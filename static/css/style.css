@@ -2051,3 +2051,270 @@ body.numpad-open .modal-content {
 body.tasks-panel-open {
     overflow: hidden;
 }
+
+/* ===== Weather Widget ===== */
+.weather-widget {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #16213e;
+    border: none;
+    border-radius: 8px;
+    color: #eee;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.weather-widget:hover {
+    background: #0f3460;
+}
+
+.weather-icon {
+    font-size: 1.25rem;
+}
+
+.weather-temp {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* ===== Weather Modal ===== */
+.modal-weather {
+    max-width: 420px;
+    width: 100%;
+}
+
+.weather-modal-content {
+    padding: 0;
+}
+
+.weather-loading,
+.weather-error {
+    padding: 2rem;
+    text-align: center;
+    color: #888;
+}
+
+/* Current Weather */
+.weather-current {
+    background: linear-gradient(135deg, #1e3a5f 0%, #0f3460 100%);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.weather-current-main {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.weather-current-icon {
+    font-size: 3.5rem;
+    line-height: 1;
+}
+
+.weather-current-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.weather-current-temp {
+    font-size: 3rem;
+    font-weight: 300;
+    color: #fff;
+    line-height: 1;
+}
+
+.weather-current-condition {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 0.25rem;
+}
+
+.weather-current-details {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.weather-detail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.weather-detail-icon {
+    font-size: 1rem;
+    opacity: 0.8;
+}
+
+.weather-detail-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.weather-detail-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+}
+
+.weather-sun-moon {
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.weather-sun,
+.weather-moon {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.sun-icon,
+.moon-icon {
+    font-size: 1.1rem;
+}
+
+.sun-time,
+.moon-phase {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Weather Sections */
+.weather-section {
+    margin-bottom: 1rem;
+}
+
+.weather-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+}
+
+/* Hourly Forecast */
+.weather-hourly {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: #0f3460 transparent;
+}
+
+.weather-hourly::-webkit-scrollbar {
+    height: 4px;
+}
+
+.weather-hourly::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.weather-hourly::-webkit-scrollbar-thumb {
+    background: #0f3460;
+    border-radius: 2px;
+}
+
+.weather-hourly-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.6rem 0.75rem;
+    background: #1a1a2e;
+    border-radius: 10px;
+    min-width: 52px;
+    flex-shrink: 0;
+}
+
+.hourly-time {
+    font-size: 0.7rem;
+    color: #888;
+    white-space: nowrap;
+}
+
+.hourly-icon {
+    font-size: 1.25rem;
+}
+
+.hourly-temp {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #eee;
+}
+
+.hourly-pop {
+    font-size: 0.65rem;
+    color: #4fc3f7;
+}
+
+/* Daily Forecast */
+.weather-daily {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.weather-daily-item {
+    display: grid;
+    grid-template-columns: 50px 36px 50px 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    background: #1a1a2e;
+    border-radius: 8px;
+}
+
+.daily-day {
+    font-size: 0.85rem;
+    color: #eee;
+    font-weight: 500;
+}
+
+.daily-icon {
+    font-size: 1.25rem;
+    text-align: center;
+}
+
+.daily-pop {
+    font-size: 0.75rem;
+    color: #4fc3f7;
+    min-width: 50px;
+}
+
+.daily-temps {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.daily-high {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #eee;
+    min-width: 32px;
+    text-align: right;
+}
+
+.daily-low {
+    font-size: 0.9rem;
+    color: #666;
+    min-width: 32px;
+    text-align: right;
+}

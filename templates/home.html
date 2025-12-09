@@ -216,5 +216,14 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 
 // Auto-refresh every 30 seconds
 setInterval(() => location.reload(), 30000);
+
+// Close modals when clicking outside (on the backdrop)
+document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('active');
+        }
+    });
+});
 </script>
 {{end}}
