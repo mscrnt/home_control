@@ -1,0 +1,1415 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="calendar-container">
+    {{if not .Authorized}}
+    <div class="page-header">
+        <a href="/home" class="page-nav-btn">Home</a>
+    </div>
+    <div class="auth-prompt">
+        <h2>Google Calendar</h2>
+        <p>Connect your Google Calendar to see upcoming events.</p>
+        <a href="/auth/google" class="auth-button">Connect Google Calendar</a>
+    </div>
+    {{else}}
+    <div class="calendar-header">
+        <div class="view-toggle">
+            <a href="?view=day&date={{.TodayDate}}" class="view-btn {{if eq .View "day"}}active{{end}}">Day</a>
+            <a href="?view=week&date={{.TodayDate}}" class="view-btn {{if eq .View "week"}}active{{end}}">Week</a>
+            <a href="?view=month&date={{.TodayDate}}" class="view-btn {{if eq .View "month"}}active{{end}}">Month</a>
+        </div>
+        {{if .Calendars}}
+        <div class="calendar-picker">
+            {{range .Calendars}}
+            <label class="calendar-chip" style="--cal-color: {{.Color}}">
+                <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
+                <span class="chip-dot"></span>
+                <span class="chip-name">{{.Name}}</span>
+            </label>
+            {{end}}
+        </div>
+        {{end}}
+        <div class="header-actions">
+            <a href="/home" class="page-nav-btn">Home</a>
+            <button class="settings-btn" onclick="openSettings()" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    {{if eq .View "month"}}
+    <div class="month-view">
+        <div class="view-title-nav">
+            <a href="?view=month&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+            <h2 class="month-title" onclick="openDatePicker()">{{.MonthName}} {{.Year}}</h2>
+            <a href="?view=month&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+        </div>
+        <div class="weekday-row">
+            <div class="weekday-header">Sun</div>
+            <div class="weekday-header">Mon</div>
+            <div class="weekday-header">Tue</div>
+            <div class="weekday-header">Wed</div>
+            <div class="weekday-header">Thu</div>
+            <div class="weekday-header">Fri</div>
+            <div class="weekday-header">Sat</div>
+        </div>
+        <div class="month-grid">
+            {{range .MonthDays}}
+            <div class="month-day {{if .IsToday}}today{{end}} {{if not .InMonth}}other-month{{end}}"
+                 data-date="{{.Date.Format "2006-01-02"}}" onclick="openCreateModal(this.dataset.date)">
+                <div class="day-number">{{.Day}}</div>
+                {{range .Events}}
+                <div class="month-event" {{if .Color}}style="background-color: {{.Color}}"{{end}}
+                     data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
+                     onclick="event.stopPropagation(); openEventDetails(this.dataset.event)">
+                    {{.Title}}
+                </div>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{else if eq .View "week"}}
+    <div class="week-view">
+        <div class="view-title-nav">
+            <a href="?view=week&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+            <h2 class="week-title" onclick="openDatePicker()">{{.WeekDateRange}}</h2>
+            <a href="?view=week&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+        </div>
+        {{range .WeekDays}}
+        <div class="week-day {{if .IsToday}}today{{end}}" data-date="{{.Date.Format "2006-01-02"}}">
+            <div class="week-day-header" onclick="openCreateModal('{{.Date.Format "2006-01-02"}}')">
+                <span class="week-day-name">{{.DayName}}</span>
+                <span class="week-day-date">{{.DateStr}}</span>
+                <span class="add-event-hint">+ Add</span>
+            </div>
+            <div class="week-day-events">
+                {{range .Events}}
+                <div class="event" {{if .Color}}style="border-left-color: {{.Color}}"{{end}}
+                     data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
+                     onclick="openEventDetails(this.dataset.event)">
+                    <div class="event-time">
+                        {{if .AllDay}}
+                        <span class="all-day">All day</span>
+                        {{else}}
+                        {{formatTime .Start}}
+                        {{end}}
+                    </div>
+                    <div class="event-details">
+                        <div class="event-title">{{.Title}}</div>
+                    </div>
+                </div>
+                {{end}}
+                {{if not .Events}}
+                <div class="no-events-small" onclick="openCreateModal('{{.Date.Format "2006-01-02"}}')">Tap to add event</div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    {{/* Day view - 24-hour timeline */}}
+    <div class="day-view">
+        <div class="view-title-nav">
+            <a href="?view=day&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+            <h2 class="day-title" onclick="openDatePicker()">{{.DayDateStr}}</h2>
+            <a href="?view=day&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+        </div>
+
+        {{/* All-day events section */}}
+        <div class="all-day-section">
+            <div class="all-day-label">All Day</div>
+            <div class="all-day-events">
+                {{range .DayEvents}}
+                {{if .AllDay}}
+                <div class="all-day-event" {{if .Color}}style="background-color: {{.Color}}"{{end}}
+                     data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
+                     onclick="openEventDetails(this.dataset.event)">
+                    {{.Title}}
+                </div>
+                {{end}}
+                {{end}}
+            </div>
+        </div>
+
+        {{/* Timeline */}}
+        <div class="day-timeline" id="dayTimeline">
+            {{range $hour := .Hours}}
+            <div class="timeline-hour" data-hour="{{$hour}}">
+                <div class="hour-label" data-hour="{{$hour}}"></div>
+                <div class="hour-slot" onclick="openCreateModalAtHour('{{$.CurrentDate}}', {{$hour}})"></div>
+            </div>
+            {{end}}
+
+            {{/* Events overlay */}}
+            <div class="timeline-events">
+                {{range .DayEvents}}
+                {{if not .AllDay}}
+                <div class="timeline-event"
+                     {{if .Color}}style="background-color: {{.Color}}; --event-color: {{.Color}}"{{end}}
+                     data-start="{{.Start.Format "15:04"}}"
+                     data-end="{{.End.Format "15:04"}}"
+                     data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
+                     onclick="openEventDetails(this.dataset.event)">
+                    <div class="timeline-event-time"></div>
+                    <div class="timeline-event-title">{{.Title}}</div>
+                    {{if .Location}}
+                    <div class="timeline-event-location">{{.Location}}</div>
+                    {{end}}
+                </div>
+                {{end}}
+                {{end}}
+            </div>
+        </div>
+    </div>
+    {{end}}
+    {{end}}
+</div>
+
+<!-- Event Details Modal -->
+<div id="eventDetailsModal" class="modal" onclick="if(event.target===this)closeModal('eventDetailsModal')">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="detailsTitle">Event Details</h2>
+            <button type="button" class="modal-close" onclick="closeModal('eventDetailsModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-row">
+                <span class="detail-label">When</span>
+                <span id="detailsWhen" class="detail-value"></span>
+            </div>
+            <div class="detail-row" id="detailsLocationRow">
+                <span class="detail-label">Where</span>
+                <span id="detailsLocation" class="detail-value"></span>
+            </div>
+            <div class="detail-row" id="detailsDescRow">
+                <span class="detail-label">Notes</span>
+                <span id="detailsDesc" class="detail-value"></span>
+            </div>
+            <div class="detail-row" id="detailsRecurringRow">
+                <span class="detail-label">Recurring</span>
+                <span id="detailsRecurring" class="detail-value">Yes</span>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="modal-btn danger" onclick="confirmDeleteEvent()">Delete</button>
+            <button type="button" class="modal-btn secondary" onclick="closeModal('eventDetailsModal')">Close</button>
+            <button type="button" class="modal-btn primary" onclick="openEditModal()">Edit</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteConfirmModal" class="modal" onclick="if(event.target===this)closeModal('deleteConfirmModal')">
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h2>Delete Event</h2>
+            <button type="button" class="modal-close" onclick="closeModal('deleteConfirmModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete "<span id="deleteEventTitle"></span>"?</p>
+            <p class="text-muted">This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="modal-btn secondary" onclick="closeModal('deleteConfirmModal')">Cancel</button>
+            <button type="button" class="modal-btn danger" onclick="deleteEvent()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Event Modal -->
+<div id="createEventModal" class="modal" onclick="if(event.target===this)closeModal('createEventModal')">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2 id="modalTitle">New Event</h2>
+            <button type="button" class="modal-close" onclick="closeModal('createEventModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <!-- Event Type Toggle -->
+            <div class="type-toggle">
+                <button type="button" class="type-btn active" data-type="event" onclick="setEventType('event')">Event</button>
+                <button type="button" class="type-btn" data-type="task" onclick="setEventType('task')">Task</button>
+            </div>
+
+            <div class="form-group">
+                <label for="eventTitle">Title</label>
+                <input type="text" id="eventTitle" class="form-input" placeholder="Event title" readonly onfocus="activateKeyboard(this)">
+            </div>
+
+            <div class="form-group">
+                <label for="eventDate">Date</label>
+                <input type="date" id="eventDate" class="form-input">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="allDayCheck" onchange="toggleTimeInputs()"> All day
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row time-inputs">
+                <div class="form-group">
+                    <label>Start Time</label>
+                    <div class="time-picker" id="startTimePicker">
+                        <div class="time-unit">
+                            <button type="button" class="time-btn up" onclick="adjustTime('start', 'hour', 1)">▲</button>
+                            <span class="time-field" id="startHour" onclick="activateTimeField(this, 'hour')">09</span>
+                            <button type="button" class="time-btn down" onclick="adjustTime('start', 'hour', -1)">▼</button>
+                        </div>
+                        <span class="time-separator">:</span>
+                        <div class="time-unit">
+                            <button type="button" class="time-btn up" onclick="adjustTime('start', 'minute', 5)">▲</button>
+                            <span class="time-field" id="startMinute" onclick="activateTimeField(this, 'minute')">00</span>
+                            <button type="button" class="time-btn down" onclick="adjustTime('start', 'minute', -5)">▼</button>
+                        </div>
+                        <div class="time-unit ampm">
+                            <button type="button" class="time-btn up" onclick="toggleAmPm('start')">▲</button>
+                            <span class="time-field ampm-field" id="startAmPm" onclick="toggleAmPm('start')">AM</span>
+                            <button type="button" class="time-btn down" onclick="toggleAmPm('start')">▼</button>
+                        </div>
+                    </div>
+                    <input type="hidden" id="eventTime" value="09:00">
+                </div>
+                <div class="form-group">
+                    <label>End Time</label>
+                    <div class="time-picker" id="endTimePicker">
+                        <div class="time-unit">
+                            <button type="button" class="time-btn up" onclick="adjustTime('end', 'hour', 1)">▲</button>
+                            <span class="time-field" id="endHour" onclick="activateTimeField(this, 'hour')">10</span>
+                            <button type="button" class="time-btn down" onclick="adjustTime('end', 'hour', -1)">▼</button>
+                        </div>
+                        <span class="time-separator">:</span>
+                        <div class="time-unit">
+                            <button type="button" class="time-btn up" onclick="adjustTime('end', 'minute', 5)">▲</button>
+                            <span class="time-field" id="endMinute" onclick="activateTimeField(this, 'minute')">00</span>
+                            <button type="button" class="time-btn down" onclick="adjustTime('end', 'minute', -5)">▼</button>
+                        </div>
+                        <div class="time-unit ampm">
+                            <button type="button" class="time-btn up" onclick="toggleAmPm('end')">▲</button>
+                            <span class="time-field ampm-field" id="endAmPm" onclick="toggleAmPm('end')">AM</span>
+                            <button type="button" class="time-btn down" onclick="toggleAmPm('end')">▼</button>
+                        </div>
+                    </div>
+                    <input type="hidden" id="eventEndTime" value="10:00">
+                </div>
+            </div>
+
+            <div class="form-group location-group">
+                <label for="eventLocation">Location</label>
+                <input type="text" id="eventLocation" class="form-input" placeholder="Add location"
+                       autocomplete="off" onfocus="activateKeyboard(this)" oninput="searchPlaces(this.value)">
+                <div id="locationSuggestions" class="location-suggestions"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="eventDescription">Description</label>
+                <textarea id="eventDescription" class="form-input form-textarea" placeholder="Add description" readonly onfocus="activateKeyboard(this)"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="eventRepeat">Repeat</label>
+                <select id="eventRepeat" class="form-input">
+                    <option value="">Does not repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                    <option value="weekdays">Every weekday (Mon-Fri)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Color</label>
+                <div class="color-picker" id="colorPicker">
+                    <button type="button" class="color-option active" data-color="" style="background: #4285f4" title="Default"></button>
+                    <button type="button" class="color-option" data-color="1" style="background: #7986cb" title="Lavender"></button>
+                    <button type="button" class="color-option" data-color="2" style="background: #33b679" title="Sage"></button>
+                    <button type="button" class="color-option" data-color="3" style="background: #8e24aa" title="Grape"></button>
+                    <button type="button" class="color-option" data-color="4" style="background: #e67c73" title="Flamingo"></button>
+                    <button type="button" class="color-option" data-color="5" style="background: #f6c026" title="Banana"></button>
+                    <button type="button" class="color-option" data-color="6" style="background: #f5511d" title="Tangerine"></button>
+                    <button type="button" class="color-option" data-color="7" style="background: #039be5" title="Peacock"></button>
+                    <button type="button" class="color-option" data-color="8" style="background: #616161" title="Graphite"></button>
+                    <button type="button" class="color-option" data-color="9" style="background: #3f51b5" title="Blueberry"></button>
+                    <button type="button" class="color-option" data-color="10" style="background: #0b8043" title="Basil"></button>
+                    <button type="button" class="color-option" data-color="11" style="background: #d60000" title="Tomato"></button>
+                </div>
+                <input type="hidden" id="eventColor" value="">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="modal-btn secondary" onclick="closeModal('createEventModal')">Cancel</button>
+            <button type="button" class="modal-btn primary" id="createBtn" onclick="saveEvent()">Create Event</button>
+        </div>
+    </div>
+</div>
+
+<!-- Virtual Keyboard (slides up from bottom) -->
+<div id="virtualKeyboard" class="virtual-keyboard">
+    <div class="keyboard-header">
+        <button type="button" class="keyboard-done" onclick="hideKeyboard()">Done</button>
+    </div>
+    <div class="keyboard-row">
+        <button type="button" class="key key-num" data-key="1" data-shift="!"><span class="key-main">1</span><span class="key-alt">!</span></button>
+        <button type="button" class="key key-num" data-key="2" data-shift="@"><span class="key-main">2</span><span class="key-alt">@</span></button>
+        <button type="button" class="key key-num" data-key="3" data-shift="#"><span class="key-main">3</span><span class="key-alt">#</span></button>
+        <button type="button" class="key key-num" data-key="4" data-shift="$"><span class="key-main">4</span><span class="key-alt">$</span></button>
+        <button type="button" class="key key-num" data-key="5" data-shift="%"><span class="key-main">5</span><span class="key-alt">%</span></button>
+        <button type="button" class="key key-num" data-key="6" data-shift="^"><span class="key-main">6</span><span class="key-alt">^</span></button>
+        <button type="button" class="key key-num" data-key="7" data-shift="&amp;"><span class="key-main">7</span><span class="key-alt">&amp;</span></button>
+        <button type="button" class="key key-num" data-key="8" data-shift="*"><span class="key-main">8</span><span class="key-alt">*</span></button>
+        <button type="button" class="key key-num" data-key="9" data-shift="("><span class="key-main">9</span><span class="key-alt">(</span></button>
+        <button type="button" class="key key-num" data-key="0" data-shift=")"><span class="key-main">0</span><span class="key-alt">)</span></button>
+    </div>
+    <div class="keyboard-row">
+        <button type="button" class="key key-letter" data-key="q">q</button>
+        <button type="button" class="key key-letter" data-key="w">w</button>
+        <button type="button" class="key key-letter" data-key="e">e</button>
+        <button type="button" class="key key-letter" data-key="r">r</button>
+        <button type="button" class="key key-letter" data-key="t">t</button>
+        <button type="button" class="key key-letter" data-key="y">y</button>
+        <button type="button" class="key key-letter" data-key="u">u</button>
+        <button type="button" class="key key-letter" data-key="i">i</button>
+        <button type="button" class="key key-letter" data-key="o">o</button>
+        <button type="button" class="key key-letter" data-key="p">p</button>
+    </div>
+    <div class="keyboard-row keyboard-row-offset">
+        <button type="button" class="key key-letter" data-key="a">a</button>
+        <button type="button" class="key key-letter" data-key="s">s</button>
+        <button type="button" class="key key-letter" data-key="d">d</button>
+        <button type="button" class="key key-letter" data-key="f">f</button>
+        <button type="button" class="key key-letter" data-key="g">g</button>
+        <button type="button" class="key key-letter" data-key="h">h</button>
+        <button type="button" class="key key-letter" data-key="j">j</button>
+        <button type="button" class="key key-letter" data-key="k">k</button>
+        <button type="button" class="key key-letter" data-key="l">l</button>
+    </div>
+    <div class="keyboard-row">
+        <button type="button" class="key key-shift" data-action="shift"><span class="shift-icon">&#8679;</span></button>
+        <button type="button" class="key key-letter" data-key="z">z</button>
+        <button type="button" class="key key-letter" data-key="x">x</button>
+        <button type="button" class="key key-letter" data-key="c">c</button>
+        <button type="button" class="key key-letter" data-key="v">v</button>
+        <button type="button" class="key key-letter" data-key="b">b</button>
+        <button type="button" class="key key-letter" data-key="n">n</button>
+        <button type="button" class="key key-letter" data-key="m">m</button>
+        <button type="button" class="key key-backspace" data-action="backspace">&#9003;</button>
+    </div>
+    <div class="keyboard-row">
+        <button type="button" class="key key-sym" data-key="," data-shift=";">,</button>
+        <button type="button" class="key key-sym" data-key="'" data-shift="&quot;">&#39;</button>
+        <button type="button" class="key key-space" data-key=" ">Space</button>
+        <button type="button" class="key key-sym" data-key="." data-shift=":">.</button>
+        <button type="button" class="key key-sym" data-key="-" data-shift="_">-</button>
+        <button type="button" class="key key-sym" data-key="?" data-shift="/">?</button>
+    </div>
+</div>
+
+<!-- Number Pad for Time Input -->
+<div id="numberPad" class="number-pad">
+    <div class="numpad-header">
+        <span class="numpad-title">Enter Time</span>
+        <button type="button" class="numpad-done" onclick="hideNumberPad()">Done</button>
+    </div>
+    <div class="numpad-grid">
+        <button type="button" class="numpad-key" onclick="numpadInput('1')">1</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('2')">2</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('3')">3</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('4')">4</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('5')">5</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('6')">6</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('7')">7</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('8')">8</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('9')">9</button>
+        <button type="button" class="numpad-key numpad-clear" onclick="numpadClear()">C</button>
+        <button type="button" class="numpad-key" onclick="numpadInput('0')">0</button>
+        <button type="button" class="numpad-key numpad-ok" onclick="hideNumberPad()">OK</button>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal">
+    <div class="modal-content modal-settings">
+        <h3 class="modal-header">Settings</h3>
+
+        <div class="settings-section">
+            <h4 class="settings-section-title">Appearance</h4>
+            <div class="form-group">
+                <label>Theme</label>
+                <div class="theme-options">
+                    <button type="button" class="theme-option" data-theme="light" onclick="setTheme('light')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                        </svg>
+                        <span>Light</span>
+                    </button>
+                    <button type="button" class="theme-option active" data-theme="dark" onclick="setTheme('dark')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                        <span>Dark</span>
+                    </button>
+                    <button type="button" class="theme-option" data-theme="auto" onclick="setTheme('auto')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 2a10 10 0 0 1 0 20"/>
+                        </svg>
+                        <span>Auto</span>
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Time Format</label>
+                <div class="time-format-toggle">
+                    <button type="button" class="format-btn" data-format="12" onclick="setTimeFormat('12')">
+                        12-Hour
+                    </button>
+                    <button type="button" class="format-btn active" data-format="24" onclick="setTimeFormat('24')">
+                        24-Hour
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h4 class="settings-section-title">Weather</h4>
+            <div class="settings-info">
+                {{if .WeatherConfigured}}
+                <div class="weather-status connected">
+                    <span class="status-dot"></span>
+                    <span>Weather data enabled</span>
+                </div>
+                {{else}}
+                <div class="weather-status disconnected">
+                    <span class="status-dot"></span>
+                    <span>Not configured</span>
+                </div>
+                <p class="settings-hint">Add OPENWEATHER_API_KEY to .env to enable weather features like sunrise/sunset times and moon phases.</p>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h4 class="settings-section-title">About</h4>
+            <p class="settings-hint">Home Control Kiosk v1.0</p>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="modal-btn primary" onclick="closeSettings()">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Date Picker Modal -->
+<div id="datePickerModal" class="modal">
+    <div class="modal-content modal-small">
+        <h3 class="modal-header">Go to Date</h3>
+        <button type="button" class="today-btn" onclick="goToToday()">Today</button>
+        <div class="date-picker-grid">
+            <div class="form-group">
+                <label>Month</label>
+                <select id="datePickerMonth" class="form-input">
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Year</label>
+                <select id="datePickerYear" class="form-input"></select>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="modal-btn secondary" onclick="closeDatePicker()">Cancel</button>
+            <button type="button" class="modal-btn primary" onclick="goToDate()">Go</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let activeInput = null;
+// Shift state: 0 = off, 1 = single shift (one char), 2 = caps lock
+let shiftState = 0;
+
+let currentEventType = 'event';
+let currentEvent = null; // Currently selected event for viewing/editing
+let editMode = false; // Are we editing an existing event?
+
+function openCreateModal(date) {
+    editMode = false;
+    currentEvent = null;
+    const modal = document.getElementById('createEventModal');
+    const dateInput = document.getElementById('eventDate');
+
+    if (date) {
+        dateInput.value = date;
+    } else {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    // Reset all fields
+    document.getElementById('eventTitle').value = '';
+    document.getElementById('allDayCheck').checked = false;
+    document.getElementById('eventTime').value = '09:00';
+    document.getElementById('eventEndTime').value = '10:00';
+    document.getElementById('eventLocation').value = '';
+    document.getElementById('eventDescription').value = '';
+    document.getElementById('eventRepeat').value = '';
+    document.getElementById('eventColor').value = '';
+    setEventType('event');
+    toggleTimeInputs();
+    setSelectedColor('');
+
+    // Initialize time pickers with default values
+    setTimePickerFromValue('start', '09:00');
+    setTimePickerFromValue('end', '10:00');
+
+    document.getElementById('modalTitle').textContent = 'New Event';
+    document.getElementById('createBtn').textContent = 'Create Event';
+
+    modal.classList.add('active');
+}
+
+function openEditModal() {
+    if (!currentEvent) return;
+
+    editMode = true;
+    closeModal('eventDetailsModal');
+
+    const modal = document.getElementById('createEventModal');
+    const start = new Date(currentEvent.start);
+    const end = new Date(currentEvent.end);
+
+    // Populate form with event data
+    document.getElementById('eventTitle').value = currentEvent.title || '';
+    document.getElementById('eventDate').value = start.toISOString().split('T')[0];
+    document.getElementById('allDayCheck').checked = currentEvent.allDay;
+
+    const startTime = start.toTimeString().slice(0, 5);
+    const endTime = end.toTimeString().slice(0, 5);
+    document.getElementById('eventTime').value = startTime;
+    document.getElementById('eventEndTime').value = endTime;
+
+    // Set time pickers from event times
+    setTimePickerFromValue('start', startTime);
+    setTimePickerFromValue('end', endTime);
+
+    document.getElementById('eventLocation').value = currentEvent.location || '';
+    document.getElementById('eventDescription').value = currentEvent.description || '';
+    document.getElementById('eventRepeat').value = '';
+    document.getElementById('eventColor').value = currentEvent.colorId || '';
+    setSelectedColor(currentEvent.colorId || '');
+    toggleTimeInputs();
+
+    document.getElementById('modalTitle').textContent = 'Edit Event';
+    document.getElementById('createBtn').textContent = 'Save Changes';
+
+    modal.classList.add('active');
+}
+
+function setEventType(type) {
+    currentEventType = type;
+    document.querySelectorAll('.type-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === type);
+    });
+
+    if (!editMode) {
+        document.getElementById('modalTitle').textContent = type === 'event' ? 'New Event' : 'New Task';
+        document.getElementById('createBtn').textContent = type === 'event' ? 'Create Event' : 'Create Task';
+    }
+
+    // Tasks typically don't have end times
+    const timeInputs = document.querySelector('.time-inputs');
+    if (type === 'task') {
+        document.getElementById('allDayCheck').checked = true;
+        timeInputs.style.display = 'none';
+    }
+}
+
+function openEventDetails(eventJson) {
+    currentEvent = JSON.parse(eventJson);
+    const modal = document.getElementById('eventDetailsModal');
+
+    document.getElementById('detailsTitle').textContent = currentEvent.title;
+
+    const start = new Date(currentEvent.start);
+    const end = new Date(currentEvent.end);
+
+    let whenText;
+    if (currentEvent.allDay) {
+        whenText = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    } else {
+        whenText = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) +
+                   ' at ' + start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
+                   ' - ' + end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    document.getElementById('detailsWhen').textContent = whenText;
+
+    const locationRow = document.getElementById('detailsLocationRow');
+    if (currentEvent.location) {
+        document.getElementById('detailsLocation').textContent = currentEvent.location;
+        locationRow.style.display = 'flex';
+    } else {
+        locationRow.style.display = 'none';
+    }
+
+    const descRow = document.getElementById('detailsDescRow');
+    if (currentEvent.description) {
+        document.getElementById('detailsDesc').textContent = currentEvent.description;
+        descRow.style.display = 'flex';
+    } else {
+        descRow.style.display = 'none';
+    }
+
+    const recurringRow = document.getElementById('detailsRecurringRow');
+    if (currentEvent.recurring) {
+        recurringRow.style.display = 'flex';
+    } else {
+        recurringRow.style.display = 'none';
+    }
+
+    modal.classList.add('active');
+}
+
+function confirmDeleteEvent() {
+    if (!currentEvent) return;
+
+    document.getElementById('deleteEventTitle').textContent = currentEvent.title;
+    document.getElementById('deleteConfirmModal').classList.add('active');
+}
+
+async function deleteEvent() {
+    if (!currentEvent || !currentEvent.id) {
+        alert('No event selected');
+        return;
+    }
+
+    const calendarId = currentEvent.calendarId || 'primary';
+
+    try {
+        const resp = await fetch(`/api/calendar/event/${encodeURIComponent(calendarId)}/${encodeURIComponent(currentEvent.id)}`, {
+            method: 'DELETE'
+        });
+
+        if (resp.ok || resp.status === 204) {
+            closeModal('deleteConfirmModal');
+            closeModal('eventDetailsModal');
+            window.location.reload();
+        } else {
+            const err = await resp.text();
+            alert('Failed to delete event: ' + err);
+        }
+    } catch (err) {
+        alert('Error deleting event: ' + err.message);
+    }
+}
+
+// Color picker handling
+document.querySelectorAll('.color-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+        setSelectedColor(btn.dataset.color);
+    });
+});
+
+function setSelectedColor(colorId) {
+    document.getElementById('eventColor').value = colorId;
+    document.querySelectorAll('.color-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color === colorId);
+    });
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+    hideKeyboard();
+}
+
+function toggleTimeInputs() {
+    const allDay = document.getElementById('allDayCheck').checked;
+    document.querySelector('.time-inputs').style.display = allDay ? 'none' : 'flex';
+}
+
+function activateKeyboard(input) {
+    activeInput = input;
+    document.getElementById('virtualKeyboard').classList.add('active');
+    document.body.classList.add('keyboard-open');
+}
+
+function hideKeyboard() {
+    document.getElementById('virtualKeyboard').classList.remove('active');
+    document.body.classList.remove('keyboard-open');
+    if (activeInput) {
+        activeInput.blur();
+    }
+    activeInput = null;
+}
+
+// Virtual keyboard handling
+document.querySelectorAll('.key').forEach(key => {
+    key.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!activeInput) return;
+
+        const action = key.dataset.action;
+        const keyVal = key.dataset.key;
+        const shiftVal = key.dataset.shift;
+
+        if (action === 'backspace') {
+            activeInput.value = activeInput.value.slice(0, -1);
+        } else if (action === 'shift') {
+            // Cycle through: 0 (off) -> 1 (single) -> 2 (caps) -> 0 (off)
+            shiftState = (shiftState + 1) % 3;
+            updateShiftDisplay();
+        } else if (keyVal) {
+            let char;
+            if (key.classList.contains('key-letter')) {
+                // Letter keys: uppercase when shift active
+                char = shiftState > 0 ? keyVal.toUpperCase() : keyVal;
+            } else if (shiftVal && shiftState > 0) {
+                // Number/symbol keys with shift variant
+                char = shiftVal;
+            } else {
+                char = keyVal;
+            }
+            activeInput.value += char;
+
+            // If single shift (state 1), revert to off after one character
+            if (shiftState === 1) {
+                shiftState = 0;
+                updateShiftDisplay();
+            }
+        }
+    });
+});
+
+function updateShiftDisplay() {
+    const shiftKey = document.querySelector('.key-shift');
+    const keyboard = document.getElementById('virtualKeyboard');
+
+    // Update shift key appearance
+    shiftKey.classList.remove('shift-single', 'shift-caps');
+    keyboard.classList.remove('shift-active');
+
+    if (shiftState === 1) {
+        shiftKey.classList.add('shift-single');
+        keyboard.classList.add('shift-active');
+    } else if (shiftState === 2) {
+        shiftKey.classList.add('shift-caps');
+        keyboard.classList.add('shift-active');
+    }
+
+    // Update letter keys
+    document.querySelectorAll('.key-letter').forEach(key => {
+        const baseChar = key.dataset.key;
+        key.textContent = shiftState > 0 ? baseChar.toUpperCase() : baseChar.toLowerCase();
+    });
+}
+
+async function saveEvent() {
+    const title = document.getElementById('eventTitle').value.trim();
+    const date = document.getElementById('eventDate').value;
+    const allDay = document.getElementById('allDayCheck').checked;
+    const time = document.getElementById('eventTime').value;
+    const endTime = document.getElementById('eventEndTime').value;
+    const eventLocation = document.getElementById('eventLocation').value.trim();
+    const description = document.getElementById('eventDescription').value.trim();
+    const repeat = document.getElementById('eventRepeat').value;
+    const colorId = document.getElementById('eventColor').value;
+
+    if (!title || !date) {
+        alert('Please enter a title and date');
+        return;
+    }
+
+    const data = {
+        type: currentEventType,
+        title: title,
+        date: date,
+        time: allDay ? '' : time,
+        endTime: allDay ? '' : endTime,
+        location: eventLocation,
+        description: description,
+        repeat: repeat,
+        colorId: colorId
+    };
+
+    try {
+        let url, method;
+
+        if (editMode && currentEvent && currentEvent.id) {
+            // Update existing event
+            const calendarId = currentEvent.calendarId || 'primary';
+            url = `/api/calendar/event/${encodeURIComponent(calendarId)}/${encodeURIComponent(currentEvent.id)}`;
+            method = 'PUT';
+        } else {
+            // Create new event
+            url = '/api/calendar/event';
+            method = 'POST';
+        }
+
+        const resp = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (resp.ok) {
+            const result = await resp.json();
+            console.log(editMode ? 'Event updated:' : 'Event created:', result);
+            closeModal('createEventModal');
+            window.location.reload();
+        } else {
+            const err = await resp.text();
+            alert(`Failed to ${editMode ? 'update' : 'create'} event: ` + err);
+        }
+    } catch (err) {
+        alert(`Error ${editMode ? 'updating' : 'creating'} event: ` + err.message);
+    }
+}
+
+// Time Picker Functions
+let activeTimeField = null;
+let activeTimeType = null; // 'hour' or 'minute'
+let activeTimePrefix = null; // 'start' or 'end'
+
+function adjustTime(prefix, field, delta) {
+    const element = document.getElementById(prefix + capitalize(field));
+    let value = parseInt(element.textContent);
+
+    if (field === 'hour') {
+        value += delta;
+        if (value > 12) value = 1;
+        if (value < 1) value = 12;
+        element.textContent = value.toString().padStart(2, '0');
+    } else if (field === 'minute') {
+        value += delta;
+        if (value >= 60) value = 0;
+        if (value < 0) value = 55;
+        element.textContent = value.toString().padStart(2, '0');
+    }
+
+    updateHiddenTimeInput(prefix);
+}
+
+function toggleAmPm(prefix) {
+    const element = document.getElementById(prefix + 'AmPm');
+    element.textContent = element.textContent === 'AM' ? 'PM' : 'AM';
+    updateHiddenTimeInput(prefix);
+}
+
+function activateTimeField(element, type) {
+    // Deactivate previous field
+    if (activeTimeField) {
+        activeTimeField.classList.remove('active');
+    }
+
+    // Get prefix from element id
+    const id = element.id;
+    activeTimePrefix = id.startsWith('start') ? 'start' : 'end';
+    activeTimeType = type;
+    activeTimeField = element;
+    element.classList.add('active');
+
+    // Show number pad
+    showNumberPad();
+}
+
+function showNumberPad() {
+    const numpad = document.getElementById('numberPad');
+    if (numpad) {
+        numpad.classList.add('active');
+        document.body.classList.add('numpad-open');
+    }
+}
+
+function hideNumberPad() {
+    const numpad = document.getElementById('numberPad');
+    if (numpad) {
+        numpad.classList.remove('active');
+        document.body.classList.remove('numpad-open');
+    }
+    if (activeTimeField) {
+        activeTimeField.classList.remove('active');
+        activeTimeField = null;
+    }
+}
+
+function numpadInput(digit) {
+    if (!activeTimeField || activeTimeType === null) return;
+
+    const current = activeTimeField.textContent;
+    let newValue;
+
+    if (activeTimeType === 'hour') {
+        // For hours: shift left and add digit (max 12)
+        newValue = (parseInt(current.slice(-1) + digit));
+        if (newValue > 12) newValue = parseInt(digit);
+        if (newValue === 0) newValue = 12;
+        activeTimeField.textContent = newValue.toString().padStart(2, '0');
+    } else if (activeTimeType === 'minute') {
+        // For minutes: shift left and add digit (max 59)
+        newValue = parseInt(current.slice(-1) + digit);
+        if (newValue > 59) newValue = parseInt(digit);
+        activeTimeField.textContent = newValue.toString().padStart(2, '0');
+    }
+
+    updateHiddenTimeInput(activeTimePrefix);
+}
+
+function numpadClear() {
+    if (activeTimeField) {
+        activeTimeField.textContent = '00';
+        if (activeTimeType === 'hour') {
+            activeTimeField.textContent = '12';
+        }
+        updateHiddenTimeInput(activeTimePrefix);
+    }
+}
+
+function updateHiddenTimeInput(prefix) {
+    const hour = parseInt(document.getElementById(prefix + 'Hour').textContent);
+    const minute = document.getElementById(prefix + 'Minute').textContent;
+    const ampm = document.getElementById(prefix + 'AmPm').textContent;
+
+    // Convert to 24-hour format
+    let hour24 = hour;
+    if (ampm === 'PM' && hour !== 12) {
+        hour24 = hour + 12;
+    } else if (ampm === 'AM' && hour === 12) {
+        hour24 = 0;
+    }
+
+    const timeValue = hour24.toString().padStart(2, '0') + ':' + minute;
+    const hiddenInput = document.getElementById(prefix === 'start' ? 'eventTime' : 'eventEndTime');
+    hiddenInput.value = timeValue;
+}
+
+function setTimePickerFromValue(prefix, time24) {
+    if (!time24) return;
+
+    const [hours, minutes] = time24.split(':').map(Number);
+    let hour12 = hours % 12;
+    if (hour12 === 0) hour12 = 12;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+
+    document.getElementById(prefix + 'Hour').textContent = hour12.toString().padStart(2, '0');
+    document.getElementById(prefix + 'Minute').textContent = minutes.toString().padStart(2, '0');
+    document.getElementById(prefix + 'AmPm').textContent = ampm;
+}
+
+function capitalize(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Location Autocomplete
+let placesSearchTimeout = null;
+
+function searchPlaces(query) {
+    if (placesSearchTimeout) {
+        clearTimeout(placesSearchTimeout);
+    }
+
+    const suggestions = document.getElementById('locationSuggestions');
+
+    if (!query || query.length < 3) {
+        suggestions.classList.remove('active');
+        suggestions.innerHTML = '';
+        return;
+    }
+
+    // Debounce the search
+    placesSearchTimeout = setTimeout(async () => {
+        try {
+            const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(query)}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                displayPlaceSuggestions(data.predictions || []);
+            }
+        } catch (err) {
+            console.error('Places search error:', err);
+        }
+    }, 300);
+}
+
+function displayPlaceSuggestions(predictions) {
+    const suggestions = document.getElementById('locationSuggestions');
+
+    if (predictions.length === 0) {
+        suggestions.classList.remove('active');
+        suggestions.innerHTML = '';
+        return;
+    }
+
+    suggestions.innerHTML = predictions.map(p => `
+        <div class="location-suggestion" onclick="selectPlace('${escapeHtml(p.description)}')">
+            <span class="suggestion-icon">📍</span>
+            <span class="suggestion-text">${escapeHtml(p.description)}</span>
+        </div>
+    `).join('');
+
+    suggestions.classList.add('active');
+}
+
+function selectPlace(place) {
+    document.getElementById('eventLocation').value = place;
+    document.getElementById('locationSuggestions').classList.remove('active');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Hide suggestions when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.location-group')) {
+        document.getElementById('locationSuggestions').classList.remove('active');
+    }
+});
+
+// Date Picker Functions
+const currentView = '{{.View}}';
+const currentDate = '{{.CurrentDate}}';
+
+function openDatePicker() {
+    const modal = document.getElementById('datePickerModal');
+    const monthSelect = document.getElementById('datePickerMonth');
+    const yearSelect = document.getElementById('datePickerYear');
+
+    // Parse current date
+    const [year, month] = currentDate.split('-').map(Number);
+
+    // Populate year dropdown (10 years back, 5 years forward)
+    yearSelect.innerHTML = '';
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear - 10; y <= currentYear + 5; y++) {
+        const option = document.createElement('option');
+        option.value = y;
+        option.textContent = y;
+        if (y === year) option.selected = true;
+        yearSelect.appendChild(option);
+    }
+
+    // Set current month
+    monthSelect.value = month;
+
+    modal.classList.add('active');
+}
+
+function closeDatePicker() {
+    document.getElementById('datePickerModal').classList.remove('active');
+}
+
+function goToDate() {
+    const month = document.getElementById('datePickerMonth').value.padStart(2, '0');
+    const year = document.getElementById('datePickerYear').value;
+    const date = `${year}-${month}-01`;
+    window.location.href = `?view=${currentView}&date=${date}`;
+}
+
+function goToToday() {
+    const today = new Date().toISOString().split('T')[0];
+    window.location.href = `?view=${currentView}&date=${today}`;
+}
+
+// Calendar Filter Functions
+function filterCalendars() {
+    const checkboxes = document.querySelectorAll('.calendar-chip input[type="checkbox"]');
+    const activeCalendarIds = new Set();
+
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            activeCalendarIds.add(cb.dataset.calendarId);
+        }
+    });
+
+    // Filter events
+    document.querySelectorAll('[data-event]').forEach(el => {
+        try {
+            const event = JSON.parse(el.dataset.event);
+            if (activeCalendarIds.has(event.calendarId)) {
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
+        } catch (e) {}
+    });
+}
+
+// Settings Functions
+function openSettings() {
+    const modal = document.getElementById('settingsModal');
+    modal.classList.add('active');
+    loadThemeSetting();
+    loadTimeFormatSetting();
+}
+
+function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('active');
+}
+
+function setTheme(theme) {
+    localStorage.setItem('theme', theme);
+    applyTheme(theme);
+
+    // Update button states
+    document.querySelectorAll('.theme-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+}
+
+function loadThemeSetting() {
+    const theme = localStorage.getItem('theme') || 'dark';
+    document.querySelectorAll('.theme-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+}
+
+function applyTheme(theme) {
+    if (theme === 'auto') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+}
+
+// Apply theme on load
+(function() {
+    const theme = localStorage.getItem('theme') || 'dark';
+    applyTheme(theme);
+})();
+
+// Listen for system theme changes when in auto mode
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    const theme = localStorage.getItem('theme');
+    if (theme === 'auto') {
+        applyTheme('auto');
+    }
+});
+
+// Time Format Functions
+function getTimeFormat() {
+    return localStorage.getItem('timeFormat') || '12';
+}
+
+function setTimeFormat(format) {
+    localStorage.setItem('timeFormat', format);
+    document.querySelectorAll('.format-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.format === format);
+    });
+    // Re-render time labels
+    updateTimeLabels();
+    updateTimelineEventTimes();
+}
+
+function loadTimeFormatSetting() {
+    const format = getTimeFormat();
+    document.querySelectorAll('.format-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.format === format);
+    });
+}
+
+function formatHour(hour) {
+    const format = getTimeFormat();
+    if (format === '24') {
+        return hour.toString().padStart(2, '0') + ':00';
+    } else {
+        if (hour === 0) return '12 AM';
+        if (hour === 12) return '12 PM';
+        if (hour < 12) return hour + ' AM';
+        return (hour - 12) + ' PM';
+    }
+}
+
+function formatTimeValue(time24) {
+    const format = getTimeFormat();
+    const [hours, minutes] = time24.split(':').map(Number);
+
+    if (format === '24') {
+        return hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0');
+    } else {
+        let h = hours % 12;
+        if (h === 0) h = 12;
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        return h + ':' + minutes.toString().padStart(2, '0') + ' ' + ampm;
+    }
+}
+
+function updateTimeLabels() {
+    document.querySelectorAll('.hour-label').forEach(label => {
+        const hour = parseInt(label.dataset.hour);
+        label.textContent = formatHour(hour);
+    });
+}
+
+function updateTimelineEventTimes() {
+    document.querySelectorAll('.timeline-event').forEach(event => {
+        const start = event.dataset.start;
+        const end = event.dataset.end;
+        const timeEl = event.querySelector('.timeline-event-time');
+        if (timeEl && start) {
+            timeEl.textContent = formatTimeValue(start) + ' - ' + formatTimeValue(end);
+        }
+    });
+}
+
+// Timeline Functions
+function initDayTimeline() {
+    const timeline = document.getElementById('dayTimeline');
+    if (!timeline) return;
+
+    // Update hour labels
+    updateTimeLabels();
+
+    // Position events
+    positionTimelineEvents();
+
+    // Add current time line (only for today)
+    addCurrentTimeLine();
+
+    // Scroll to current time
+    scrollToCurrentTime();
+}
+
+function positionTimelineEvents() {
+    const events = document.querySelectorAll('.timeline-event');
+    const hourHeight = 60; // matches CSS .timeline-hour height
+
+    events.forEach(event => {
+        const start = event.dataset.start;
+        const end = event.dataset.end;
+
+        if (!start || !end) return;
+
+        const [startHour, startMin] = start.split(':').map(Number);
+        const [endHour, endMin] = end.split(':').map(Number);
+
+        // Calculate position (in pixels from top)
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+
+        const top = (startMinutes / 60) * hourHeight;
+        const height = Math.max(((endMinutes - startMinutes) / 60) * hourHeight, 24); // min height 24px
+
+        event.style.top = top + 'px';
+        event.style.height = height + 'px';
+
+        // Update time display
+        const timeEl = event.querySelector('.timeline-event-time');
+        if (timeEl) {
+            timeEl.textContent = formatTimeValue(start) + ' - ' + formatTimeValue(end);
+        }
+    });
+}
+
+function addCurrentTimeLine() {
+    const timeline = document.getElementById('dayTimeline');
+    if (!timeline) return;
+
+    // Check if viewing today
+    const viewDate = '{{.CurrentDate}}';
+    const today = new Date().toISOString().split('T')[0];
+    if (viewDate !== today) return;
+
+    // Remove existing line if any
+    const existing = timeline.querySelector('.current-time-line');
+    if (existing) existing.remove();
+
+    // Create and position the line
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const hourHeight = 60;
+    const top = (minutes / 60) * hourHeight;
+
+    const line = document.createElement('div');
+    line.className = 'current-time-line';
+    line.style.top = top + 'px';
+
+    timeline.querySelector('.timeline-events').appendChild(line);
+}
+
+function scrollToCurrentTime() {
+    const timeline = document.getElementById('dayTimeline');
+    if (!timeline) return;
+
+    const now = new Date();
+    const hourHeight = 60;
+
+    // Calculate scroll position (current hour - 2 hours padding at top)
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const scrollTo = Math.max(0, (currentMinutes / 60) * hourHeight - 120);
+
+    timeline.scrollTop = scrollTo;
+}
+
+function openCreateModalAtHour(date, hour) {
+    openCreateModal(date);
+
+    // Set the start time to the clicked hour
+    const format = getTimeFormat();
+    let hour12 = hour % 12;
+    if (hour12 === 0) hour12 = 12;
+    const ampm = hour < 12 ? 'AM' : 'PM';
+
+    document.getElementById('startHour').textContent = hour12.toString().padStart(2, '0');
+    document.getElementById('startMinute').textContent = '00';
+    document.getElementById('startAmPm').textContent = ampm;
+    document.getElementById('eventTime').value = hour.toString().padStart(2, '0') + ':00';
+
+    // Set end time to 1 hour later
+    const endHour = (hour + 1) % 24;
+    let endHour12 = endHour % 12;
+    if (endHour12 === 0) endHour12 = 12;
+    const endAmpm = endHour < 12 ? 'AM' : 'PM';
+
+    document.getElementById('endHour').textContent = endHour12.toString().padStart(2, '0');
+    document.getElementById('endMinute').textContent = '00';
+    document.getElementById('endAmPm').textContent = endAmpm;
+    document.getElementById('eventEndTime').value = endHour.toString().padStart(2, '0') + ':00';
+
+    // Make sure all-day is unchecked
+    document.getElementById('allDayCheck').checked = false;
+    toggleTimeInputs();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    // Init day timeline if on day view
+    initDayTimeline();
+
+    // Load time format setting
+    loadTimeFormatSetting();
+
+    // Update current time line every minute
+    setInterval(() => {
+        addCurrentTimeLine();
+    }, 60000);
+});
+
+// Auto-refresh every 5 minutes
+setInterval(() => location.reload(), 300000);
+</script>
+{{end}}

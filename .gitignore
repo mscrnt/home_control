@@ -1,0 +1,6 @@
+.env
+server
+*.exe
+data/
+token.json
+client_secret*.json
