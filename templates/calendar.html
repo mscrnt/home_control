@@ -2024,6 +2024,58 @@ function playDoorbellSound() {
 
 // Connect WebSocket on page load
 connectWebSocket();
+
+// ===== Calendar Event Auto-Refresh =====
+let lastEventsHash = '';
+
+// Create a simple hash from events data
+function hashEvents(events) {
+    if (!events || !Array.isArray(events)) return '';
+    return events.map(e => `${e.ID}:${e.Title}:${e.Start}:${e.End}`).sort().join('|');
+}
+
+// Check for new/changed events periodically
+async function checkForEventUpdates() {
+    // Don't refresh if a modal is open (user is interacting)
+    const activeModal = document.querySelector('.modal.active');
+    if (activeModal) {
+        console.log('Skipping calendar refresh - modal is open');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/calendar/events?view=${currentView}&date=${currentDate}`);
+        if (!resp.ok) {
+            console.log('Calendar refresh: API error');
+            return;
+        }
+
+        const events = await resp.json();
+        const newHash = hashEvents(events);
+
+        // Initialize hash on first check
+        if (lastEventsHash === '') {
+            lastEventsHash = newHash;
+            console.log('Calendar refresh: initialized events hash');
+            return;
+        }
+
+        // If events changed, reload the page
+        if (newHash !== lastEventsHash) {
+            console.log('Calendar refresh: events changed, reloading...');
+            lastEventsHash = newHash;
+            window.location.reload();
+        }
+    } catch (err) {
+        console.error('Calendar refresh error:', err);
+    }
+}
+
+// Check for updates every 60 seconds
+setInterval(checkForEventUpdates, 60000);
+
+// Also check once shortly after page load to initialize the hash
+setTimeout(checkForEventUpdates, 5000);
 </script>
 
 <!-- Camera Modal -->

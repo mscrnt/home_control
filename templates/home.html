@@ -504,13 +504,42 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     }
 });
 
-// Auto-refresh every 30 seconds (skip if modal is open)
-setInterval(() => {
-    const hasActiveModal = document.querySelector('.modal.active');
-    if (!hasActiveModal) {
-        location.reload();
+// Refresh entity states every 30 seconds via AJAX (no page reload)
+async function refreshEntityStates() {
+    try {
+        const resp = await fetch('/api/entities');
+        if (!resp.ok) return;
+
+        const groups = await resp.json();
+
+        // Update groupsData with new states
+        groups.forEach(group => {
+            if (groupsData[group.Name]) {
+                groupsData[group.Name] = group;
+            }
+        });
+
+        // Update group card summaries
+        updateGroupSummaries();
+
+        // If a group modal is open, refresh its content
+        const activeModal = document.querySelector('#groupModal.active');
+        if (activeModal) {
+            const titleEl = document.getElementById('groupModalTitle');
+            if (titleEl) {
+                const groupName = titleEl.textContent;
+                const group = groupsData[groupName];
+                if (group) {
+                    document.getElementById('groupModalContent').innerHTML = renderGroupContent(group);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Failed to refresh entity states:', err);
     }
-}, 30000);
+}
+
+setInterval(refreshEntityStates, 30000);
 
 // Close modals when clicking outside (on the backdrop)
 document.querySelectorAll('.modal').forEach(modal => {
