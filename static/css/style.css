@@ -177,6 +177,91 @@ body {
     padding-bottom: 1rem;
 }
 
+/* Groups Grid */
+.groups-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+@media (min-width: 768px) {
+    .groups-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 1200px) {
+    .groups-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.group-card {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+}
+
+.group-card:hover {
+    background: #1e2a4a;
+    border-color: #0f3460;
+    transform: translateY(-2px);
+}
+
+.group-card:active {
+    transform: translateY(0);
+}
+
+.group-card-icon {
+    font-size: 2.5rem;
+    min-width: 3.5rem;
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(233, 69, 96, 0.1);
+    border-radius: 12px;
+}
+
+.group-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.group-card-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #eee;
+}
+
+.group-card-summary {
+    font-size: 0.95rem;
+    color: #888;
+    margin-top: 0.25rem;
+}
+
+.group-card-arrow {
+    color: #666;
+    transition: transform 0.2s;
+}
+
+.group-card-arrow svg {
+    width: 24px;
+    height: 24px;
+}
+
+.group-card:hover .group-card-arrow {
+    color: #e94560;
+    transform: translateX(4px);
+}
+
+/* Legacy card-group (kept for compatibility) */
 .card-group {
     margin-bottom: 2rem;
 }
@@ -1554,6 +1639,155 @@ body.numpad-open .modal-content {
     font-weight: 600;
 }
 
+/* ===== Group Modal ===== */
+.modal-group {
+    max-width: 450px;
+    width: 100%;
+}
+
+.modal-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #0f3460;
+}
+
+.modal-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.modal-header-title h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #eee;
+}
+
+.group-modal-icon {
+    font-size: 1.75rem;
+}
+
+.modal-close-btn {
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.75rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.modal-close-btn:hover {
+    background: #0f3460;
+    color: #eee;
+}
+
+.group-modal-content {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Entity Rows in Group Modal */
+.entity-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #0f3460;
+    transition: background 0.2s;
+}
+
+.entity-row:last-child {
+    border-bottom: none;
+}
+
+.entity-toggleable {
+    cursor: pointer;
+}
+
+.entity-toggleable:hover {
+    background: #1a1a2e;
+}
+
+.entity-loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.entity-icon {
+    font-size: 1.75rem;
+    min-width: 2.5rem;
+    text-align: center;
+}
+
+.entity-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.entity-name {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.entity-state {
+    font-size: 0.9rem;
+    color: #888;
+    margin-top: 0.15rem;
+    text-transform: capitalize;
+}
+
+.entity-on .entity-state {
+    color: #e94560;
+}
+
+/* Toggle Switch */
+.entity-toggle {
+    flex-shrink: 0;
+}
+
+.toggle-switch {
+    width: 52px;
+    height: 28px;
+    background: #1a1a2e;
+    border-radius: 14px;
+    position: relative;
+    transition: background 0.2s;
+    border: 2px solid #0f3460;
+}
+
+.toggle-switch.on {
+    background: #e94560;
+    border-color: #e94560;
+}
+
+.toggle-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: #eee;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.toggle-switch.on .toggle-slider {
+    transform: translateX(24px);
+}
+
 /* Weather Status */
 .weather-status {
     display: flex;
@@ -2328,4 +2562,213 @@ body.tasks-panel-open {
     color: #666;
     min-width: 32px;
     text-align: right;
+}
+
+/* ===== Camera Modal Styles ===== */
+.camera-modal.active {
+    z-index: 1100; /* Higher than other modals */
+}
+
+.modal-camera {
+    max-width: 90vw;
+    max-height: 90vh;
+    width: auto;
+    padding: 0;
+    overflow: hidden;
+}
+
+.camera-modal-icon {
+    font-size: 1.5rem;
+    margin-right: 0.5rem;
+    animation: ring 0.5s ease-in-out infinite;
+}
+
+@keyframes ring {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(15deg); }
+    75% { transform: rotate(-15deg); }
+}
+
+.camera-stream-container {
+    position: relative;
+    background: #000;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-stream {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+}
+
+.camera-stream[src=""] {
+    display: none;
+}
+
+.camera-stream[src=""] + .camera-loading {
+    display: block;
+}
+
+.camera-loading {
+    display: none;
+    color: #888;
+    font-size: 1rem;
+    position: absolute;
+    text-align: center;
+}
+
+.camera-modal-actions {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    background: var(--bg-secondary);
+}
+
+/* Camera modal header styling */
+.modal-camera .modal-header-row {
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.modal-camera .modal-header-title h3 {
+    color: #fff;
+}
+
+.modal-camera .modal-close-btn {
+    color: #fff;
+    background: rgba(255,255,255,0.2);
+}
+
+.modal-camera .modal-close-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+/* ===== Cameras Modal Styles ===== */
+.modal-cameras {
+    max-width: 500px;
+}
+
+.cameras-modal-content {
+    padding: 1rem;
+}
+
+.camera-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.camera-row:hover {
+    background: var(--bg-hover);
+    transform: translateX(4px);
+}
+
+.camera-row:active {
+    transform: translateX(2px);
+}
+
+.camera-icon {
+    font-size: 2rem;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(66, 133, 244, 0.15);
+    border-radius: 12px;
+}
+
+.camera-info {
+    flex: 1;
+}
+
+.camera-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.camera-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.camera-arrow {
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+}
+
+.camera-arrow svg {
+    width: 100%;
+    height: 100%;
+}
+
+.no-cameras {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+}
+
+/* Camera View Modal */
+.camera-view-modal.active {
+    z-index: 1050;
+}
+
+.modal-camera-view {
+    max-width: 90vw;
+    max-height: 90vh;
+    width: auto;
+    padding: 0;
+    overflow: hidden;
+}
+
+.camera-view-container {
+    position: relative;
+    background: #000;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-view-stream {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+}
+
+.camera-view-stream[src=""] {
+    display: none;
+}
+
+.camera-view-stream[src=""] + .camera-view-loading {
+    display: block;
+}
+
+.camera-view-loading {
+    display: none;
+    color: #888;
+    font-size: 1rem;
+    position: absolute;
+    text-align: center;
+}
+
+.camera-view-actions {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    background: var(--bg-secondary);
 }

@@ -1,5 +1,6 @@
 .env
 server
+home_control
 *.exe
 data/
 token.json

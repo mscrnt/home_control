@@ -13,34 +13,123 @@
             </button>
         </div>
     </div>
-    {{if .Groups}}
-    {{range .Groups}}
-    <div class="card-group">
-        <h2 class="group-header">
-            <span class="group-icon">{{.Icon}}</span>
-            {{.Name}}
-        </h2>
-        <div class="cards-grid">
-            {{range .Cards}}
-            <div class="card card-{{.Type}}{{if .IsOn}} card-on{{end}}"
-                 data-entity="{{.EntityID}}"
-                 {{if or (eq .Type "light") (eq .Type "switch") (eq .Type "fan") (eq .Type "lock")}}onclick="toggleEntity('{{.EntityID}}')"{{end}}>
-                <div class="card-icon">{{.Icon}}</div>
-                <div class="card-info">
-                    <div class="card-name">{{.Name}}</div>
-                    <div class="card-state">{{.State}}{{if .Unit}} {{.Unit}}{{end}}</div>
+    {{if or .Groups .Cameras}}
+    <div class="groups-grid">
+        {{range $idx, $group := .Groups}}
+        <div class="group-card" onclick="openGroupModal('{{$group.Name}}')" data-group="{{$group.Name}}">
+            <div class="group-card-icon">{{$group.Icon}}</div>
+            <div class="group-card-info">
+                <div class="group-card-name">{{$group.Name}}</div>
+                <div class="group-card-summary" id="summary-{{$group.Name}}">
+                    {{len $group.Cards}} device{{if ne (len $group.Cards) 1}}s{{end}}
                 </div>
             </div>
-            {{end}}
+            <div class="group-card-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                </svg>
+            </div>
         </div>
+        {{end}}
+        {{if .Cameras}}
+        <div class="group-card" onclick="openCamerasModal()" data-group="Cameras">
+            <div class="group-card-icon">📷</div>
+            <div class="group-card-info">
+                <div class="group-card-name">Cameras</div>
+                <div class="group-card-summary">
+                    {{len .Cameras}} camera{{if ne (len .Cameras) 1}}s{{end}}
+                </div>
+            </div>
+            <div class="group-card-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                </svg>
+            </div>
+        </div>
+        {{end}}
     </div>
+
+    <!-- Hidden data for JavaScript -->
+    <script id="groupsData" type="application/json">
+    {{range $idx, $group := .Groups}}
+    {{if $idx}},{{end}}
+    {"name": "{{$group.Name}}", "icon": "{{$group.Icon}}", "cards": [
+        {{range $cidx, $card := $group.Cards}}
+        {{if $cidx}},{{end}}
+        {
+            "entityId": "{{$card.EntityID}}",
+            "name": "{{$card.Name}}",
+            "state": "{{$card.State}}",
+            "icon": "{{$card.Icon}}",
+            "type": "{{$card.Type}}",
+            "unit": "{{$card.Unit}}",
+            "isOn": {{$card.IsOn}}
+        }
+        {{end}}
+    ]}
     {{end}}
+    </script>
+    <script id="camerasData" type="application/json">
+    [{{range $idx, $cam := .Cameras}}{{if $idx}},{{end}}{"name": "{{$cam.name}}", "label": "{{$cam.label}}"}{{end}}]
+    </script>
     {{else}}
     <div class="no-cards">
         <p>No entities configured.</p>
         <p>Set HA_ENTITIES in your environment.</p>
     </div>
     {{end}}
+</div>
+
+<!-- Group Modal -->
+<div id="groupModal" class="modal">
+    <div class="modal-content modal-group">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span id="groupModalIcon" class="group-modal-icon"></span>
+                <h3 id="groupModalTitle"></h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeGroupModal()">&times;</button>
+        </div>
+        <div id="groupModalContent" class="group-modal-content">
+            <!-- Entities will be rendered here -->
+        </div>
+    </div>
+</div>
+
+<!-- Cameras Modal -->
+<div id="camerasModal" class="modal">
+    <div class="modal-content modal-cameras">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="group-modal-icon">📷</span>
+                <h3>Cameras</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeCamerasModal()">&times;</button>
+        </div>
+        <div id="camerasModalContent" class="cameras-modal-content">
+            <!-- Cameras will be rendered here -->
+        </div>
+    </div>
+</div>
+
+<!-- Camera View Modal -->
+<div id="cameraViewModal" class="modal camera-view-modal">
+    <div class="modal-content modal-camera-view">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="camera-modal-icon">📷</span>
+                <h3 id="cameraViewTitle">Camera</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeCameraViewModal()">&times;</button>
+        </div>
+        <div class="camera-view-container">
+            <img id="cameraViewStream" class="camera-view-stream" alt="Camera stream">
+            <div class="camera-view-loading">Loading camera...</div>
+        </div>
+        <div class="camera-view-actions">
+            <button class="modal-btn secondary" onclick="closeCameraViewModal()">Close</button>
+        </div>
+    </div>
 </div>
 
 <!-- Settings Modal -->
@@ -125,21 +214,222 @@
 </div>
 
 <script>
+// Parse groups data
+let groupsData = {};
+try {
+    const dataEl = document.getElementById('groupsData');
+    if (dataEl) {
+        const jsonStr = '[' + dataEl.textContent.trim() + ']';
+        const groups = JSON.parse(jsonStr);
+        groups.forEach(g => {
+            groupsData[g.name] = g;
+        });
+    }
+} catch (e) {
+    console.error('Failed to parse groups data:', e);
+}
+
+// Parse cameras data
+let camerasData = [];
+try {
+    const camerasEl = document.getElementById('camerasData');
+    if (camerasEl) {
+        camerasData = JSON.parse(camerasEl.textContent.trim());
+    }
+} catch (e) {
+    console.error('Failed to parse cameras data:', e);
+}
+
+// Update group summaries on load
+function updateGroupSummaries() {
+    Object.keys(groupsData).forEach(groupName => {
+        const group = groupsData[groupName];
+        const summaryEl = document.getElementById('summary-' + groupName);
+        if (!summaryEl) return;
+
+        const onCount = group.cards.filter(c => c.isOn).length;
+        const total = group.cards.length;
+
+        if (groupName === 'Lights') {
+            if (onCount === 0) {
+                summaryEl.textContent = 'All off';
+            } else if (onCount === total) {
+                summaryEl.textContent = 'All on';
+            } else {
+                summaryEl.textContent = onCount + ' on';
+            }
+        } else if (groupName === 'Security') {
+            const locked = group.cards.filter(c => c.state === 'locked').length;
+            if (locked === total) {
+                summaryEl.textContent = 'All locked';
+            } else {
+                summaryEl.textContent = (total - locked) + ' unlocked';
+            }
+        } else if (groupName === 'Climate') {
+            // Find thermostat or show temp
+            const climate = group.cards.find(c => c.type === 'climate');
+            if (climate) {
+                summaryEl.textContent = climate.state;
+            } else {
+                const temp = group.cards.find(c => c.unit === '°F' || c.unit === '°C');
+                if (temp) {
+                    summaryEl.textContent = temp.state + temp.unit;
+                }
+            }
+        } else {
+            summaryEl.textContent = total + ' device' + (total !== 1 ? 's' : '');
+        }
+    });
+}
+
+updateGroupSummaries();
+
+// Group Modal
+function openGroupModal(groupName) {
+    const group = groupsData[groupName];
+    if (!group) return;
+
+    document.getElementById('groupModalIcon').textContent = group.icon;
+    document.getElementById('groupModalTitle').textContent = group.name;
+
+    const content = document.getElementById('groupModalContent');
+    content.innerHTML = renderGroupContent(group);
+
+    document.getElementById('groupModal').classList.add('active');
+}
+
+function closeGroupModal() {
+    document.getElementById('groupModal').classList.remove('active');
+}
+
+// Cameras Modal
+function openCamerasModal() {
+    const content = document.getElementById('camerasModalContent');
+    content.innerHTML = renderCamerasContent();
+    document.getElementById('camerasModal').classList.add('active');
+}
+
+function closeCamerasModal() {
+    document.getElementById('camerasModal').classList.remove('active');
+}
+
+function renderCamerasContent() {
+    if (camerasData.length === 0) {
+        return '<div class="no-cameras">No cameras configured</div>';
+    }
+    return camerasData.map(cam => `
+        <div class="camera-row" onclick="openCameraView('${cam.name}', '${cam.label}')">
+            <div class="camera-icon">📷</div>
+            <div class="camera-info">
+                <div class="camera-name">${cam.label}</div>
+                <div class="camera-status">Tap to view</div>
+            </div>
+            <div class="camera-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                </svg>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openCameraView(cameraName, cameraLabel) {
+    const modal = document.getElementById('cameraViewModal');
+    const title = document.getElementById('cameraViewTitle');
+    const stream = document.getElementById('cameraViewStream');
+
+    title.textContent = cameraLabel;
+
+    // Load the camera stream
+    stream.src = `/api/camera/${cameraName}/stream`;
+    stream.onerror = () => {
+        stream.src = `/api/camera/${cameraName}/snapshot`;
+    };
+
+    modal.classList.add('active');
+}
+
+function closeCameraViewModal() {
+    const modal = document.getElementById('cameraViewModal');
+    const stream = document.getElementById('cameraViewStream');
+
+    modal.classList.remove('active');
+    stream.src = ''; // Stop the stream
+}
+
+function renderGroupContent(group) {
+    return group.cards.map(card => {
+        const isToggleable = ['light', 'switch', 'fan', 'lock'].includes(card.type);
+        const toggleAttr = isToggleable ? `onclick="toggleEntity('${card.entityId}')"` : '';
+        const cursorClass = isToggleable ? 'entity-toggleable' : '';
+        const onClass = card.isOn ? 'entity-on' : '';
+
+        return `
+            <div class="entity-row ${cursorClass} ${onClass}" data-entity="${card.entityId}" ${toggleAttr}>
+                <div class="entity-icon">${card.icon}</div>
+                <div class="entity-info">
+                    <div class="entity-name">${escapeHtml(card.name)}</div>
+                    <div class="entity-state">${card.state}${card.unit ? ' ' + card.unit : ''}</div>
+                </div>
+                ${isToggleable ? `
+                <div class="entity-toggle">
+                    <div class="toggle-switch ${card.isOn ? 'on' : ''}">
+                        <div class="toggle-slider"></div>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 async function toggleEntity(entityID) {
-    const card = document.querySelector(`[data-entity="${entityID}"]`);
-    card.classList.add('card-loading');
+    const entityRow = document.querySelector(`.entity-row[data-entity="${entityID}"]`);
+    const groupCard = document.querySelector(`.group-card[data-group]`);
+
+    if (entityRow) {
+        entityRow.classList.add('entity-loading');
+    }
 
     try {
         const resp = await fetch(`/api/toggle/${entityID}`, { method: 'POST' });
         if (resp.ok) {
             const data = await resp.json();
-            card.classList.toggle('card-on', data.IsOn);
-            card.querySelector('.card-state').textContent = data.State;
+
+            // Update the entity row in modal
+            if (entityRow) {
+                entityRow.classList.toggle('entity-on', data.IsOn);
+                entityRow.querySelector('.entity-state').textContent = data.State;
+                const toggle = entityRow.querySelector('.toggle-switch');
+                if (toggle) {
+                    toggle.classList.toggle('on', data.IsOn);
+                }
+            }
+
+            // Update the local data
+            Object.keys(groupsData).forEach(groupName => {
+                const card = groupsData[groupName].cards.find(c => c.entityId === entityID);
+                if (card) {
+                    card.isOn = data.IsOn;
+                    card.state = data.State;
+                }
+            });
+
+            // Update group summaries
+            updateGroupSummaries();
         }
     } catch (err) {
         console.error('Toggle failed:', err);
     } finally {
-        card.classList.remove('card-loading');
+        if (entityRow) {
+            entityRow.classList.remove('entity-loading');
+        }
     }
 }
 
@@ -214,8 +504,13 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     }
 });
 
-// Auto-refresh every 30 seconds
-setInterval(() => location.reload(), 30000);
+// Auto-refresh every 30 seconds (skip if modal is open)
+setInterval(() => {
+    const hasActiveModal = document.querySelector('.modal.active');
+    if (!hasActiveModal) {
+        location.reload();
+    }
+}, 30000);
 
 // Close modals when clicking outside (on the backdrop)
 document.querySelectorAll('.modal').forEach(modal => {
@@ -225,5 +520,147 @@ document.querySelectorAll('.modal').forEach(modal => {
         }
     });
 });
+
+// ===== Camera/Doorbell WebSocket =====
+let ws = null;
+let wsReconnectTimer = null;
+let cameraModalTimeout = null;
+
+function connectWebSocket() {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+        if (wsReconnectTimer) {
+            clearTimeout(wsReconnectTimer);
+            wsReconnectTimer = null;
+        }
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'doorbell') {
+                showCameraModal(data.payload.camera || 'doorbell');
+            }
+        } catch (e) {
+            console.error('WebSocket message error:', e);
+        }
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        // Reconnect after 5 seconds
+        wsReconnectTimer = setTimeout(connectWebSocket, 5000);
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+}
+
+function showCameraModal(cameraName) {
+    const modal = document.getElementById('cameraModal');
+    const title = document.getElementById('cameraModalTitle');
+    const stream = document.getElementById('cameraStream');
+
+    title.textContent = 'Doorbell';
+
+    // Use snapshot first, then try stream
+    stream.src = `/api/camera/${cameraName}/stream`;
+    stream.onerror = () => {
+        stream.src = `/api/camera/${cameraName}/snapshot`;
+    };
+
+    modal.classList.add('active');
+
+    // Play doorbell sound
+    playDoorbellSound();
+
+    // Auto-close after 60 seconds
+    if (cameraModalTimeout) {
+        clearTimeout(cameraModalTimeout);
+    }
+    cameraModalTimeout = setTimeout(() => {
+        closeCameraModal();
+    }, 60000);
+}
+
+function closeCameraModal() {
+    const modal = document.getElementById('cameraModal');
+    const stream = document.getElementById('cameraStream');
+
+    modal.classList.remove('active');
+    stream.src = '';
+
+    if (cameraModalTimeout) {
+        clearTimeout(cameraModalTimeout);
+        cameraModalTimeout = null;
+    }
+}
+
+function playDoorbellSound() {
+    // Create a simple doorbell tone using Web Audio API
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+        oscillator.start(audioCtx.currentTime);
+        oscillator.stop(audioCtx.currentTime + 0.5);
+
+        // Second ding
+        setTimeout(() => {
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(659, audioCtx.currentTime); // E5
+            gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            osc2.start(audioCtx.currentTime);
+            osc2.stop(audioCtx.currentTime + 0.5);
+        }, 200);
+    } catch (e) {
+        console.log('Could not play doorbell sound:', e);
+    }
+}
+
+// Connect WebSocket on page load
+document.addEventListener('DOMContentLoaded', () => {
+    connectWebSocket();
+});
 </script>
+
+<!-- Camera Modal -->
+<div id="cameraModal" class="modal camera-modal">
+    <div class="modal-content modal-camera">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="camera-modal-icon">🔔</span>
+                <h3 id="cameraModalTitle">Doorbell</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeCameraModal()">&times;</button>
+        </div>
+        <div class="camera-stream-container">
+            <img id="cameraStream" class="camera-stream" alt="Camera stream">
+            <div class="camera-loading">Loading camera...</div>
+        </div>
+        <div class="camera-modal-actions">
+            <button class="modal-btn secondary" onclick="closeCameraModal()">Dismiss</button>
+        </div>
+    </div>
+</div>
 {{end}}
