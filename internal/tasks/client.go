@@ -22,6 +22,7 @@ type Client struct {
 	config    *oauth2.Config
 	tokenFile string
 	service   *gtasks.Service
+	timezone  *time.Location
 }
 
 // Task represents a Google Task
@@ -42,7 +43,7 @@ type TaskList struct {
 }
 
 // NewClient creates a tasks client that shares the OAuth token with calendar
-func NewClient(clientID, clientSecret, tokenFile string) *Client {
+func NewClient(clientID, clientSecret, tokenFile string, timezone *time.Location) *Client {
 	config := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -55,6 +56,7 @@ func NewClient(clientID, clientSecret, tokenFile string) *Client {
 	client := &Client{
 		config:    config,
 		tokenFile: tokenFile,
+		timezone:  timezone,
 	}
 
 	return client
@@ -165,9 +167,18 @@ func (c *Client) GetTasks(ctx context.Context, listID string) ([]Task, error) {
 		}
 
 		if t.Due != "" {
-			// Google Tasks due dates are in RFC3339 format
-			if due, err := time.Parse(time.RFC3339, t.Due); err == nil {
-				task.Due = due
+			// Google Tasks due dates are stored as midnight UTC (YYYY-MM-DDT00:00:00.000Z)
+			// but represent a date, not a specific time. Parse just the date portion
+			// to avoid timezone shift issues.
+			if len(t.Due) >= 10 {
+				dateStr := t.Due[:10] // Extract YYYY-MM-DD
+				loc := c.timezone
+				if loc == nil {
+					loc = time.Local
+				}
+				if due, err := time.ParseInLocation("2006-01-02", dateStr, loc); err == nil {
+					task.Due = due
+				}
 			}
 		}
 

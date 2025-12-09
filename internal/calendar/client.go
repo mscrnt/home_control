@@ -21,6 +21,7 @@ type Client struct {
 	tokenFile   string
 	service     *gcal.Service
 	calendarIDs []string
+	timezone    *time.Location
 }
 
 type Event struct {
@@ -57,7 +58,7 @@ type CalendarInfo struct {
 	Color string `json:"color,omitempty"`
 }
 
-func NewClient(clientID, clientSecret, redirectURL, tokenFile string, calendarIDs []string) *Client {
+func NewClient(clientID, clientSecret, redirectURL, tokenFile string, calendarIDs []string, timezone *time.Location) *Client {
 	config := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -73,6 +74,7 @@ func NewClient(clientID, clientSecret, redirectURL, tokenFile string, calendarID
 		config:      config,
 		tokenFile:   tokenFile,
 		calendarIDs: calendarIDs,
+		timezone:    timezone,
 	}
 }
 
@@ -190,7 +192,7 @@ func (c *Client) GetUpcomingEvents(ctx context.Context, days int) ([]*Event, err
 		}
 
 		for _, item := range events.Items {
-			result = append(result, convertGoogleEvent(item, cal.ID, cal.Color))
+			result = append(result, c.convertGoogleEvent(item, cal.ID, cal.Color))
 		}
 	}
 
@@ -250,7 +252,7 @@ func (c *Client) GetEventsInRange(ctx context.Context, start, end time.Time) ([]
 		}
 
 		for _, item := range events.Items {
-			result = append(result, convertGoogleEvent(item, cal.ID, cal.Color))
+			result = append(result, c.convertGoogleEvent(item, cal.ID, cal.Color))
 		}
 	}
 
@@ -282,7 +284,7 @@ type UpdateEventOptions struct {
 }
 
 // convertGoogleEvent converts a Google Calendar event to our Event struct
-func convertGoogleEvent(item *gcal.Event, calendarID, defaultColor string) *Event {
+func (c *Client) convertGoogleEvent(item *gcal.Event, calendarID, defaultColor string) *Event {
 	event := &Event{
 		ID:          item.Id,
 		CalendarID:  calendarID,
@@ -295,6 +297,12 @@ func convertGoogleEvent(item *gcal.Event, calendarID, defaultColor string) *Even
 		HTMLLink:    item.HtmlLink,
 	}
 
+	// Get timezone for all-day event parsing
+	loc := c.timezone
+	if loc == nil {
+		loc = time.Local
+	}
+
 	// Parse start time
 	if item.Start != nil {
 		if item.Start.DateTime != "" {
@@ -302,7 +310,8 @@ func convertGoogleEvent(item *gcal.Event, calendarID, defaultColor string) *Even
 			event.Start = t
 			event.AllDay = false
 		} else if item.Start.Date != "" {
-			t, _ := time.Parse("2006-01-02", item.Start.Date)
+			// All-day events should be parsed in local timezone
+			t, _ := time.ParseInLocation("2006-01-02", item.Start.Date, loc)
 			event.Start = t
 			event.AllDay = true
 		}
@@ -314,7 +323,8 @@ func convertGoogleEvent(item *gcal.Event, calendarID, defaultColor string) *Even
 			t, _ := time.Parse(time.RFC3339, item.End.DateTime)
 			event.End = t
 		} else if item.End.Date != "" {
-			t, _ := time.Parse("2006-01-02", item.End.Date)
+			// All-day events should be parsed in local timezone
+			t, _ := time.ParseInLocation("2006-01-02", item.End.Date, loc)
 			event.End = t
 		}
 	}
@@ -396,7 +406,7 @@ func (c *Client) CreateEvent(ctx context.Context, title string, start, end time.
 		log.Printf("Event verified: ID=%s, Summary=%s, Status=%s, Start=%+v", verified.Id, verified.Summary, verified.Status, verified.Start)
 	}
 
-	return convertGoogleEvent(created, calendarID, "#4285f4"), nil
+	return c.convertGoogleEvent(created, calendarID, "#4285f4"), nil
 }
 
 // GetEvent fetches a single event by ID
@@ -423,7 +433,7 @@ func (c *Client) GetEvent(ctx context.Context, calendarID, eventID string) (*Eve
 		log.Printf("GetEvent: Found event on primary calendar")
 	}
 
-	return convertGoogleEvent(event, calendarID, "#4285f4"), nil
+	return c.convertGoogleEvent(event, calendarID, "#4285f4"), nil
 }
 
 // UpdateEvent performs a full update of an event (replaces all fields)
@@ -493,7 +503,7 @@ func (c *Client) UpdateEvent(ctx context.Context, calendarID, eventID string, ti
 	}
 
 	log.Printf("Event updated: ID=%s, Status=%s", updated.Id, updated.Status)
-	return convertGoogleEvent(updated, calendarID, "#4285f4"), nil
+	return c.convertGoogleEvent(updated, calendarID, "#4285f4"), nil
 }
 
 // PatchEvent performs a partial update of an event (only specified fields)
@@ -591,7 +601,7 @@ func (c *Client) PatchEvent(ctx context.Context, calendarID, eventID string, opt
 	}
 
 	log.Printf("Event patched: ID=%s, Status=%s", patched.Id, patched.Status)
-	return convertGoogleEvent(patched, calendarID, "#4285f4"), nil
+	return c.convertGoogleEvent(patched, calendarID, "#4285f4"), nil
 }
 
 // MoveEvent moves an event to a different calendar
@@ -610,7 +620,7 @@ func (c *Client) MoveEvent(ctx context.Context, sourceCalendarID, eventID, desti
 	}
 
 	log.Printf("Event moved: ID=%s from %s to %s", moved.Id, sourceCalendarID, destinationCalendarID)
-	return convertGoogleEvent(moved, destinationCalendarID, "#4285f4"), nil
+	return c.convertGoogleEvent(moved, destinationCalendarID, "#4285f4"), nil
 }
 
 // DeleteEvent removes an event from a calendar
@@ -672,7 +682,7 @@ func (c *Client) GetEventInstances(ctx context.Context, calendarID, eventID stri
 
 	var result []*Event
 	for _, item := range instances.Items {
-		result = append(result, convertGoogleEvent(item, calendarID, "#4285f4"))
+		result = append(result, c.convertGoogleEvent(item, calendarID, "#4285f4"))
 	}
 
 	return result, nil

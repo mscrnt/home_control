@@ -18,17 +18,6 @@
             <a href="?view=week&date={{.TodayDate}}" class="view-btn {{if eq .View "week"}}active{{end}}">Week</a>
             <a href="?view=month&date={{.TodayDate}}" class="view-btn {{if eq .View "month"}}active{{end}}">Month</a>
         </div>
-        {{if .Calendars}}
-        <div class="calendar-picker">
-            {{range .Calendars}}
-            <label class="calendar-chip" style="--cal-color: {{.Color}}">
-                <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
-                <span class="chip-dot"></span>
-                <span class="chip-name">{{.Name}}</span>
-            </label>
-            {{end}}
-        </div>
-        {{end}}
         <div class="header-actions">
             <a href="/home" class="page-nav-btn">Home</a>
             <button class="settings-btn" onclick="openSettings()" title="Settings">
@@ -43,25 +32,38 @@
     {{if eq .View "month"}}
     <div class="month-view">
         <div class="view-title-nav">
-            <div class="view-title-left">
-                <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
-                    <span class="weather-icon" id="weatherIconMonth"></span>
-                    <span class="weather-temp" id="weatherTempMonth">--°</span>
-                </button>
+            {{if .Calendars}}
+            <div class="calendar-picker">
+                {{range .Calendars}}
+                <label class="calendar-chip" style="--cal-color: {{.Color}}">
+                    <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
+                    <span class="chip-dot"></span>
+                    <span class="chip-name">{{.Name}}</span>
+                </label>
+                {{end}}
             </div>
-            <div class="view-title-center">
-                <a href="?view=month&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
-                <h2 class="month-title" onclick="openDatePicker()">{{.MonthName}} {{.Year}}</h2>
-                <a href="?view=month&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
-            </div>
-            <div class="view-title-right">
-                <button class="tasks-btn" onclick="toggleTasksPanel()" title="Tasks">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 11l3 3L22 4"/>
-                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-                    </svg>
-                    <span>Tasks</span>
-                </button>
+            {{end}}
+            <div class="view-title-row">
+                <div class="view-title-left">
+                    <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
+                        <span class="weather-icon" id="weatherIconMonth"></span>
+                        <span class="weather-temp" id="weatherTempMonth">--°</span>
+                    </button>
+                </div>
+                <div class="view-title-center">
+                    <a href="?view=month&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                    <h2 class="month-title" onclick="openDatePicker()">{{.MonthName}} {{.Year}}</h2>
+                    <a href="?view=month&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+                </div>
+                <div class="view-title-right">
+                    <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"/>
+                            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                        </svg>
+                        <span>TODOs</span>
+                    </button>
+                </div>
             </div>
         </div>
         <div class="weekday-row">
@@ -92,25 +94,38 @@
     {{else if eq .View "week"}}
     <div class="week-view">
         <div class="view-title-nav">
-            <div class="view-title-left">
-                <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
-                    <span class="weather-icon" id="weatherIconWeek"></span>
-                    <span class="weather-temp" id="weatherTempWeek">--°</span>
-                </button>
+            {{if .Calendars}}
+            <div class="calendar-picker">
+                {{range .Calendars}}
+                <label class="calendar-chip" style="--cal-color: {{.Color}}">
+                    <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
+                    <span class="chip-dot"></span>
+                    <span class="chip-name">{{.Name}}</span>
+                </label>
+                {{end}}
             </div>
-            <div class="view-title-center">
-                <a href="?view=week&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
-                <h2 class="week-title" onclick="openDatePicker()">{{.WeekDateRange}}</h2>
-                <a href="?view=week&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
-            </div>
-            <div class="view-title-right">
-                <button class="tasks-btn" onclick="toggleTasksPanel()" title="Tasks">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 11l3 3L22 4"/>
-                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-                    </svg>
-                    <span>Tasks</span>
-                </button>
+            {{end}}
+            <div class="view-title-row">
+                <div class="view-title-left">
+                    <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
+                        <span class="weather-icon" id="weatherIconWeek"></span>
+                        <span class="weather-temp" id="weatherTempWeek">--°</span>
+                    </button>
+                </div>
+                <div class="view-title-center">
+                    <a href="?view=week&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                    <h2 class="week-title" onclick="openDatePicker()">{{.WeekDateRange}}</h2>
+                    <a href="?view=week&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+                </div>
+                <div class="view-title-right">
+                    <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"/>
+                            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                        </svg>
+                        <span>TODOs</span>
+                    </button>
+                </div>
             </div>
         </div>
         {{range .WeekDays}}
@@ -148,25 +163,38 @@
     {{/* Day view - 24-hour timeline */}}
     <div class="day-view">
         <div class="view-title-nav">
-            <div class="view-title-left">
-                <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
-                    <span class="weather-icon" id="weatherIconDay"></span>
-                    <span class="weather-temp" id="weatherTempDay">--°</span>
-                </button>
+            {{if .Calendars}}
+            <div class="calendar-picker">
+                {{range .Calendars}}
+                <label class="calendar-chip" style="--cal-color: {{.Color}}">
+                    <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
+                    <span class="chip-dot"></span>
+                    <span class="chip-name">{{.Name}}</span>
+                </label>
+                {{end}}
             </div>
-            <div class="view-title-center">
-                <a href="?view=day&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
-                <h2 class="day-title" onclick="openDatePicker()">{{.DayDateStr}}</h2>
-                <a href="?view=day&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
-            </div>
-            <div class="view-title-right">
-                <button class="tasks-btn" onclick="toggleTasksPanel()" title="Tasks">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 11l3 3L22 4"/>
-                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-                    </svg>
-                    <span>Tasks</span>
-                </button>
+            {{end}}
+            <div class="view-title-row">
+                <div class="view-title-left">
+                    <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
+                        <span class="weather-icon" id="weatherIconDay"></span>
+                        <span class="weather-temp" id="weatherTempDay">--°</span>
+                    </button>
+                </div>
+                <div class="view-title-center">
+                    <a href="?view=day&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                    <h2 class="day-title" onclick="openDatePicker()">{{.DayDateStr}}</h2>
+                    <a href="?view=day&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+                </div>
+                <div class="view-title-right">
+                    <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"/>
+                            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                        </svg>
+                        <span>TODOs</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -599,15 +627,15 @@
     </div>
 </div>
 
-<!-- Tasks Slide-out Panel -->
+<!-- TODOs Slide-out Panel -->
 <div id="tasksPanel" class="tasks-panel">
     <div class="tasks-panel-header">
-        <h3>Tasks</h3>
+        <h3>TODOs</h3>
         <button class="tasks-panel-close" onclick="closeTasksPanel()">&times;</button>
     </div>
     <div class="tasks-panel-content">
         <div class="tasks-add-form">
-            <input type="text" id="newTaskTitle" class="form-input" placeholder="Add a task..."
+            <input type="text" id="newTaskTitle" class="form-input" placeholder="Add a TODO..."
                    onkeydown="if(event.key==='Enter')createNewTask()">
             <button class="tasks-add-btn" onclick="createNewTask()">+</button>
         </div>
@@ -1746,7 +1774,7 @@ async function loadTasks() {
         renderTasks(tasks || []);
     } catch (err) {
         console.error('Error loading tasks:', err);
-        tasksList.innerHTML = '<div class="tasks-error">Failed to load tasks. Make sure Google Tasks is authorized.</div>';
+        tasksList.innerHTML = '<div class="tasks-error">Failed to load TODOs. Make sure Google Tasks is authorized.</div>';
     }
 }
 
@@ -1754,7 +1782,7 @@ function renderTasks(tasks) {
     const tasksList = document.getElementById('tasksList');
 
     if (tasks.length === 0) {
-        tasksList.innerHTML = '<div class="tasks-empty">No tasks yet. Add one above!</div>';
+        tasksList.innerHTML = '<div class="tasks-empty">No TODOs yet. Add one above!</div>';
         return;
     }
 
