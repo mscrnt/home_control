@@ -43,9 +43,21 @@
     {{if eq .View "month"}}
     <div class="month-view">
         <div class="view-title-nav">
-            <a href="?view=month&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
-            <h2 class="month-title" onclick="openDatePicker()">{{.MonthName}} {{.Year}}</h2>
-            <a href="?view=month&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+            <div class="view-title-left"></div>
+            <div class="view-title-center">
+                <a href="?view=month&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                <h2 class="month-title" onclick="openDatePicker()">{{.MonthName}} {{.Year}}</h2>
+                <a href="?view=month&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+            </div>
+            <div class="view-title-right">
+                <button class="tasks-btn" onclick="toggleTasksPanel()" title="Tasks">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"/>
+                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                    </svg>
+                    <span>Tasks</span>
+                </button>
+            </div>
         </div>
         <div class="weekday-row">
             <div class="weekday-header">Sun</div>
@@ -75,9 +87,21 @@
     {{else if eq .View "week"}}
     <div class="week-view">
         <div class="view-title-nav">
-            <a href="?view=week&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
-            <h2 class="week-title" onclick="openDatePicker()">{{.WeekDateRange}}</h2>
-            <a href="?view=week&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+            <div class="view-title-left"></div>
+            <div class="view-title-center">
+                <a href="?view=week&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                <h2 class="week-title" onclick="openDatePicker()">{{.WeekDateRange}}</h2>
+                <a href="?view=week&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+            </div>
+            <div class="view-title-right">
+                <button class="tasks-btn" onclick="toggleTasksPanel()" title="Tasks">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"/>
+                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                    </svg>
+                    <span>Tasks</span>
+                </button>
+            </div>
         </div>
         {{range .WeekDays}}
         <div class="week-day {{if .IsToday}}today{{end}}" data-date="{{.Date.Format "2006-01-02"}}">
@@ -114,9 +138,21 @@
     {{/* Day view - 24-hour timeline */}}
     <div class="day-view">
         <div class="view-title-nav">
-            <a href="?view=day&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
-            <h2 class="day-title" onclick="openDatePicker()">{{.DayDateStr}}</h2>
-            <a href="?view=day&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+            <div class="view-title-left"></div>
+            <div class="view-title-center">
+                <a href="?view=day&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                <h2 class="day-title" onclick="openDatePicker()">{{.DayDateStr}}</h2>
+                <a href="?view=day&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+            </div>
+            <div class="view-title-right">
+                <button class="tasks-btn" onclick="toggleTasksPanel()" title="Tasks">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"/>
+                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                    </svg>
+                    <span>Tasks</span>
+                </button>
+            </div>
         </div>
 
         {{/* All-day events section */}}
@@ -547,6 +583,28 @@
         </div>
     </div>
 </div>
+
+<!-- Tasks Slide-out Panel -->
+<div id="tasksPanel" class="tasks-panel">
+    <div class="tasks-panel-header">
+        <h3>Tasks</h3>
+        <button class="tasks-panel-close" onclick="closeTasksPanel()">&times;</button>
+    </div>
+    <div class="tasks-panel-content">
+        <div class="tasks-add-form">
+            <input type="text" id="newTaskTitle" class="form-input" placeholder="Add a task..."
+                   onkeydown="if(event.key==='Enter')createNewTask()">
+            <button class="tasks-add-btn" onclick="createNewTask()">+</button>
+        </div>
+        <div id="tasksList" class="tasks-list">
+            <div class="tasks-loading">Loading tasks...</div>
+        </div>
+        <div class="tasks-actions">
+            <button class="tasks-clear-btn" onclick="clearCompletedTasks()">Clear completed</button>
+        </div>
+    </div>
+</div>
+<div id="tasksPanelOverlay" class="tasks-panel-overlay" onclick="closeTasksPanel()"></div>
 
 <script>
 let activeInput = null;
@@ -1411,5 +1469,177 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Auto-refresh every 5 minutes
 setInterval(() => location.reload(), 300000);
+
+// ===== Tasks Panel Functions =====
+let currentListId = '@default';
+let tasksLoaded = false;
+
+function toggleTasksPanel() {
+    const panel = document.getElementById('tasksPanel');
+    const overlay = document.getElementById('tasksPanelOverlay');
+    const isOpen = panel.classList.contains('active');
+
+    if (isOpen) {
+        closeTasksPanel();
+    } else {
+        panel.classList.add('active');
+        overlay.classList.add('active');
+        document.body.classList.add('tasks-panel-open');
+        if (!tasksLoaded) {
+            loadTasks();
+        }
+    }
+}
+
+function closeTasksPanel() {
+    document.getElementById('tasksPanel').classList.remove('active');
+    document.getElementById('tasksPanelOverlay').classList.remove('active');
+    document.body.classList.remove('tasks-panel-open');
+}
+
+async function loadTasks() {
+    const tasksList = document.getElementById('tasksList');
+    tasksList.innerHTML = '<div class="tasks-loading">Loading tasks...</div>';
+
+    try {
+        const resp = await fetch(`/api/tasks?listId=${encodeURIComponent(currentListId)}`);
+        if (!resp.ok) {
+            throw new Error('Failed to load tasks');
+        }
+        const tasks = await resp.json();
+        tasksLoaded = true;
+        renderTasks(tasks || []);
+    } catch (err) {
+        console.error('Error loading tasks:', err);
+        tasksList.innerHTML = '<div class="tasks-error">Failed to load tasks. Make sure Google Tasks is authorized.</div>';
+    }
+}
+
+function renderTasks(tasks) {
+    const tasksList = document.getElementById('tasksList');
+
+    if (tasks.length === 0) {
+        tasksList.innerHTML = '<div class="tasks-empty">No tasks yet. Add one above!</div>';
+        return;
+    }
+
+    // Update currentListId with the actual resolved list ID from tasks
+    if (tasks[0] && tasks[0].listId) {
+        currentListId = tasks[0].listId;
+    }
+
+    tasksList.innerHTML = tasks.map(task => `
+        <div class="task-item ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-list-id="${task.listId}">
+            <button class="task-checkbox" onclick="toggleTask('${task.listId}', '${task.id}')">
+                ${task.completed ? '&#10003;' : ''}
+            </button>
+            <span class="task-title">${escapeHtml(task.title)}</span>
+            <button class="task-delete" onclick="deleteTask('${task.listId}', '${task.id}')">&times;</button>
+        </div>
+    `).join('');
+}
+
+async function createNewTask() {
+    const input = document.getElementById('newTaskTitle');
+    const title = input.value.trim();
+
+    if (!title) return;
+
+    input.disabled = true;
+
+    try {
+        const resp = await fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                listId: currentListId,
+                title: title
+            })
+        });
+
+        if (resp.ok) {
+            input.value = '';
+            loadTasks();
+        } else {
+            const err = await resp.text();
+            console.error('Failed to create task:', err);
+        }
+    } catch (err) {
+        console.error('Error creating task:', err);
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+async function toggleTask(listId, taskId) {
+    const taskEl = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (taskEl) {
+        taskEl.classList.add('loading');
+    }
+
+    try {
+        const resp = await fetch(`/api/tasks/${encodeURIComponent(listId)}/${encodeURIComponent(taskId)}/toggle`, {
+            method: 'POST'
+        });
+
+        if (resp.ok) {
+            const task = await resp.json();
+            if (taskEl) {
+                taskEl.classList.toggle('completed', task.completed);
+                taskEl.querySelector('.task-checkbox').innerHTML = task.completed ? '&#10003;' : '';
+            }
+        }
+    } catch (err) {
+        console.error('Error toggling task:', err);
+    } finally {
+        if (taskEl) {
+            taskEl.classList.remove('loading');
+        }
+    }
+}
+
+async function deleteTask(listId, taskId) {
+    const taskEl = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (taskEl) {
+        taskEl.classList.add('deleting');
+    }
+
+    try {
+        const resp = await fetch(`/api/tasks/${encodeURIComponent(listId)}/${encodeURIComponent(taskId)}`, {
+            method: 'DELETE'
+        });
+
+        if (resp.ok || resp.status === 204) {
+            if (taskEl) {
+                taskEl.remove();
+            }
+            // Check if list is now empty
+            const remaining = document.querySelectorAll('.task-item');
+            if (remaining.length === 0) {
+                document.getElementById('tasksList').innerHTML = '<div class="tasks-empty">No tasks yet. Add one above!</div>';
+            }
+        }
+    } catch (err) {
+        console.error('Error deleting task:', err);
+        if (taskEl) {
+            taskEl.classList.remove('deleting');
+        }
+    }
+}
+
+async function clearCompletedTasks() {
+    try {
+        const resp = await fetch(`/api/tasks/${encodeURIComponent(currentListId)}/clear`, {
+            method: 'POST'
+        });
+
+        if (resp.ok || resp.status === 204) {
+            loadTasks();
+        }
+    } catch (err) {
+        console.error('Error clearing completed tasks:', err);
+    }
+}
 </script>
 {{end}}

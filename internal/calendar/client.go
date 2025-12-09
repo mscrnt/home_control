@@ -62,8 +62,11 @@ func NewClient(clientID, clientSecret, redirectURL, tokenFile string, calendarID
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
-		Scopes:       []string{gcal.CalendarScope},
-		Endpoint:     google.Endpoint,
+		Scopes: []string{
+			gcal.CalendarScope,
+			"https://www.googleapis.com/auth/tasks",
+		},
+		Endpoint: google.Endpoint,
 	}
 
 	return &Client{
