@@ -1,6 +1,9 @@
 package homeassistant
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // CardType determines how to render an entity
 type CardType string
@@ -22,22 +25,24 @@ const (
 
 // Card represents a rendered card for the UI
 type Card struct {
-	EntityID     string
-	Name         string
-	State        string
-	Icon         string
-	Type         CardType
-	Unit         string
-	IsOn         bool
-	Group        string
-	Attributes   map[string]interface{}
+	EntityID     string                 `json:"entityId"`
+	Name         string                 `json:"name"`
+	State        string                 `json:"state"`
+	Icon         string                 `json:"icon"`
+	Type         CardType               `json:"type"`
+	Unit         string                 `json:"unit"`
+	IsOn         bool                   `json:"isOn"`
+	Group        string                 `json:"group"`
+	Attributes   map[string]interface{} `json:"attributes"`
+	IsLightGroup bool                   `json:"isLightGroup"` // True if this is a light group with member lights
+	Members      []*Card                `json:"members"`      // Member lights for light groups
 }
 
 // CardGroup holds cards organized by group
 type CardGroup struct {
-	Name  string
-	Icon  string
-	Cards []*Card
+	Name  string  `json:"name"`
+	Icon  string  `json:"icon"`
+	Cards []*Card `json:"cards"`
 }
 
 // ToCard converts an Entity to a UI Card
@@ -76,13 +81,12 @@ func (e *Entity) ToCard() *Card {
 // GroupCards organizes cards into groups
 func GroupCards(cards []*Card) []*CardGroup {
 	// Define group order and icons
-	groupOrder := []string{"Lights", "Climate", "Security", "Tesla", "Weather", "Home", "Other"}
+	groupOrder := []string{"Lights", "Climate", "Security", "Tesla", "Home", "Other"}
 	groupIcons := map[string]string{
 		"Lights":   "💡",
 		"Climate":  "🌡️",
 		"Security": "🔒",
 		"Tesla":    "🚗",
-		"Weather":  "🌤️",
 		"Home":     "🏠",
 		"Other":    "📦",
 	}
@@ -97,6 +101,12 @@ func GroupCards(cards []*Card) []*CardGroup {
 	var result []*CardGroup
 	for _, name := range groupOrder {
 		if cards, ok := grouped[name]; ok && len(cards) > 0 {
+			// Sort cards within Climate group: climate first, then sensors, then fans
+			if name == "Climate" {
+				sort.Slice(cards, func(i, j int) bool {
+					return cardTypePriority(cards[i].Type) < cardTypePriority(cards[j].Type)
+				})
+			}
 			result = append(result, &CardGroup{
 				Name:  name,
 				Icon:  groupIcons[name],
@@ -106,6 +116,20 @@ func GroupCards(cards []*Card) []*CardGroup {
 	}
 
 	return result
+}
+
+// cardTypePriority returns sort priority for cards within Climate group
+func cardTypePriority(t CardType) int {
+	switch t {
+	case CardTypeClimate:
+		return 0
+	case CardTypeFan:
+		return 1
+	case CardTypeSensor:
+		return 2
+	default:
+		return 3
+	}
 }
 
 func detectGroup(entityID string, cardType CardType) string {

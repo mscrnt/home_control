@@ -117,3 +117,119 @@ func (s stringReader) Read(p []byte) (n int, err error) {
 	n = copy(p, s)
 	return n, io.EOF
 }
+
+// SetClimateTemperature sets the target temperature for a climate entity
+func (c *Client) SetClimateTemperature(entityID string, temperature float64) error {
+	url := fmt.Sprintf("%s/api/services/climate/set_temperature", c.baseURL)
+
+	body := fmt.Sprintf(`{"entity_id": "%s", "temperature": %.1f}`, entityID, temperature)
+
+	req, err := http.NewRequest("POST", url, io.NopCloser(
+		io.Reader(stringReader(body)),
+	))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HA service call failed %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// SetClimateDualTemperature sets both low and high target temperatures for heat_cool/auto mode
+func (c *Client) SetClimateDualTemperature(entityID string, targetTempLow, targetTempHigh float64) error {
+	url := fmt.Sprintf("%s/api/services/climate/set_temperature", c.baseURL)
+
+	body := fmt.Sprintf(`{"entity_id": "%s", "target_temp_low": %.1f, "target_temp_high": %.1f}`, entityID, targetTempLow, targetTempHigh)
+
+	req, err := http.NewRequest("POST", url, io.NopCloser(
+		io.Reader(stringReader(body)),
+	))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HA service call failed %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// SetClimateHVACMode sets the HVAC mode for a climate entity (heat, cool, auto, off, etc.)
+func (c *Client) SetClimateHVACMode(entityID string, hvacMode string) error {
+	url := fmt.Sprintf("%s/api/services/climate/set_hvac_mode", c.baseURL)
+
+	body := fmt.Sprintf(`{"entity_id": "%s", "hvac_mode": "%s"}`, entityID, hvacMode)
+
+	req, err := http.NewRequest("POST", url, io.NopCloser(
+		io.Reader(stringReader(body)),
+	))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HA service call failed %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// SetClimateFanMode sets the fan mode for a climate entity (on, off, auto, low, medium, high, etc.)
+func (c *Client) SetClimateFanMode(entityID string, fanMode string) error {
+	url := fmt.Sprintf("%s/api/services/climate/set_fan_mode", c.baseURL)
+
+	body := fmt.Sprintf(`{"entity_id": "%s", "fan_mode": "%s"}`, entityID, fanMode)
+
+	req, err := http.NewRequest("POST", url, io.NopCloser(
+		io.Reader(stringReader(body)),
+	))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HA service call failed %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}

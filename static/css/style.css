@@ -733,15 +733,15 @@ body {
 .modal-content {
     background: #16213e;
     border-radius: 16px;
-    width: 90%;
-    max-width: 500px;
-    max-height: 90vh;
+    width: 95vw;
+    max-width: 95vw;
+    max-height: 95vh;
     overflow-y: auto;
     animation: modalSlide 0.2s ease;
 }
 
 .modal-large {
-    max-width: 700px;
+    max-width: 95vw;
 }
 
 @keyframes modalSlide {
@@ -1376,7 +1376,8 @@ body.numpad-open .modal-content {
 }
 
 .view-title-left {
-    /* Empty spacer for balance */
+    /* Contains weather widget for quick access */
+    min-width: 80px;
 }
 
 .view-title-center {
@@ -1643,6 +1644,11 @@ body.numpad-open .modal-content {
 .modal-group {
     max-width: 450px;
     width: 100%;
+}
+
+/* Larger modal when containing climate controls */
+.modal-group:has(.climate-card) {
+    max-width: 600px;
 }
 
 .modal-header-row {
@@ -2771,4 +2777,1398 @@ body.tasks-panel-open {
     justify-content: center;
     gap: 1rem;
     background: var(--bg-secondary);
+}
+
+/* ===== Security Grid Styles ===== */
+.security-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    padding: 0.5rem;
+}
+
+.security-grid-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.5rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+    min-height: 120px;
+}
+
+.security-grid-item:hover {
+    background: var(--bg-hover);
+    transform: scale(1.02);
+}
+
+.security-grid-item:active {
+    transform: scale(0.98);
+}
+
+.security-grid-item.lock-item.locked {
+    border-color: var(--success-color, #4caf50);
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.security-grid-item.lock-item.unlocked {
+    border-color: var(--warning-color, #ff9800);
+    background: rgba(255, 152, 0, 0.1);
+}
+
+.security-grid-item.camera-item {
+    border-color: rgba(66, 133, 244, 0.3);
+    background: rgba(66, 133, 244, 0.1);
+}
+
+.security-grid-item.camera-item:hover {
+    border-color: rgba(66, 133, 244, 0.6);
+    background: rgba(66, 133, 244, 0.2);
+}
+
+.security-item-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.security-item-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    text-align: center;
+}
+
+.security-item-state {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+}
+
+.lock-item.locked .security-item-state {
+    color: var(--success-color, #4caf50);
+}
+
+.lock-item.unlocked .security-item-state {
+    color: var(--warning-color, #ff9800);
+}
+
+/* ===== Climate Card Styles ===== */
+.climate-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1rem 1.5rem;
+    gap: 0.75rem;
+}
+
+.climate-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.climate-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #0f3460;
+}
+
+.climate-temp-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.climate-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid #0f3460;
+    background: #1a1a2e;
+    color: #eee;
+    font-size: 1.75rem;
+    font-weight: 300;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.climate-btn:hover {
+    background: #0f3460;
+    border-color: #e94560;
+}
+
+.climate-btn:active {
+    background: #e94560;
+    border-color: #e94560;
+    transform: scale(0.95);
+}
+
+.climate-temp-display {
+    min-width: 80px;
+    text-align: center;
+}
+
+.climate-target-temp {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: #eee;
+}
+
+.climate-temp-unit {
+    font-size: 1.25rem;
+    color: #888;
+    margin-left: 2px;
+}
+
+.climate-mode-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.climate-mode-control {
+    display: flex;
+    justify-content: center;
+}
+
+.climate-fan-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.climate-fan-label {
+    font-size: 0.9rem;
+    color: #888;
+    font-weight: 500;
+}
+
+.climate-fan-select {
+    padding: 0.5rem 0.75rem;
+    background: #1a1a2e;
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+    color: #eee;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    padding-right: 1.75rem;
+}
+
+.climate-fan-select:hover,
+.climate-fan-select:focus {
+    border-color: #e94560;
+    outline: none;
+}
+
+.climate-mode-select {
+    width: 100%;
+    max-width: 200px;
+    padding: 0.6rem 1rem;
+    background: #1a1a2e;
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+    color: #eee;
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
+}
+
+.climate-mode-select:hover,
+.climate-mode-select:focus {
+    border-color: #e94560;
+    outline: none;
+}
+
+.climate-status {
+    display: flex;
+    justify-content: center;
+}
+
+.climate-action {
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    background: #1a1a2e;
+    color: #888;
+}
+
+.climate-action.heating {
+    background: rgba(255, 87, 34, 0.2);
+    color: #ff5722;
+}
+
+.climate-action.cooling {
+    background: rgba(33, 150, 243, 0.2);
+    color: #2196f3;
+}
+
+.climate-action.heat {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+}
+
+.climate-action.cool {
+    background: rgba(33, 150, 243, 0.15);
+    color: #2196f3;
+}
+
+.climate-action.auto,
+.climate-action.heat_cool {
+    background: rgba(156, 39, 176, 0.15);
+    color: #9c27b0;
+}
+
+.climate-action.off {
+    background: rgba(96, 125, 139, 0.15);
+    color: #607d8b;
+}
+
+/* ===== Thermostat Display Styles ===== */
+.thermostat-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+.thermostat-display {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.thermostat-display .thermostat-action {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.2rem 0.6rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #888;
+}
+
+.thermostat-display .thermostat-action.heating {
+    background: rgba(255, 152, 0, 0.2);
+    color: #ff9800;
+}
+
+.thermostat-display .thermostat-action.cooling {
+    background: rgba(33, 150, 243, 0.2);
+    color: #2196f3;
+}
+
+.thermostat-display .thermostat-action.heat {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+}
+
+.thermostat-display .thermostat-action.cool {
+    background: rgba(33, 150, 243, 0.15);
+    color: #2196f3;
+}
+
+.thermostat-display .thermostat-action.heat_cool,
+.thermostat-display .thermostat-action.auto {
+    background: rgba(156, 39, 176, 0.15);
+    color: #9c27b0;
+}
+
+.thermostat-display .thermostat-action.off {
+    background: rgba(96, 125, 139, 0.15);
+    color: #607d8b;
+}
+
+.thermostat-temps-dual {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.thermostat-temps-dual .temp-low {
+    font-size: 3rem;
+    font-weight: 600;
+    color: #ff9800;
+}
+
+.thermostat-temps-dual .temp-high {
+    font-size: 3rem;
+    font-weight: 600;
+    color: #2196f3;
+}
+
+.thermostat-temps-dual sup {
+    font-size: 1.5rem;
+    font-weight: 400;
+}
+
+.thermostat-temps-single {
+    display: flex;
+    align-items: baseline;
+    margin: 0.5rem 0;
+}
+
+.thermostat-temps-single .temp-target {
+    font-size: 3.5rem;
+    font-weight: 600;
+    color: #eee;
+}
+
+.thermostat-temps-single sup {
+    font-size: 1.75rem;
+    font-weight: 400;
+}
+
+.thermostat-current {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.thermostat-current .current-icon {
+    font-size: 2rem;
+}
+
+.thermostat-current .current-temp {
+    font-size: 3rem;
+    font-weight: 600;
+    color: #eee;
+}
+
+.thermostat-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 0.5rem;
+}
+
+.thermostat-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    background: #1a1a2e;
+    color: #eee;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.thermostat-btn:hover {
+    background: #2a2a4e;
+    transform: scale(1.05);
+}
+
+.thermostat-btn:active {
+    background: #e94560;
+    transform: scale(0.95);
+}
+
+.thermostat-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+.thermostat-footer {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #0f3460;
+}
+
+.thermostat-footer .climate-mode-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* Override climate-card layout for thermostat design */
+.entity-row.climate-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1.5rem 2rem;
+    gap: 0;
+}
+
+/* ===== Right-side Temperature Controls ===== */
+.thermostat-controls-right {
+    display: flex;
+    gap: 1rem;
+}
+
+.thermostat-controls-right.single {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.thermostat-controls-right.single .temp-target {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: #eee;
+    line-height: 1;
+}
+
+.thermostat-controls-right.single sup {
+    font-size: 1.25rem;
+}
+
+.thermostat-setpoint-vertical {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.thermostat-setpoint-vertical.heat {
+    border: 2px solid rgba(255, 152, 0, 0.3);
+}
+
+.thermostat-setpoint-vertical.cool {
+    border: 2px solid rgba(33, 150, 243, 0.3);
+}
+
+.thermostat-setpoint-vertical .setpoint-value {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+}
+
+.thermostat-setpoint-vertical .setpoint-temp {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.thermostat-setpoint-vertical .setpoint-label {
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.thermostat-setpoint-vertical.heat .setpoint-temp,
+.thermostat-setpoint-vertical.heat .setpoint-label {
+    color: #ff9800;
+}
+
+.thermostat-setpoint-vertical.cool .setpoint-temp,
+.thermostat-setpoint-vertical.cool .setpoint-label {
+    color: #2196f3;
+}
+
+.thermostat-btn-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: #1a1a2e;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.thermostat-btn-sm svg {
+    width: 16px;
+    height: 16px;
+}
+
+.thermostat-setpoint.heat .thermostat-btn-sm:hover,
+.thermostat-setpoint-vertical.heat .thermostat-btn-sm:hover {
+    background: #ff9800;
+    color: #fff;
+}
+
+.thermostat-setpoint.cool .thermostat-btn-sm:hover,
+.thermostat-setpoint-vertical.cool .thermostat-btn-sm:hover {
+    background: #2196f3;
+    color: #fff;
+}
+
+.thermostat-btn-sm:active {
+    transform: scale(0.9);
+}
+
+.setpoint-value {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 50px;
+}
+
+.setpoint-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+}
+
+.thermostat-setpoint.heat .setpoint-label {
+    color: #ff9800;
+}
+
+.thermostat-setpoint.cool .setpoint-label {
+    color: #2196f3;
+}
+
+.setpoint-temp {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.thermostat-setpoint.heat .setpoint-temp {
+    color: #ff9800;
+}
+
+.thermostat-setpoint.cool .setpoint-temp {
+    color: #2196f3;
+}
+
+/* ===== Light Group Expandable Controls ===== */
+.light-group-card {
+    border-bottom: 1px solid #0f3460;
+}
+
+.light-group-card:last-child {
+    border-bottom: none;
+}
+
+.light-group-header {
+    position: relative;
+    padding-right: 3.5rem;
+}
+
+.light-group-expand {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.light-group-expand:hover {
+    background: #0f3460;
+    color: #eee;
+}
+
+.light-group-expand svg {
+    width: 20px;
+    height: 20px;
+    transition: transform 0.3s ease;
+}
+
+.light-group-card.expanded .light-group-expand svg {
+    transform: rotate(180deg);
+}
+
+.light-group-members {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.light-group-card.expanded .light-group-members {
+    max-height: 500px;
+}
+
+.light-member {
+    padding: 0.75rem 1.5rem 0.75rem 3rem;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.light-member:last-child {
+    border-bottom: none;
+}
+
+.light-member .entity-icon {
+    font-size: 1.5rem;
+    min-width: 2rem;
+}
+
+.light-member .entity-name {
+    font-size: 0.95rem;
+}
+
+.light-member .toggle-switch {
+    width: 44px;
+    height: 24px;
+}
+
+.light-member .toggle-slider {
+    width: 16px;
+    height: 16px;
+}
+
+.light-member .toggle-switch.on .toggle-slider {
+    transform: translateX(20px);
+}
+
+/* ===== Hue Lights Modal ===== */
+.hue-modal {
+    z-index: 1001;
+}
+
+.modal-hue-fullscreen {
+    width: 95vw;
+    max-width: 95vw;
+    height: 95vh;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.hue-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.hue-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #888;
+    font-size: 1.1rem;
+}
+
+/* Hue Room Card */
+.hue-room-card {
+    background: #1a1a2e;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #0f3460;
+    transition: all 0.2s;
+}
+
+.hue-room-card.room-on {
+    border-color: #ffa726;
+    background: linear-gradient(135deg, #1a1a2e 0%, #1e2a40 100%);
+}
+
+.hue-room-header {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    gap: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+    padding-right: 3.5rem;
+}
+
+.hue-room-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.hue-room-icon {
+    font-size: 2rem;
+    min-width: 2.5rem;
+    text-align: center;
+}
+
+.hue-room-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.hue-room-name {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hue-room-status {
+    font-size: 0.85rem;
+    color: #888;
+    margin-top: 2px;
+}
+
+.hue-room-toggle {
+    flex-shrink: 0;
+}
+
+.hue-room-expand {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.hue-room-expand:hover {
+    background: #0f3460;
+    color: #eee;
+}
+
+.hue-room-expand svg {
+    width: 20px;
+    height: 20px;
+    transition: transform 0.3s ease;
+}
+
+.hue-room-card.expanded .hue-room-expand svg {
+    transform: rotate(180deg);
+}
+
+/* Room Details (Expandable) */
+.hue-room-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.hue-room-card.expanded .hue-room-details {
+    max-height: 800px;
+}
+
+.hue-room-brightness {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.hue-room-brightness label,
+.hue-room-scenes label,
+.hue-room-lights label {
+    display: block;
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hue-room-brightness input[type="range"] {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: #0f3460;
+    appearance: none;
+    cursor: pointer;
+}
+
+.hue-room-brightness input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #ffa726;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Scenes Grid */
+.hue-room-scenes {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.hue-scenes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.hue-scene-btn {
+    padding: 0.75rem 1rem;
+    background: #0f3460;
+    border: 1px solid #1e4d7b;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hue-scene-btn:hover {
+    background: #1e4d7b;
+    border-color: #ffa726;
+}
+
+.hue-scene-btn:active {
+    transform: scale(0.98);
+}
+
+/* Individual Lights */
+.hue-room-lights {
+    padding: 1rem;
+}
+
+.hue-light-row {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    gap: 0.75rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 0.5rem;
+    background: rgba(15, 52, 96, 0.3);
+}
+
+.hue-light-row:first-of-type {
+    margin-top: 0;
+}
+
+.hue-light-row:hover {
+    background: rgba(15, 52, 96, 0.6);
+}
+
+.hue-light-row.light-on {
+    background: rgba(255, 167, 38, 0.15);
+    border: 1px solid rgba(255, 167, 38, 0.3);
+}
+
+.hue-light-row.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.hue-light-icon {
+    font-size: 1.25rem;
+    min-width: 1.75rem;
+    text-align: center;
+}
+
+.hue-light-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.hue-light-name {
+    font-size: 0.95rem;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hue-light-state {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 2px;
+}
+
+.hue-light-toggle {
+    flex-shrink: 0;
+}
+
+.no-lights {
+    color: #888;
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+}
+
+/* Loading state for room cards */
+.hue-room-card.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Entertainment area styling */
+.hue-room-card.entertainment-area {
+    border-color: #9c27b0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #2a1a3e 100%);
+}
+
+.hue-room-card.entertainment-area .hue-room-header:hover {
+    background: rgba(156, 39, 176, 0.2);
+}
+
+.entertainment-activate-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9c27b0;
+}
+
+.entertainment-activate-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.hue-room-card.entertainment-area.activated {
+    border-color: #4caf50;
+    background: linear-gradient(135deg, #1a2e1a 0%, #1a3e2a 100%);
+}
+
+.hue-room-card.entertainment-area.activated .entertainment-activate-icon {
+    color: #4caf50;
+}
+
+/* Responsive adjustments for Hue modal */
+@media (max-width: 480px) {
+    .modal-hue-fullscreen {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .hue-scenes-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .hue-scene-btn {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.85rem;
+    }
+}
+
+/* Hue Tabs */
+.hue-tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin: -1rem -1rem 1rem -1rem;
+    width: calc(100% + 2rem);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.hue-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.hue-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex: 1;
+    min-width: 0;
+    color: var(--text-secondary);
+}
+
+.hue-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.hue-tab.active {
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+}
+
+.hue-tab.entertainment {
+    border: 1px solid rgba(155, 89, 182, 0.5);
+}
+
+.hue-tab.entertainment.active {
+    background: #9b59b6;
+    border-color: #9b59b6;
+}
+
+.hue-tab-icon {
+    font-size: 1.25rem;
+}
+
+.hue-tab-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    letter-spacing: 0.3px;
+}
+
+.hue-tab-content {
+    padding: 0;
+}
+
+/* Hue Room Content (tabbed view) */
+.hue-room-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.hue-room-main-toggle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+    background: var(--card-bg);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hue-room-main-toggle:hover {
+    background: var(--hover-bg);
+}
+
+.hue-room-power {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.hue-room-power svg {
+    width: 40px;
+    height: 40px;
+    stroke: var(--text-secondary);
+    transition: stroke 0.3s ease;
+}
+
+.hue-room-power.on {
+    background: var(--primary-color);
+    box-shadow: 0 0 30px rgba(255, 179, 0, 0.4);
+}
+
+.hue-room-power.on svg {
+    stroke: white;
+}
+
+.hue-room-power-label {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+}
+
+.hue-room-brightness-section,
+.hue-room-scenes-section,
+.hue-room-lights-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.hue-room-brightness-section label,
+.hue-room-scenes-section label,
+.hue-room-lights-section label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hue-brightness-control {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.hue-brightness-control input[type="range"] {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.hue-brightness-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.hue-brightness-value {
+    min-width: 50px;
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.hue-scenes-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.5rem;
+}
+
+/* Entertainment Content */
+.hue-entertainment-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.hue-entertainment-selector {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.hue-entertainment-selector label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hue-entertainment-areas {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.hue-entertainment-area-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hue-entertainment-area-btn:hover {
+    border-color: #9b59b6;
+    background: rgba(155, 89, 182, 0.1);
+}
+
+.hue-entertainment-area-btn.selected {
+    border-color: #9b59b6;
+    background: rgba(155, 89, 182, 0.2);
+    box-shadow: 0 0 15px rgba(155, 89, 182, 0.3);
+}
+
+.hue-entertainment-area-btn .area-icon {
+    font-size: 2rem;
+}
+
+.hue-entertainment-area-btn .area-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+}
+
+.hue-entertainment-area-btn .area-lights {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.hue-entertainment-selected {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid #9b59b6;
+}
+
+.selected-area-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.selected-area-icon {
+    font-size: 2.5rem;
+}
+
+.selected-area-info {
+    flex: 1;
+}
+
+.selected-area-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.selected-area-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #9b59b6;
+}
+
+.hue-entertainment-activate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 1.25rem;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #9b59b6, #8e44ad);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hue-entertainment-activate-btn:hover {
+    background: linear-gradient(135deg, #8e44ad, #7d3c98);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(155, 89, 182, 0.4);
+}
+
+.hue-entertainment-activate-btn:active {
+    transform: translateY(0);
+}
+
+.hue-entertainment-activate-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+.hue-entertainment-lights {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.hue-entertainment-lights label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hue-light-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.hue-light-item:last-child {
+    border-bottom: none;
+}
+
+/* Mobile adjustments for tabs */
+@media (max-width: 600px) {
+    .hue-tab {
+        min-width: 70px;
+        padding: 0.6rem 0.75rem;
+    }
+
+    .hue-tab-icon {
+        font-size: 1.3rem;
+    }
+
+    .hue-tab-name {
+        font-size: 0.7rem;
+        max-width: 60px;
+    }
+
+    .hue-room-power {
+        width: 70px;
+        height: 70px;
+    }
+
+    .hue-room-power svg {
+        width: 35px;
+        height: 35px;
+    }
 }
