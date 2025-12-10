@@ -512,10 +512,25 @@ async function refreshEntityStates() {
 
         const groups = await resp.json();
 
-        // Update groupsData with new states
-        groups.forEach(group => {
-            if (groupsData[group.Name]) {
-                groupsData[group.Name] = group;
+        // Update groupsData with new states (normalize API response to match local format)
+        groups.forEach(apiGroup => {
+            // API returns capitalized Go struct names, local uses lowercase
+            const groupName = apiGroup.Name || apiGroup.name;
+            if (groupsData[groupName]) {
+                // Normalize to lowercase property names
+                groupsData[groupName] = {
+                    name: groupName,
+                    icon: apiGroup.Icon || apiGroup.icon,
+                    cards: (apiGroup.Cards || apiGroup.cards || []).map(card => ({
+                        entityId: card.EntityID || card.entityId,
+                        name: card.Name || card.name,
+                        state: card.State || card.state,
+                        icon: card.Icon || card.icon,
+                        type: card.Type || card.type,
+                        unit: card.Unit || card.unit,
+                        isOn: card.IsOn !== undefined ? card.IsOn : card.isOn
+                    }))
+                };
             }
         });
 
@@ -631,39 +646,82 @@ function closeCameraModal() {
     }
 }
 
+// Global AudioContext - needs user interaction to work
+let doorbellAudioCtx = null;
+let audioEnabled = false;
+
+// Initialize audio context on first user interaction
+function initAudioContext() {
+    if (audioEnabled) return;
+
+    if (!doorbellAudioCtx) {
+        doorbellAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('AudioContext initialized, state:', doorbellAudioCtx.state);
+    }
+    if (doorbellAudioCtx.state === 'suspended') {
+        doorbellAudioCtx.resume().then(() => {
+            console.log('AudioContext resumed');
+        });
+    }
+
+    audioEnabled = true;
+
+    // Hide the audio prompt banner
+    const banner = document.getElementById('audioEnableBanner');
+    if (banner) {
+        banner.style.display = 'none';
+    }
+}
+
+// Warm up audio on any user interaction
+document.addEventListener('click', initAudioContext, { once: true });
+document.addEventListener('touchstart', initAudioContext, { once: true });
+
 function playDoorbellSound() {
-    // Create a simple doorbell tone using Web Audio API
+    console.log('playDoorbellSound called');
+
+    // Create AudioContext if needed
+    if (!doorbellAudioCtx) {
+        doorbellAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    // Resume if suspended (browser autoplay policy)
+    if (doorbellAudioCtx.state === 'suspended') {
+        console.log('AudioContext suspended, attempting resume...');
+        doorbellAudioCtx.resume();
+    }
+
     try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
+        const ctx = doorbellAudioCtx;
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        // First ding - higher pitch
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(932, ctx.currentTime); // Bb5
+        gain1.gain.setValueAtTime(0.6, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.8);
 
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        // Second ding - lower pitch (classic ding-dong)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(698, ctx.currentTime + 0.3); // F5
+        gain2.gain.setValueAtTime(0, ctx.currentTime);
+        gain2.gain.setValueAtTime(0.6, ctx.currentTime + 0.3);
+        gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.2);
+        osc2.start(ctx.currentTime + 0.3);
+        osc2.stop(ctx.currentTime + 1.2);
 
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.5);
-
-        // Second ding
-        setTimeout(() => {
-            const osc2 = audioCtx.createOscillator();
-            const gain2 = audioCtx.createGain();
-            osc2.connect(gain2);
-            gain2.connect(audioCtx.destination);
-            osc2.type = 'sine';
-            osc2.frequency.setValueAtTime(659, audioCtx.currentTime); // E5
-            gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-            osc2.start(audioCtx.currentTime);
-            osc2.stop(audioCtx.currentTime + 0.5);
-        }, 200);
+        console.log('Doorbell sound playing, ctx state:', ctx.state);
     } catch (e) {
-        console.log('Could not play doorbell sound:', e);
+        console.error('Could not play doorbell sound:', e);
     }
 }
 
@@ -672,6 +730,12 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
 });
 </script>
+
+<!-- Audio Enable Banner -->
+<div id="audioEnableBanner" style="position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: white; padding: 12px 20px; text-align: center; z-index: 9999; display: flex; align-items: center; justify-content: center; gap: 10px;">
+    <span>🔔</span>
+    <span>Tap anywhere to enable doorbell sounds</span>
+</div>
 
 <!-- Camera Modal -->
 <div id="cameraModal" class="modal camera-modal">
