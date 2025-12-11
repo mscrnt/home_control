@@ -21,6 +21,7 @@ import (
 	"home_control/internal/hue"
 	"home_control/internal/icons"
 	"home_control/internal/mqtt"
+	"home_control/internal/spotify"
 	"home_control/internal/syncbox"
 	"home_control/internal/tasks"
 	"home_control/internal/weather"
@@ -35,10 +36,11 @@ var pageTemplates map[string]*template.Template
 
 // quietPaths are endpoints that get polled frequently and shouldn't spam logs
 var quietPaths = map[string]bool{
-	"/api/hue/rooms": true,
-	"/api/ha/states": true,
-	"/api/entities":  true,
-	"/api/syncbox":   true,
+	"/api/hue/rooms":       true,
+	"/api/ha/states":       true,
+	"/api/entities":        true,
+	"/api/syncbox":         true,
+	"/api/spotify/playback": true,
 }
 
 // quietPrefixes are path prefixes that shouldn't spam logs
@@ -101,6 +103,9 @@ type Config struct {
 	DriveScreensaverFolder string
 	DriveBackgroundFolder  string
 	ScreensaverTimeout     int // Seconds of inactivity before screensaver (default: 300)
+	// Spotify settings
+	SpotifyClientID     string
+	SpotifyClientSecret string
 }
 
 // SyncBoxConfig holds configuration for a single Hue Sync Box
@@ -120,6 +125,7 @@ var weatherClient *weather.Client
 var mqttClient *mqtt.Client
 var cameraManager *camera.Manager
 var driveClient *drive.Client
+var spotifyClient *spotify.Client
 var wsHub *websocket.Hub
 var appConfig Config
 
@@ -200,6 +206,8 @@ func main() {
 		DriveScreensaverFolder: getEnv("DRIVE_SCREENSAVER_FOLDER", ""),
 		DriveBackgroundFolder:  getEnv("DRIVE_BACKGROUND_FOLDER", ""),
 		ScreensaverTimeout:     parseIntEnv("SCREENSAVER_TIMEOUT", 300),
+		SpotifyClientID:        getEnv("SPOTIFY_CLIENT_ID", ""),
+		SpotifyClientSecret:    getEnv("SPOTIFY_CLIENT_SECRET", ""),
 	}
 	appConfig = cfg
 	log.Printf("Using timezone: %s", loc.String())
@@ -292,6 +300,36 @@ func main() {
 				}
 			}
 		}
+	}
+
+	// Initialize Spotify client
+	if cfg.SpotifyClientID != "" && cfg.SpotifyClientSecret != "" {
+		dataDir := getEnv("DATA_DIR", "data")
+		redirectURL := cfg.BaseURL + "/auth/spotify/callback"
+		spotifyClient = spotify.NewClient(cfg.SpotifyClientID, cfg.SpotifyClientSecret, redirectURL)
+
+		// Set up token persistence
+		tokenFile := filepath.Join(dataDir, "spotify_token.json")
+		spotifyClient.SetTokenSaveCallback(func(token *spotify.Token) error {
+			data, err := json.MarshalIndent(token, "", "  ")
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(tokenFile, data, 0600)
+		})
+
+		// Try to load existing token
+		if tokenData, err := os.ReadFile(tokenFile); err == nil {
+			var token spotify.Token
+			if err := json.Unmarshal(tokenData, &token); err == nil {
+				spotifyClient.SetToken(&token)
+				log.Println("Spotify client initialized with saved token")
+			}
+		} else {
+			log.Println("Spotify client initialized. Visit /auth/spotify to authorize.")
+		}
+	} else {
+		log.Println("Info: Spotify not configured (optional)")
 	}
 
 	// Initialize Weather client
@@ -469,6 +507,25 @@ func main() {
 	r.Get("/api/drive/background/random", handleGetRandomBackgroundPhoto)
 	r.Get("/api/drive/photo/{id}", handleGetDrivePhoto)
 	r.Get("/api/screensaver/config", handleGetScreensaverConfig)
+
+	// Spotify routes
+	r.Get("/auth/spotify", handleSpotifyAuth)
+	r.Get("/auth/spotify/callback", handleSpotifyCallback)
+	r.Get("/api/spotify/status", handleSpotifyStatus)
+	r.Get("/api/spotify/playback", handleSpotifyPlayback)
+	r.Get("/api/spotify/devices", handleSpotifyDevices)
+	r.Post("/api/spotify/play", handleSpotifyPlay)
+	r.Post("/api/spotify/pause", handleSpotifyPause)
+	r.Post("/api/spotify/next", handleSpotifyNext)
+	r.Post("/api/spotify/previous", handleSpotifyPrevious)
+	r.Post("/api/spotify/volume", handleSpotifyVolume)
+	r.Post("/api/spotify/seek", handleSpotifySeek)
+	r.Post("/api/spotify/shuffle", handleSpotifyShuffle)
+	r.Post("/api/spotify/repeat", handleSpotifyRepeat)
+	r.Post("/api/spotify/transfer", handleSpotifyTransfer)
+	r.Get("/api/spotify/playlists", handleSpotifyPlaylists)
+	r.Get("/api/spotify/playlist/{id}/tracks", handleSpotifyPlaylistTracks)
+	r.Get("/api/spotify/search", handleSpotifySearch)
 
 	// Icon serving
 	r.Get("/icon/{name}", icons.Handler())
@@ -2427,11 +2484,421 @@ func handleGetDrivePhoto(w http.ResponseWriter, r *http.Request) {
 
 func handleGetScreensaverConfig(w http.ResponseWriter, r *http.Request) {
 	config := map[string]interface{}{
-		"timeout":             appConfig.ScreensaverTimeout,
+		"timeout":              appConfig.ScreensaverTimeout,
 		"hasScreensaverFolder": driveClient != nil && driveClient.HasScreensaverFolder(),
-		"hasBackgroundFolder": driveClient != nil && driveClient.HasBackgroundFolder(),
+		"hasBackgroundFolder":  driveClient != nil && driveClient.HasBackgroundFolder(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(config)
+}
+
+// Spotify handlers
+
+func handleSpotifyAuth(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil {
+		http.Error(w, "Spotify not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	state := fmt.Sprintf("%d", time.Now().UnixNano())
+	authURL := spotifyClient.GetAuthURL(state)
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+}
+
+func handleSpotifyCallback(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil {
+		http.Error(w, "Spotify not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		errMsg := r.URL.Query().Get("error")
+		http.Error(w, "Authorization failed: "+errMsg, http.StatusBadRequest)
+		return
+	}
+
+	_, err := spotifyClient.Exchange(r.Context(), code)
+	if err != nil {
+		log.Printf("Spotify token exchange failed: %v", err)
+		http.Error(w, "Token exchange failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("Spotify authorization successful")
+	http.Redirect(w, r, "/home", http.StatusTemporaryRedirect)
+}
+
+func handleSpotifyStatus(w http.ResponseWriter, r *http.Request) {
+	status := map[string]interface{}{
+		"configured":    spotifyClient != nil,
+		"authenticated": spotifyClient != nil && spotifyClient.IsAuthenticated(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
+func handleSpotifyPlayback(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	state, err := spotifyClient.GetPlaybackState(r.Context())
+	if err != nil {
+		log.Printf("Error getting playback state: %v", err)
+		http.Error(w, "Failed to get playback state: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(state)
+}
+
+func handleSpotifyDevices(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	devices, err := spotifyClient.GetDevices(r.Context())
+	if err != nil {
+		log.Printf("Error getting devices: %v", err)
+		http.Error(w, "Failed to get devices: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(devices)
+}
+
+func handleSpotifyPlay(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+		URI      string `json:"uri"`
+		Position int    `json:"position"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	var err error
+	if req.URI != "" {
+		err = spotifyClient.PlayURI(r.Context(), req.DeviceID, req.URI, req.Position)
+	} else {
+		err = spotifyClient.Play(r.Context(), req.DeviceID)
+	}
+
+	if err != nil {
+		log.Printf("Error starting playback: %v", err)
+		http.Error(w, "Failed to start playback: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyPause(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if err := spotifyClient.Pause(r.Context(), req.DeviceID); err != nil {
+		log.Printf("Error pausing playback: %v", err)
+		http.Error(w, "Failed to pause: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyNext(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if err := spotifyClient.Next(r.Context(), req.DeviceID); err != nil {
+		log.Printf("Error skipping to next: %v", err)
+		http.Error(w, "Failed to skip: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyPrevious(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if err := spotifyClient.Previous(r.Context(), req.DeviceID); err != nil {
+		log.Printf("Error going to previous: %v", err)
+		http.Error(w, "Failed to go to previous: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyVolume(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID      string `json:"device_id"`
+		VolumePercent int    `json:"volume_percent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.SetVolume(r.Context(), req.DeviceID, req.VolumePercent); err != nil {
+		log.Printf("Error setting volume: %v", err)
+		http.Error(w, "Failed to set volume: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifySeek(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID   string `json:"device_id"`
+		PositionMS int    `json:"position_ms"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.Seek(r.Context(), req.DeviceID, req.PositionMS); err != nil {
+		log.Printf("Error seeking: %v", err)
+		http.Error(w, "Failed to seek: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyShuffle(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+		State    bool   `json:"state"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.SetShuffle(r.Context(), req.DeviceID, req.State); err != nil {
+		log.Printf("Error setting shuffle: %v", err)
+		http.Error(w, "Failed to set shuffle: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyRepeat(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+		State    string `json:"state"` // track, context, off
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.SetRepeat(r.Context(), req.DeviceID, req.State); err != nil {
+		log.Printf("Error setting repeat: %v", err)
+		http.Error(w, "Failed to set repeat: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyTransfer(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		DeviceID string `json:"device_id"`
+		Play     bool   `json:"play"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.DeviceID == "" {
+		http.Error(w, "device_id required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.TransferPlayback(r.Context(), req.DeviceID, req.Play); err != nil {
+		log.Printf("Error transferring playback: %v", err)
+		http.Error(w, "Failed to transfer playback: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyPlaylists(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	playlists, total, err := spotifyClient.GetPlaylists(r.Context(), limit, offset)
+	if err != nil {
+		log.Printf("Error getting playlists: %v", err)
+		http.Error(w, "Failed to get playlists: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"items":  playlists,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleSpotifyPlaylistTracks(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	playlistID := chi.URLParam(r, "id")
+	if playlistID == "" {
+		http.Error(w, "Playlist ID required", http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	tracks, total, err := spotifyClient.GetPlaylistTracks(r.Context(), playlistID, limit, offset)
+	if err != nil {
+		log.Printf("Error getting playlist tracks: %v", err)
+		http.Error(w, "Failed to get tracks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"items":  tracks,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleSpotifySearch(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Search query required", http.StatusBadRequest)
+		return
+	}
+
+	types := []string{"track", "album", "artist", "playlist"}
+	if t := r.URL.Query().Get("type"); t != "" {
+		types = strings.Split(t, ",")
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	results, err := spotifyClient.Search(r.Context(), query, types, limit)
+	if err != nil {
+		log.Printf("Error searching: %v", err)
+		http.Error(w, "Search failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
 }

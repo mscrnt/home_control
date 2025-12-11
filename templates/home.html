@@ -3,6 +3,12 @@
 {{define "content"}}
 <div class="home-container">
     <div class="page-header">
+        <div class="header-left">
+            <button class="notification-btn" id="notificationBtn" onclick="openNotifications()" title="Notifications">
+                <img src="/icon/bell" class="notification-icon" alt="Notifications">
+                <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+            </button>
+        </div>
         <div class="header-actions">
             <a href="/calendar" class="page-nav-btn"><img src="/icon/calendar-days" class="nav-icon" alt="">Calendar</a>
             <button class="settings-btn" onclick="openSettings()" title="Settings">
@@ -37,6 +43,19 @@
             <div class="group-card-info">
                 <div class="group-card-name"><img src="/icon/philipshue-svgrepo-com" class="hue-logo" alt="Philips Hue"></div>
                 <div class="group-card-summary" id="summary-Hue">Loading...</div>
+            </div>
+            <div class="group-card-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                </svg>
+            </div>
+        </div>
+        <!-- Spotify Card -->
+        <div class="group-card" onclick="openSpotifyModal()" data-group="Spotify" id="spotifyCard" style="display: none;">
+            <div class="group-card-icon"><img src="/icon/spotify" class="group-icon group-icon-spotify" alt=""></div>
+            <div class="group-card-info">
+                <div class="group-card-name">Spotify</div>
+                <div class="group-card-summary" id="summary-Spotify">Not playing</div>
             </div>
             <div class="group-card-arrow">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -232,6 +251,38 @@
         </div>
         <div id="hueModalContent" class="hue-modal-content">
             <div class="hue-loading">Loading lights...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Spotify Modal (Full Screen) -->
+<div id="spotifyModal" class="modal spotify-modal">
+    <div class="modal-content modal-spotify-fullscreen">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <img src="/icon/spotify" class="spotify-logo-modal" alt="Spotify">
+                <h3>Spotify</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeSpotifyModal()">&times;</button>
+        </div>
+        <div id="spotifyModalContent" class="spotify-modal-content">
+            <div class="spotify-loading">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Spotify Playlist Modal -->
+<div id="spotifyPlaylistModal" class="modal spotify-playlist-modal">
+    <div class="modal-content modal-spotify-playlist">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <img src="/icon/spotify" class="group-modal-icon-img spotify-icon" alt="">
+                <h3 id="spotifyPlaylistTitle">Playlist</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeSpotifyPlaylistModal()">&times;</button>
+        </div>
+        <div id="spotifyPlaylistContent" class="spotify-playlist-content">
+            <div class="spotify-loading">Loading tracks...</div>
         </div>
     </div>
 </div>
@@ -924,6 +975,24 @@ function updateClimateCardData(entityID, data) {
         }
     });
     updateGroupSummaries();
+}
+
+// Notifications Functions (placeholder)
+function openNotifications() {
+    // TODO: Implement notifications panel
+    console.log('Notifications clicked - placeholder');
+}
+
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('notificationBadge');
+    if (!badge) return;
+
+    if (count > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = count > 99 ? '99+' : count;
+    } else {
+        badge.style.display = 'none';
+    }
 }
 
 // Settings Functions
@@ -1905,6 +1974,717 @@ loadHueRooms();
 // Refresh Hue state every second for real-time responsiveness
 setInterval(loadHueRooms, 1000);
 
+// ===== Spotify Integration =====
+let spotifyStatus = null;
+let spotifyPlayback = null;
+let spotifyDevices = [];
+let spotifyPlaylists = [];
+let activeSpotifyTab = 'now-playing';
+let spotifyProgressInterval = null;
+
+async function checkSpotifyStatus() {
+    try {
+        const resp = await fetch('/api/spotify/status');
+        if (resp.ok) {
+            spotifyStatus = await resp.json();
+            const card = document.getElementById('spotifyCard');
+            if (spotifyStatus.configured) {
+                card.style.display = '';
+                if (spotifyStatus.authenticated) {
+                    loadSpotifyPlayback();
+                } else {
+                    document.getElementById('summary-Spotify').textContent = 'Not connected';
+                }
+            }
+        }
+    } catch (err) {
+        console.log('Spotify not available:', err);
+    }
+}
+
+async function loadSpotifyPlayback() {
+    if (!spotifyStatus || !spotifyStatus.authenticated) return;
+
+    try {
+        const resp = await fetch('/api/spotify/playback');
+        if (resp.ok) {
+            spotifyPlayback = await resp.json();
+            updateSpotifySummary();
+
+            // Update modal if open
+            const modal = document.getElementById('spotifyModal');
+            if (modal && modal.classList.contains('active')) {
+                renderSpotifyContent();
+            }
+        } else if (resp.status === 401) {
+            document.getElementById('summary-Spotify').textContent = 'Not connected';
+        }
+    } catch (err) {
+        console.error('Failed to load Spotify playback:', err);
+    }
+}
+
+async function loadSpotifyDevices() {
+    if (!spotifyStatus || !spotifyStatus.authenticated) return;
+
+    try {
+        const resp = await fetch('/api/spotify/devices');
+        if (resp.ok) {
+            spotifyDevices = await resp.json();
+        }
+    } catch (err) {
+        console.error('Failed to load Spotify devices:', err);
+    }
+}
+
+async function loadSpotifyPlaylists() {
+    if (!spotifyStatus || !spotifyStatus.authenticated) return;
+
+    try {
+        const resp = await fetch('/api/spotify/playlists?limit=50');
+        if (resp.ok) {
+            const data = await resp.json();
+            spotifyPlaylists = data.items || [];
+        }
+    } catch (err) {
+        console.error('Failed to load Spotify playlists:', err);
+    }
+}
+
+function updateSpotifySummary() {
+    const summaryEl = document.getElementById('summary-Spotify');
+    if (summaryEl) {
+        if (!spotifyPlayback || !spotifyPlayback.item) {
+            summaryEl.textContent = 'Not playing';
+        } else {
+            const track = spotifyPlayback.item;
+            const artist = track.artists ? track.artists.map(a => a.name).join(', ') : '';
+            summaryEl.textContent = spotifyPlayback.is_playing
+                ? `${track.name} - ${artist}`
+                : 'Paused';
+        }
+    }
+
+    // Update mini player
+    updateMiniPlayer();
+}
+
+function updateMiniPlayer() {
+    const miniPlayer = document.getElementById('spotifyMiniPlayer');
+    if (!miniPlayer) return;
+
+    // Show mini player only when there's active playback
+    if (!spotifyPlayback || !spotifyPlayback.item) {
+        miniPlayer.style.display = 'none';
+        updateScreensaverSpotify();
+        return;
+    }
+
+    miniPlayer.style.display = 'flex';
+
+    const track = spotifyPlayback.item;
+    const album = track.album || {};
+    const artists = track.artists ? track.artists.map(a => a.name).join(', ') : '';
+    const albumArt = album.images && album.images.length > 0
+        ? album.images[album.images.length - 1].url
+        : '';
+
+    // Update album art
+    const artEl = document.getElementById('spotifyMiniArt');
+    if (artEl) {
+        artEl.innerHTML = albumArt ? `<img src="${albumArt}" alt="">` : '';
+    }
+
+    // Update track info
+    const infoEl = document.getElementById('spotifyMiniInfo');
+    if (infoEl) {
+        infoEl.innerHTML = `
+            <div class="spotify-mini-track">${escapeHtml(track.name)}</div>
+            <div class="spotify-mini-artist">${escapeHtml(artists)}</div>
+        `;
+    }
+
+    // Update play/pause icon
+    const playIcon = document.getElementById('spotifyMiniPlayIcon');
+    if (playIcon) {
+        playIcon.src = spotifyPlayback.is_playing ? '/icon/pause' : '/icon/play';
+        playIcon.alt = spotifyPlayback.is_playing ? 'Pause' : 'Play';
+    }
+
+    // Update progress bar
+    updateMiniPlayerProgress();
+
+    // Update screensaver display
+    updateScreensaverSpotify();
+}
+
+function updateScreensaverSpotify() {
+    const screensaverSpotify = document.getElementById('screensaverSpotify');
+    if (!screensaverSpotify) return;
+
+    // Hide if no playback or paused
+    if (!spotifyPlayback || !spotifyPlayback.item || !spotifyPlayback.is_playing) {
+        screensaverSpotify.style.display = 'none';
+        return;
+    }
+
+    screensaverSpotify.style.display = 'flex';
+
+    const track = spotifyPlayback.item;
+    const album = track.album || {};
+    const artists = track.artists ? track.artists.map(a => a.name).join(', ') : '';
+    const albumArt = album.images && album.images.length > 0
+        ? album.images[0].url  // Use larger image for screensaver
+        : '';
+
+    // Update album art
+    const artEl = document.getElementById('screensaverSpotifyArt');
+    if (artEl) {
+        artEl.innerHTML = albumArt ? `<img src="${albumArt}" alt="">` : '';
+    }
+
+    // Update track name
+    const trackEl = document.getElementById('screensaverSpotifyTrack');
+    if (trackEl) {
+        trackEl.textContent = track.name;
+    }
+
+    // Update artist
+    const artistEl = document.getElementById('screensaverSpotifyArtist');
+    if (artistEl) {
+        artistEl.textContent = artists;
+    }
+}
+
+function updateMiniPlayerProgress() {
+    const progressFill = document.getElementById('spotifyMiniProgressFill');
+    if (!progressFill || !spotifyPlayback || !spotifyPlayback.item) return;
+
+    const progress = spotifyPlayback.progress_ms || 0;
+    const duration = spotifyPlayback.item.duration_ms || 1;
+    const percent = (progress / duration) * 100;
+    progressFill.style.width = `${percent}%`;
+}
+
+function handleMiniPlayerClick(event) {
+    // Open the full modal when clicking on empty area (not on controls)
+    openSpotifyModal();
+}
+
+function openSpotifyModal() {
+    if (!spotifyStatus || !spotifyStatus.authenticated) {
+        window.location.href = '/auth/spotify';
+        return;
+    }
+
+    document.getElementById('spotifyModal').classList.add('active');
+    loadSpotifyDevices();
+    loadSpotifyPlaylists();
+    renderSpotifyContent();
+    startSpotifyProgressUpdates();
+}
+
+function closeSpotifyModal() {
+    document.getElementById('spotifyModal').classList.remove('active');
+    stopSpotifyProgressUpdates();
+}
+
+function startSpotifyProgressUpdates() {
+    stopSpotifyProgressUpdates();
+    spotifyProgressInterval = setInterval(() => {
+        if (spotifyPlayback && spotifyPlayback.is_playing) {
+            spotifyPlayback.progress_ms += 1000;
+            updateProgressBar();
+            updateMiniPlayerProgress();
+        }
+    }, 1000);
+}
+
+function stopSpotifyProgressUpdates() {
+    if (spotifyProgressInterval) {
+        clearInterval(spotifyProgressInterval);
+        spotifyProgressInterval = null;
+    }
+}
+
+function updateProgressBar() {
+    const progressBar = document.getElementById('spotifyProgressBar');
+    const currentTime = document.getElementById('spotifyCurrentTime');
+    const totalTime = document.getElementById('spotifyTotalTime');
+
+    if (!progressBar || !spotifyPlayback || !spotifyPlayback.item) return;
+
+    const progress = spotifyPlayback.progress_ms || 0;
+    const duration = spotifyPlayback.item.duration_ms || 1;
+    const percent = (progress / duration) * 100;
+
+    progressBar.style.width = `${percent}%`;
+    if (currentTime) currentTime.textContent = formatTime(progress);
+    if (totalTime) totalTime.textContent = formatTime(duration);
+}
+
+function formatTime(ms) {
+    const seconds = Math.floor(ms / 1000);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function renderSpotifyContent() {
+    const content = document.getElementById('spotifyModalContent');
+
+    if (!spotifyStatus || !spotifyStatus.authenticated) {
+        content.innerHTML = `
+            <div class="spotify-auth-prompt">
+                <p>Connect your Spotify account to control playback</p>
+                <a href="/auth/spotify" class="modal-btn primary">Connect Spotify</a>
+            </div>`;
+        return;
+    }
+
+    // Build tabs
+    const tabs = [
+        { id: 'now-playing', name: 'Now Playing', icon: 'play' },
+        { id: 'playlists', name: 'Playlists', icon: 'spotify' },
+        { id: 'devices', name: 'Devices', icon: 'volume-high' },
+        { id: 'search', name: 'Search', icon: 'search' }
+    ];
+
+    if (!activeSpotifyTab) activeSpotifyTab = 'now-playing';
+
+    let html = `<div class="spotify-tabs">`;
+    tabs.forEach(tab => {
+        const isActive = tab.id === activeSpotifyTab ? 'active' : '';
+        html += `<button class="spotify-tab ${isActive}" onclick="switchSpotifyTab('${tab.id}')">${tab.name}</button>`;
+    });
+    html += `</div><div class="spotify-tab-content">`;
+
+    switch (activeSpotifyTab) {
+        case 'now-playing':
+            html += renderNowPlaying();
+            break;
+        case 'playlists':
+            html += renderPlaylists();
+            break;
+        case 'devices':
+            html += renderDevices();
+            break;
+        case 'search':
+            html += renderSearch();
+            break;
+    }
+
+    html += `</div>`;
+    content.innerHTML = html;
+
+    if (activeSpotifyTab === 'now-playing') {
+        updateProgressBar();
+    }
+}
+
+function renderNowPlaying() {
+    if (!spotifyPlayback || !spotifyPlayback.item) {
+        return `
+            <div class="spotify-no-playback">
+                <img src="/icon/spotify" class="spotify-no-playback-icon" alt="">
+                <p>No active playback</p>
+                <p class="spotify-hint">Start playing on any device to see controls here</p>
+            </div>`;
+    }
+
+    const track = spotifyPlayback.item;
+    const album = track.album || {};
+    const artists = track.artists ? track.artists.map(a => a.name).join(', ') : '';
+    const albumArt = album.images && album.images.length > 0 ? album.images[0].url : '';
+    const isPlaying = spotifyPlayback.is_playing;
+    const shuffleActive = spotifyPlayback.shuffle_state ? 'active' : '';
+    const repeatState = spotifyPlayback.repeat_state || 'off';
+    const repeatActive = repeatState !== 'off' ? 'active' : '';
+    const volume = spotifyPlayback.device ? spotifyPlayback.device.volume_percent : 50;
+
+    return `
+        <div class="spotify-now-playing">
+            <div class="spotify-album-art">
+                ${albumArt ? `<img src="${albumArt}" alt="${escapeHtml(album.name || '')}">` : '<div class="spotify-no-art"></div>'}
+            </div>
+            <div class="spotify-track-info">
+                <div class="spotify-track-name">${escapeHtml(track.name)}</div>
+                <div class="spotify-track-artist">${escapeHtml(artists)}</div>
+                <div class="spotify-track-album">${escapeHtml(album.name || '')}</div>
+            </div>
+            <div class="spotify-progress">
+                <span class="spotify-time" id="spotifyCurrentTime">${formatTime(spotifyPlayback.progress_ms || 0)}</span>
+                <div class="spotify-progress-bar" onclick="seekSpotify(event)">
+                    <div class="spotify-progress-fill" id="spotifyProgressBar"></div>
+                </div>
+                <span class="spotify-time" id="spotifyTotalTime">${formatTime(track.duration_ms || 0)}</span>
+            </div>
+            <div class="spotify-controls">
+                <button class="spotify-control-btn spotify-secondary ${shuffleActive}" onclick="toggleSpotifyShuffle()">
+                    <img src="/icon/shuffle" alt="Shuffle">
+                </button>
+                <button class="spotify-control-btn" onclick="spotifyPrevious()">
+                    <img src="/icon/backward-step" alt="Previous">
+                </button>
+                <button class="spotify-control-btn spotify-play-btn" onclick="toggleSpotifyPlayback()">
+                    <img src="/icon/${isPlaying ? 'pause' : 'play'}" alt="${isPlaying ? 'Pause' : 'Play'}">
+                </button>
+                <button class="spotify-control-btn" onclick="spotifyNext()">
+                    <img src="/icon/forward-step" alt="Next">
+                </button>
+                <button class="spotify-control-btn spotify-secondary ${repeatActive}" onclick="toggleSpotifyRepeat()">
+                    <img src="/icon/repeat" alt="Repeat">
+                </button>
+            </div>
+            <div class="spotify-volume">
+                <img src="/icon/volume-high" class="spotify-volume-icon" alt="Volume">
+                <input type="range" class="spotify-volume-slider" min="0" max="100" value="${volume}"
+                       onchange="setSpotifyVolume(this.value)" oninput="this.style.setProperty('--val', this.value + '%')">
+                <span class="spotify-volume-value">${volume}%</span>
+            </div>
+        </div>`;
+}
+
+function renderPlaylists() {
+    if (spotifyPlaylists.length === 0) {
+        return `<div class="spotify-loading">Loading playlists...</div>`;
+    }
+
+    let html = `<div class="spotify-playlists-grid">`;
+    spotifyPlaylists.forEach(playlist => {
+        const image = playlist.images && playlist.images.length > 0 ? playlist.images[0].url : '';
+        html += `
+            <div class="spotify-playlist-card" onclick="openPlaylist('${playlist.id}', '${escapeHtml(playlist.name)}')">
+                <div class="spotify-playlist-image">
+                    ${image ? `<img src="${image}" alt="">` : '<div class="spotify-no-art"></div>'}
+                </div>
+                <div class="spotify-playlist-name">${escapeHtml(playlist.name)}</div>
+                <div class="spotify-playlist-tracks">${playlist.tracks.total} tracks</div>
+            </div>`;
+    });
+    html += `</div>`;
+    return html;
+}
+
+function renderDevices() {
+    if (spotifyDevices.length === 0) {
+        return `
+            <div class="spotify-no-devices">
+                <p>No devices found</p>
+                <p class="spotify-hint">Open Spotify on a device to see it here</p>
+                <button class="modal-btn secondary" onclick="loadSpotifyDevices(); renderSpotifyContent();">Refresh</button>
+            </div>`;
+    }
+
+    let html = `<div class="spotify-devices-list">`;
+    spotifyDevices.forEach(device => {
+        const isActive = device.is_active ? 'active' : '';
+        const icon = getDeviceIcon(device.type);
+        html += `
+            <div class="spotify-device ${isActive}" onclick="transferToDevice('${device.id}')">
+                <div class="spotify-device-icon">${icon}</div>
+                <div class="spotify-device-info">
+                    <div class="spotify-device-name">${escapeHtml(device.name)}</div>
+                    <div class="spotify-device-type">${device.type}${device.is_active ? ' - Active' : ''}</div>
+                </div>
+                ${device.is_active ? '<div class="spotify-device-active-indicator"></div>' : ''}
+            </div>`;
+    });
+    html += `</div>`;
+    return html;
+}
+
+function getDeviceIcon(type) {
+    switch (type.toLowerCase()) {
+        case 'computer': return '💻';
+        case 'smartphone': return '📱';
+        case 'speaker': return '🔊';
+        case 'tv': return '📺';
+        default: return '🎵';
+    }
+}
+
+function renderSearch() {
+    return `
+        <div class="spotify-search">
+            <div class="spotify-search-input-wrapper">
+                <input type="text" id="spotifySearchInput" class="spotify-search-input"
+                       placeholder="Search songs, artists, albums..."
+                       onkeydown="if(event.key==='Enter')performSpotifySearch()">
+                <button class="spotify-search-btn" onclick="performSpotifySearch()">Search</button>
+            </div>
+            <div id="spotifySearchResults" class="spotify-search-results"></div>
+        </div>`;
+}
+
+async function performSpotifySearch() {
+    const input = document.getElementById('spotifySearchInput');
+    const resultsDiv = document.getElementById('spotifySearchResults');
+    const query = input.value.trim();
+
+    if (!query) return;
+
+    resultsDiv.innerHTML = '<div class="spotify-loading">Searching...</div>';
+
+    try {
+        const resp = await fetch(`/api/spotify/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=20`);
+        if (resp.ok) {
+            const results = await resp.json();
+            renderSearchResults(results);
+        }
+    } catch (err) {
+        resultsDiv.innerHTML = '<div class="spotify-error">Search failed</div>';
+    }
+}
+
+function renderSearchResults(results) {
+    const resultsDiv = document.getElementById('spotifySearchResults');
+    let html = '';
+
+    if (results.tracks && results.tracks.items.length > 0) {
+        html += `<h4 class="spotify-results-section">Tracks</h4><div class="spotify-tracks-list">`;
+        results.tracks.items.forEach(track => {
+            const artists = track.artists.map(a => a.name).join(', ');
+            const albumArt = track.album.images && track.album.images.length > 0 ? track.album.images[track.album.images.length - 1].url : '';
+            html += `
+                <div class="spotify-track-row" onclick="playSpotifyUri('${track.uri}')">
+                    <div class="spotify-track-thumb">
+                        ${albumArt ? `<img src="${albumArt}" alt="">` : ''}
+                    </div>
+                    <div class="spotify-track-details">
+                        <div class="spotify-track-title">${escapeHtml(track.name)}</div>
+                        <div class="spotify-track-subtitle">${escapeHtml(artists)}</div>
+                    </div>
+                    <div class="spotify-track-duration">${formatTime(track.duration_ms)}</div>
+                </div>`;
+        });
+        html += `</div>`;
+    }
+
+    if (results.playlists && results.playlists.items.length > 0) {
+        html += `<h4 class="spotify-results-section">Playlists</h4><div class="spotify-playlists-list">`;
+        results.playlists.items.forEach(playlist => {
+            if (!playlist) return;
+            const image = playlist.images && playlist.images.length > 0 ? playlist.images[0].url : '';
+            html += `
+                <div class="spotify-playlist-row" onclick="openPlaylist('${playlist.id}', '${escapeHtml(playlist.name)}')">
+                    <div class="spotify-playlist-thumb">
+                        ${image ? `<img src="${image}" alt="">` : ''}
+                    </div>
+                    <div class="spotify-playlist-details">
+                        <div class="spotify-playlist-title">${escapeHtml(playlist.name)}</div>
+                        <div class="spotify-playlist-subtitle">${playlist.tracks.total} tracks</div>
+                    </div>
+                </div>`;
+        });
+        html += `</div>`;
+    }
+
+    if (!html) {
+        html = '<div class="spotify-no-results">No results found</div>';
+    }
+
+    resultsDiv.innerHTML = html;
+}
+
+function switchSpotifyTab(tabId) {
+    activeSpotifyTab = tabId;
+    renderSpotifyContent();
+}
+
+// Playback controls
+async function toggleSpotifyPlayback() {
+    const endpoint = spotifyPlayback && spotifyPlayback.is_playing ? '/api/spotify/pause' : '/api/spotify/play';
+    try {
+        await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        setTimeout(loadSpotifyPlayback, 300);
+    } catch (err) {
+        console.error('Playback toggle failed:', err);
+    }
+}
+
+async function spotifyNext() {
+    try {
+        await fetch('/api/spotify/next', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        setTimeout(loadSpotifyPlayback, 300);
+    } catch (err) {
+        console.error('Next failed:', err);
+    }
+}
+
+async function spotifyPrevious() {
+    try {
+        await fetch('/api/spotify/previous', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        setTimeout(loadSpotifyPlayback, 300);
+    } catch (err) {
+        console.error('Previous failed:', err);
+    }
+}
+
+async function setSpotifyVolume(volume) {
+    try {
+        await fetch('/api/spotify/volume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ volume_percent: parseInt(volume) })
+        });
+        const volumeValue = document.querySelector('.spotify-volume-value');
+        if (volumeValue) volumeValue.textContent = volume + '%';
+    } catch (err) {
+        console.error('Volume change failed:', err);
+    }
+}
+
+async function toggleSpotifyShuffle() {
+    const newState = !spotifyPlayback.shuffle_state;
+    try {
+        await fetch('/api/spotify/shuffle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ state: newState })
+        });
+        setTimeout(loadSpotifyPlayback, 300);
+    } catch (err) {
+        console.error('Shuffle toggle failed:', err);
+    }
+}
+
+async function toggleSpotifyRepeat() {
+    const states = ['off', 'context', 'track'];
+    const currentIndex = states.indexOf(spotifyPlayback.repeat_state || 'off');
+    const newState = states[(currentIndex + 1) % states.length];
+    try {
+        await fetch('/api/spotify/repeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ state: newState })
+        });
+        setTimeout(loadSpotifyPlayback, 300);
+    } catch (err) {
+        console.error('Repeat toggle failed:', err);
+    }
+}
+
+async function seekSpotify(event) {
+    if (!spotifyPlayback || !spotifyPlayback.item) return;
+
+    const bar = event.currentTarget;
+    const rect = bar.getBoundingClientRect();
+    const percent = (event.clientX - rect.left) / rect.width;
+    const positionMs = Math.floor(percent * spotifyPlayback.item.duration_ms);
+
+    try {
+        await fetch('/api/spotify/seek', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position_ms: positionMs })
+        });
+        spotifyPlayback.progress_ms = positionMs;
+        updateProgressBar();
+    } catch (err) {
+        console.error('Seek failed:', err);
+    }
+}
+
+async function transferToDevice(deviceId) {
+    try {
+        await fetch('/api/spotify/transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId, play: true })
+        });
+        setTimeout(() => {
+            loadSpotifyDevices();
+            loadSpotifyPlayback();
+        }, 500);
+    } catch (err) {
+        console.error('Transfer failed:', err);
+    }
+}
+
+async function playSpotifyUri(uri) {
+    try {
+        await fetch('/api/spotify/play', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uri: uri })
+        });
+        setTimeout(loadSpotifyPlayback, 500);
+        switchSpotifyTab('now-playing');
+    } catch (err) {
+        console.error('Play failed:', err);
+    }
+}
+
+async function openPlaylist(playlistId, name) {
+    document.getElementById('spotifyPlaylistTitle').textContent = name;
+    document.getElementById('spotifyPlaylistModal').classList.add('active');
+
+    const content = document.getElementById('spotifyPlaylistContent');
+    content.innerHTML = '<div class="spotify-loading">Loading tracks...</div>';
+
+    try {
+        const resp = await fetch(`/api/spotify/playlist/${playlistId}/tracks?limit=50`);
+        if (resp.ok) {
+            const data = await resp.json();
+            renderPlaylistTracks(data.items, `spotify:playlist:${playlistId}`);
+        }
+    } catch (err) {
+        content.innerHTML = '<div class="spotify-error">Failed to load tracks</div>';
+    }
+}
+
+function renderPlaylistTracks(tracks, contextUri) {
+    const content = document.getElementById('spotifyPlaylistContent');
+
+    let html = `
+        <button class="spotify-play-all-btn" onclick="playSpotifyUri('${contextUri}')">
+            <img src="/icon/play" alt=""> Play All
+        </button>
+        <div class="spotify-tracks-list">`;
+
+    tracks.forEach((item, index) => {
+        if (!item.track) return;
+        const track = item.track;
+        const artists = track.artists.map(a => a.name).join(', ');
+        const albumArt = track.album.images && track.album.images.length > 0 ? track.album.images[track.album.images.length - 1].url : '';
+        html += `
+            <div class="spotify-track-row" onclick="playSpotifyUri('${contextUri}', ${index})">
+                <div class="spotify-track-thumb">
+                    ${albumArt ? `<img src="${albumArt}" alt="">` : ''}
+                </div>
+                <div class="spotify-track-details">
+                    <div class="spotify-track-title">${escapeHtml(track.name)}</div>
+                    <div class="spotify-track-subtitle">${escapeHtml(artists)}</div>
+                </div>
+                <div class="spotify-track-duration">${formatTime(track.duration_ms)}</div>
+            </div>`;
+    });
+    html += `</div>`;
+    content.innerHTML = html;
+}
+
+function closeSpotifyPlaylistModal() {
+    document.getElementById('spotifyPlaylistModal').classList.remove('active');
+}
+
+// Initialize Spotify
+checkSpotifyStatus();
+setInterval(loadSpotifyPlayback, 5000);
+
+// Mini player progress update (runs independently of modal)
+let miniPlayerProgressInterval = null;
+function startMiniPlayerProgress() {
+    if (miniPlayerProgressInterval) return;
+    miniPlayerProgressInterval = setInterval(() => {
+        if (spotifyPlayback && spotifyPlayback.is_playing) {
+            spotifyPlayback.progress_ms += 1000;
+            updateMiniPlayerProgress();
+        }
+    }, 1000);
+}
+startMiniPlayerProgress();
+
 // Close modals when clicking outside (on the backdrop)
 document.querySelectorAll('.modal').forEach(modal => {
     modal.addEventListener('click', (e) => {
@@ -2099,6 +2879,29 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 </div>
 
+<!-- Spotify Mini Player Banner -->
+<div id="spotifyMiniPlayer" class="spotify-mini-player" style="display: none;" onclick="handleMiniPlayerClick(event)">
+    <div class="spotify-mini-art" id="spotifyMiniArt"></div>
+    <div class="spotify-mini-info" id="spotifyMiniInfo">
+        <div class="spotify-mini-track">Not playing</div>
+        <div class="spotify-mini-artist"></div>
+    </div>
+    <div class="spotify-mini-controls">
+        <button class="spotify-mini-btn" onclick="event.stopPropagation(); spotifyPrevious();">
+            <img src="/icon/backward-step" alt="Previous">
+        </button>
+        <button class="spotify-mini-btn spotify-mini-play" id="spotifyMiniPlayBtn" onclick="event.stopPropagation(); toggleSpotifyPlayback();">
+            <img src="/icon/play" alt="Play" id="spotifyMiniPlayIcon">
+        </button>
+        <button class="spotify-mini-btn" onclick="event.stopPropagation(); spotifyNext();">
+            <img src="/icon/forward-step" alt="Next">
+        </button>
+    </div>
+    <div class="spotify-mini-progress">
+        <div class="spotify-mini-progress-fill" id="spotifyMiniProgressFill"></div>
+    </div>
+</div>
+
 <!-- Screensaver Overlay -->
 <div id="screensaver" class="screensaver">
     <div class="screensaver-bg"></div>
@@ -2106,6 +2909,14 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="screensaver-clock">
         <div class="screensaver-time" id="screensaverTime">12:00</div>
         <div class="screensaver-date" id="screensaverDate">Monday, January 1</div>
+    </div>
+    <div class="screensaver-spotify" id="screensaverSpotify" style="display: none;">
+        <img src="/icon/spotify" class="screensaver-spotify-icon" alt="">
+        <div class="screensaver-spotify-art" id="screensaverSpotifyArt"></div>
+        <div class="screensaver-spotify-info">
+            <div class="screensaver-spotify-track" id="screensaverSpotifyTrack"></div>
+            <div class="screensaver-spotify-artist" id="screensaverSpotifyArtist"></div>
+        </div>
     </div>
 </div>
 
