@@ -4,7 +4,7 @@
 <div class="home-container">
     <div class="page-header">
         <div class="header-actions">
-            <a href="/calendar" class="page-nav-btn">Calendar</a>
+            <a href="/calendar" class="page-nav-btn"><img src="/icon/calendar-days" class="nav-icon" alt="">Calendar</a>
             <button class="settings-btn" onclick="openSettings()" title="Settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"/>
@@ -17,7 +17,7 @@
     <div class="groups-grid">
         {{range $idx, $group := .Groups}}
         <div class="group-card" onclick="openGroupModal('{{$group.Name}}')" data-group="{{$group.Name}}">
-            <div class="group-card-icon">{{$group.Icon}}</div>
+            <div class="group-card-icon">{{if eq $group.Name "Tesla"}}<img src="/icon/tesla-svgrepo-com" class="group-icon group-icon-tesla" alt="">{{else if eq $group.Name "Security"}}<img src="/icon/lock" class="group-icon" alt="">{{else if eq $group.Name "Home"}}<img src="/icon/house-chimney" class="group-icon" alt="">{{else if eq $group.Name "Climate"}}<img src="/icon/temperature-high" class="group-icon" alt="">{{else if eq $group.Name "Lights"}}<img src="/icon/lightbulb" class="group-icon" alt="">{{else}}{{$group.Icon}}{{end}}</div>
             <div class="group-card-info">
                 <div class="group-card-name">{{$group.Name}}</div>
                 <div class="group-card-summary" id="summary-{{$group.Name}}">
@@ -33,9 +33,9 @@
         {{end}}
         <!-- Hue Lights Card -->
         <div class="group-card" onclick="openHueModal()" data-group="Hue">
-            <div class="group-card-icon">💡</div>
+            <div class="group-card-icon"><img src="/icon/lightbulb" class="group-icon" alt=""></div>
             <div class="group-card-info">
-                <div class="group-card-name">Lights</div>
+                <div class="group-card-name"><img src="/icon/philipshue-svgrepo-com" class="hue-logo" alt="Philips Hue"></div>
                 <div class="group-card-summary" id="summary-Hue">Loading...</div>
             </div>
             <div class="group-card-arrow">
@@ -108,7 +108,7 @@
     <div class="modal-content modal-cameras">
         <div class="modal-header-row">
             <div class="modal-header-title">
-                <span class="group-modal-icon">📷</span>
+                <img src="/icon/video" class="group-modal-icon-img" alt="">
                 <h3>Cameras</h3>
             </div>
             <button class="modal-close-btn" onclick="closeCamerasModal()">&times;</button>
@@ -124,7 +124,7 @@
     <div class="modal-content modal-camera-view">
         <div class="modal-header-row">
             <div class="modal-header-title">
-                <span class="camera-modal-icon">📷</span>
+                <img src="/icon/video" class="group-modal-icon-img" alt="">
                 <h3 id="cameraViewTitle">Camera</h3>
             </div>
             <button class="modal-close-btn" onclick="closeCameraViewModal()">&times;</button>
@@ -225,8 +225,8 @@
     <div class="modal-content modal-hue-fullscreen">
         <div class="modal-header-row">
             <div class="modal-header-title">
-                <span class="group-modal-icon">💡</span>
-                <h3>Lights</h3>
+                <img src="/icon/philipshue-svgrepo-com" class="hue-logo-modal" alt="Philips Hue">
+                <img src="/icon/lightbulb" class="modal-header-lightbulb" alt="">
             </div>
             <button class="modal-close-btn" onclick="closeHueModal()">&times;</button>
         </div>
@@ -241,7 +241,7 @@
     <div class="modal-content modal-light-brightness">
         <div class="modal-header-row">
             <div class="modal-header-title">
-                <span class="group-modal-icon">💡</span>
+                <img src="/icon/lightbulb" class="group-modal-icon-img" alt="">
                 <h3 id="lightBrightnessTitle">Light</h3>
             </div>
             <button class="modal-close-btn" onclick="closeLightBrightnessPopup()">&times;</button>
@@ -426,7 +426,7 @@ function renderCamerasContent() {
     }
     return camerasData.map(cam => `
         <div class="camera-row" onclick="openCameraView('${cam.name}', '${cam.label}')">
-            <div class="camera-icon">📷</div>
+            <div class="camera-icon"><img src="/icon/video" class="camera-icon-img" alt=""></div>
             <div class="camera-info">
                 <div class="camera-name">${cam.label}</div>
                 <div class="camera-status">Tap to view</div>
@@ -530,7 +530,7 @@ function renderSecurityGrid(group) {
         html += `
             <div class="security-grid-item camera-item"
                  onclick="openCameraView('${cam.name}', '${cam.label}')">
-                <div class="security-item-icon">📷</div>
+                <div class="security-item-icon"><img src="/icon/video" class="security-icon-img" alt=""></div>
                 <div class="security-item-name">${escapeHtml(cam.label)}</div>
                 <div class="security-item-state">Tap to view</div>
             </div>
@@ -2123,10 +2123,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPhotoIndex = 0;
     let currentBgElement = 0;
 
-    // Check if any modal is currently open
-    function isModalOpen() {
-        const modals = document.querySelectorAll('.modal.active');
-        return modals.length > 0;
+    // Check if a video modal is currently open (don't activate screensaver over videos)
+    function isVideoModalOpen() {
+        return document.querySelector('#cameraModal.active, #camerasModal.active, #cameraViewModal.active') !== null;
     }
 
     // Load screensaver config
@@ -2217,9 +2216,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function showScreensaver() {
         if (screensaverActive) return;
 
-        // Don't activate screensaver if a modal is open (e.g., camera/doorbell)
-        if (isModalOpen()) {
-            console.log('Screensaver skipped: modal is open');
+        // Don't activate screensaver if a video modal is open (e.g., camera/doorbell)
+        if (isVideoModalOpen()) {
+            console.log('Screensaver skipped: video modal is open');
             return;
         }
 

@@ -51,6 +51,18 @@ body {
     color: #fff;
 }
 
+.page-nav-btn:hover .nav-icon {
+    filter: invert(100%) sepia(0%) saturate(0%) brightness(100%);
+}
+
+.nav-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
+    transition: filter 0.2s;
+}
+
 /* Calendar */
 .calendar-container {
     height: 100%;
@@ -231,6 +243,35 @@ body {
     justify-content: center;
     background: rgba(233, 69, 96, 0.1);
     border-radius: 12px;
+}
+
+.group-card-icon .group-icon {
+    width: 2rem;
+    height: 2rem;
+    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
+}
+
+.group-card-icon .group-icon-tesla {
+    filter: brightness(0) invert(1);
+}
+
+.hue-logo {
+    height: 2.15rem;
+    width: auto;
+    filter: brightness(0) invert(1);
+}
+
+.hue-logo-modal {
+    height: 3rem;
+    width: auto;
+    filter: brightness(0) invert(1);
+    margin-right: 0.75rem;
+}
+
+.modal-header-lightbulb {
+    width: 2rem;
+    height: 2rem;
+    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
 }
 
 .group-card-info {
@@ -1410,21 +1451,27 @@ body.numpad-open .modal-content {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #16213e;
-    border-radius: 50%;
-    color: #eee;
     text-decoration: none;
-    font-size: 1.4rem;
-    font-weight: 300;
-    transition: background 0.15s;
+    transition: opacity 0.15s, transform 0.15s;
 }
 
-.nav-arrow:hover {
-    background: #1e3a5f;
+.nav-arrow img {
+    width: 100%;
+    height: 100%;
+    filter: invert(70%) sepia(10%) saturate(200%) hue-rotate(180deg) brightness(95%);
+    transition: filter 0.15s;
+}
+
+.nav-arrow:hover img {
+    filter: invert(100%) sepia(0%) saturate(0%) brightness(100%);
 }
 
 .nav-arrow:active {
-    background: #e94560;
+    transform: scale(0.95);
+}
+
+.nav-arrow:active img {
+    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
 }
 
 .nav-today-btn {
@@ -1656,13 +1703,12 @@ body.numpad-open .modal-content {
 
 /* ===== Group Modal ===== */
 .modal-group {
-    max-width: 450px;
-    width: 100%;
-}
-
-/* Larger modal when containing climate controls */
-.modal-group:has(.climate-card) {
-    max-width: 600px;
+    width: 95vw;
+    max-width: 95vw;
+    height: 95vh;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-header-row {
@@ -1691,6 +1737,24 @@ body.numpad-open .modal-content {
     font-size: 1.75rem;
 }
 
+.group-modal-icon-img {
+    width: 1.75rem;
+    height: 1.75rem;
+    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
+}
+
+.camera-icon-img {
+    width: 1.5rem;
+    height: 1.5rem;
+    filter: invert(70%) sepia(10%) saturate(200%) hue-rotate(180deg) brightness(95%);
+}
+
+.security-icon-img {
+    width: 2rem;
+    height: 2rem;
+    filter: invert(70%) sepia(10%) saturate(200%) hue-rotate(180deg) brightness(95%);
+}
+
 .modal-close-btn {
     position: absolute;
     right: 1.5rem;
@@ -1716,8 +1780,9 @@ body.numpad-open .modal-content {
 }
 
 .group-modal-content {
-    max-height: 60vh;
+    flex: 1;
     overflow-y: auto;
+    padding: 1rem;
 }
 
 /* Entity Rows in Group Modal */
@@ -2674,10 +2739,17 @@ body.tasks-panel-open {
 
 /* ===== Cameras Modal Styles ===== */
 .modal-cameras {
-    max-width: 500px;
+    width: 95vw;
+    max-width: 95vw;
+    height: 95vh;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .cameras-modal-content {
+    flex: 1;
+    overflow-y: auto;
     padding: 1rem;
 }
 

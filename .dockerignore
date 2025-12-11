@@ -1,0 +1,25 @@
+# Font Awesome source (icons are embedded in binary)
+fontawesome-pro-6.7.2-web/
+
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+*.exe
+server
+home_control
+
+# Secrets and local config
+.env
+token.json
+client_secret*.json
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# Documentation
+*.md
+LICENSE

@@ -4,7 +4,7 @@
 <div class="calendar-container">
     {{if not .Authorized}}
     <div class="page-header">
-        <a href="/home" class="page-nav-btn">Home</a>
+        <a href="/home" class="page-nav-btn"><img src="/icon/house-signal" class="nav-icon" alt="">Home</a>
     </div>
     <div class="auth-prompt">
         <h2>Google Calendar</h2>
@@ -19,7 +19,7 @@
             <a href="?view=month&date={{.TodayDate}}" class="view-btn {{if eq .View "month"}}active{{end}}">Month</a>
         </div>
         <div class="header-actions">
-            <a href="/home" class="page-nav-btn">Home</a>
+            <a href="/home" class="page-nav-btn"><img src="/icon/house-signal" class="nav-icon" alt="">Home</a>
             <button class="settings-btn" onclick="openSettings()" title="Settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"/>
@@ -51,9 +51,9 @@
                     </button>
                 </div>
                 <div class="view-title-center">
-                    <a href="?view=month&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                    <a href="?view=month&date={{.PrevDate}}" class="nav-arrow"><img src="/icon/circle-arrow-left" alt="Previous"></a>
                     <h2 class="month-title" onclick="openDatePicker()">{{.MonthName}} {{.Year}}</h2>
-                    <a href="?view=month&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+                    <a href="?view=month&date={{.NextDate}}" class="nav-arrow"><img src="/icon/circle-arrow-right" alt="Next"></a>
                 </div>
                 <div class="view-title-right">
                     <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
@@ -113,9 +113,9 @@
                     </button>
                 </div>
                 <div class="view-title-center">
-                    <a href="?view=week&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                    <a href="?view=week&date={{.PrevDate}}" class="nav-arrow"><img src="/icon/circle-arrow-left" alt="Previous"></a>
                     <h2 class="week-title" onclick="openDatePicker()">{{.WeekDateRange}}</h2>
-                    <a href="?view=week&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+                    <a href="?view=week&date={{.NextDate}}" class="nav-arrow"><img src="/icon/circle-arrow-right" alt="Next"></a>
                 </div>
                 <div class="view-title-right">
                     <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
@@ -182,9 +182,9 @@
                     </button>
                 </div>
                 <div class="view-title-center">
-                    <a href="?view=day&date={{.PrevDate}}" class="nav-arrow">&#8249;</a>
+                    <a href="?view=day&date={{.PrevDate}}" class="nav-arrow"><img src="/icon/circle-arrow-left" alt="Previous"></a>
                     <h2 class="day-title" onclick="openDatePicker()">{{.DayDateStr}}</h2>
-                    <a href="?view=day&date={{.NextDate}}" class="nav-arrow">&#8250;</a>
+                    <a href="?view=day&date={{.NextDate}}" class="nav-arrow"><img src="/icon/circle-arrow-right" alt="Next"></a>
                 </div>
                 <div class="view-title-right">
                     <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
@@ -2164,10 +2164,9 @@ setTimeout(checkForEventUpdates, 5000);
     let currentPhotoIndex = 0;
     let currentBgElement = 0;
 
-    // Check if any modal is currently open
-    function isModalOpen() {
-        const modals = document.querySelectorAll('.modal.active');
-        return modals.length > 0;
+    // Check if a video modal is currently open (don't activate screensaver over videos)
+    function isVideoModalOpen() {
+        return document.querySelector('#cameraModal.active, #camerasModal.active, #cameraViewModal.active') !== null;
     }
 
     // Load screensaver config
@@ -2258,9 +2257,9 @@ setTimeout(checkForEventUpdates, 5000);
     function showScreensaver() {
         if (screensaverActive) return;
 
-        // Don't activate screensaver if a modal is open (e.g., camera/doorbell)
-        if (isModalOpen()) {
-            console.log('Screensaver skipped: modal is open');
+        // Don't activate screensaver if a video modal is open (e.g., camera/doorbell)
+        if (isVideoModalOpen()) {
+            console.log('Screensaver skipped: video modal is open');
             return;
         }
 

@@ -19,6 +19,7 @@ import (
 	"home_control/internal/drive"
 	"home_control/internal/homeassistant"
 	"home_control/internal/hue"
+	"home_control/internal/icons"
 	"home_control/internal/mqtt"
 	"home_control/internal/syncbox"
 	"home_control/internal/tasks"
@@ -468,6 +469,9 @@ func main() {
 	r.Get("/api/drive/background/random", handleGetRandomBackgroundPhoto)
 	r.Get("/api/drive/photo/{id}", handleGetDrivePhoto)
 	r.Get("/api/screensaver/config", handleGetScreensaverConfig)
+
+	// Icon serving
+	r.Get("/icon/{name}", icons.Handler())
 
 	log.Printf("Server starting on :%s", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
