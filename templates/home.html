@@ -236,6 +236,86 @@
     </div>
 </div>
 
+<!-- Light Brightness Popup -->
+<div id="lightBrightnessModal" class="modal light-brightness-modal">
+    <div class="modal-content modal-light-brightness">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="group-modal-icon">💡</span>
+                <h3 id="lightBrightnessTitle">Light</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeLightBrightnessPopup()">&times;</button>
+        </div>
+        <div class="light-brightness-content">
+            <div class="light-brightness-toggle-row" onclick="toggleBrightnessPopupLight()">
+                <span class="light-brightness-toggle-label">Power</span>
+                <div class="toggle-switch" id="lightBrightnessToggle">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+            <div class="light-brightness-slider-container">
+                <input type="range" id="lightBrightnessSlider" min="1" max="254" value="127"
+                       oninput="updateLightBrightnessPreview(this.value)"
+                       onchange="setLightBrightness(this.value)">
+                <span id="lightBrightnessPercent" class="light-brightness-percent">50%</span>
+            </div>
+            <div class="light-brightness-actions">
+                <button class="modal-btn secondary" onclick="closeLightBrightnessPopup()">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scene Selection Popup -->
+<div id="sceneModal" class="modal scene-modal">
+    <div class="modal-content modal-scene">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="group-modal-icon">🎬</span>
+                <h3 id="sceneModalTitle">Scenes</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeSceneModal()">&times;</button>
+        </div>
+        <div class="scene-modal-content">
+            <div id="sceneModalList" class="scene-modal-list">
+                <!-- Scenes will be populated here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sync Mode Modal -->
+<div id="syncModeModal" class="modal syncbox-modal">
+    <div class="modal-content modal-syncbox">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="group-modal-icon">🎬</span>
+                <h3>Sync Mode</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeSyncModeModal()">&times;</button>
+        </div>
+        <div class="syncbox-modal-options">
+            <!-- Options populated by JS -->
+        </div>
+    </div>
+</div>
+
+<!-- HDMI Input Modal -->
+<div id="hdmiInputModal" class="modal syncbox-modal">
+    <div class="modal-content modal-syncbox">
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <span class="group-modal-icon">📺</span>
+                <h3>HDMI Input</h3>
+            </div>
+            <button class="modal-close-btn" onclick="closeHdmiInputModal()">&times;</button>
+        </div>
+        <div class="syncbox-modal-options">
+            <!-- Options populated by JS -->
+        </div>
+    </div>
+</div>
+
 <script>
 // Parse groups data
 let groupsData = {};
@@ -992,6 +1072,13 @@ async function loadHueRooms() {
         }
         hueRooms = await resp.json();
         updateHueSummary(hueRooms);
+
+        // Only re-render on entertainment tab (for streaming status updates)
+        // Don't re-render room tabs - it resets scroll position
+        const modal = document.getElementById('hueModal');
+        if (modal && modal.classList.contains('active') && activeHueTab === 'entertainment') {
+            renderHueContent();
+        }
     } catch (err) {
         console.error('Failed to load Hue rooms:', err);
         updateHueSummary(null);
@@ -1028,6 +1115,19 @@ function closeHueModal() {
 
 let activeHueTab = null;
 let selectedEntertainmentArea = null;
+// Note: activatedEntertainmentArea is now tracked via streamingActive from API
+
+// Check if a light is being synced (part of an actively streaming entertainment area)
+function isLightSyncing(lightId) {
+    if (!hueRooms) return false;
+    const entertainment = hueRooms.filter(r => r.type === 'Entertainment' && r.streamingActive);
+    for (const area of entertainment) {
+        if (area.lights && area.lights.some(l => l.id === lightId)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 function renderHueContent() {
     const content = document.getElementById('hueModalContent');
@@ -1049,11 +1149,11 @@ function renderHueContent() {
         type: 'room'
     }));
 
-    // Add single Entertainment tab if there are entertainment areas
+    // Add single Entertainment Areas tab if there are entertainment areas
     if (entertainment.length > 0) {
         tabs.push({
             id: 'entertainment',
-            name: 'Entertainment',
+            name: 'Entertainment Areas',
             icon: '🎬',
             type: 'entertainment'
         });
@@ -1112,115 +1212,402 @@ function selectEntertainmentArea(areaId) {
     renderHueContent();
 }
 
-function renderEntertainmentContent(areas) {
-    const selectedArea = areas.find(a => a.id === selectedEntertainmentArea) || areas[0];
-    const lightsCount = selectedArea?.lights?.length || 0;
+// Sync Box data
+let syncBoxes = [];
+let syncBoxStatuses = {};
+let selectedSyncBox = 0;
 
+async function loadSyncBoxes() {
+    try {
+        const resp = await fetch('/api/syncbox');
+        if (resp.ok) {
+            syncBoxes = await resp.json();
+            // Load status for each sync box
+            for (const box of syncBoxes) {
+                loadSyncBoxStatus(box.index);
+            }
+        }
+    } catch (err) {
+        console.log('Sync boxes not available:', err);
+    }
+}
+
+async function loadSyncBoxStatus(index) {
+    try {
+        const resp = await fetch(`/api/syncbox/${index}/status`);
+        if (resp.ok) {
+            syncBoxStatuses[index] = await resp.json();
+            // Re-render if modal is open
+            const modal = document.getElementById('hueModal');
+            if (modal && modal.classList.contains('active') && activeHueTab === 'entertainment') {
+                renderHueContent();
+            }
+        }
+    } catch (err) {
+        console.log(`Failed to load sync box ${index} status:`, err);
+    }
+}
+
+async function toggleSyncBox(index, active) {
+    try {
+        const resp = await fetch(`/api/syncbox/${index}/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active })
+        });
+        if (resp.ok) {
+            await loadSyncBoxStatus(index);
+        }
+    } catch (err) {
+        console.error('Failed to toggle sync:', err);
+    }
+}
+
+async function setSyncBoxArea(index, groupId) {
+    try {
+        const resp = await fetch(`/api/syncbox/${index}/area`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupId })
+        });
+        if (resp.ok) {
+            await loadSyncBoxStatus(index);
+            await loadHueRooms(); // Refresh to get updated streaming status
+        }
+    } catch (err) {
+        console.error('Failed to set entertainment area:', err);
+    }
+}
+
+async function setSyncBoxMode(index, mode) {
+    try {
+        const resp = await fetch(`/api/syncbox/${index}/mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
+        });
+        if (resp.ok) {
+            await loadSyncBoxStatus(index);
+        }
+    } catch (err) {
+        console.error('Failed to set mode:', err);
+    }
+}
+
+async function setSyncBoxInput(index, hdmiSource) {
+    try {
+        const resp = await fetch(`/api/syncbox/${index}/input`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hdmiSource })
+        });
+        if (resp.ok) {
+            await loadSyncBoxStatus(index);
+        }
+    } catch (err) {
+        console.error('Failed to set HDMI input:', err);
+    }
+}
+
+function selectSyncBox(index) {
+    selectedSyncBox = index;
+    renderHueContent();
+}
+
+function renderEntertainmentContent(areas) {
+    // Use streamingActive from the API
+    const activeArea = areas.find(a => a.streamingActive);
+
+    // If we have Sync Boxes configured, show Sync Box control UI
+    if (syncBoxes.length > 0) {
+        return renderSyncBoxContent(areas, activeArea);
+    }
+
+    // Otherwise show read-only entertainment areas status
     return `
         <div class="hue-entertainment-content">
+            ${activeArea ? `
+            <div class="hue-entertainment-active-banner">
+                <span class="active-indicator"></span>
+                <span>Currently Streaming: <strong>${escapeHtml(activeArea.name)}</strong></span>
+            </div>
+            ` : '<div class="hue-entertainment-notice">No Sync Boxes configured. Add SYNC_BOXES to .env to control streaming.</div>'}
+
             <div class="hue-entertainment-selector">
-                <label>Select Entertainment Area</label>
+                <label>Entertainment Areas</label>
                 <div class="hue-entertainment-areas">
                     ${areas.map(area => `
-                        <button class="hue-entertainment-area-btn ${area.id === selectedEntertainmentArea ? 'selected' : ''}"
-                                onclick="selectEntertainmentArea('${area.id}')">
+                        <div class="hue-entertainment-area-btn ${area.streamingActive ? 'activated' : ''}">
                             <span class="area-icon">🎬</span>
                             <span class="area-name">${escapeHtml(area.name)}</span>
                             <span class="area-lights">${area.lights?.length || 0} lights</span>
-                        </button>
-                    `).join('')}
-                </div>
-            </div>
-
-            <div class="hue-entertainment-selected">
-                <div class="selected-area-header">
-                    <div class="selected-area-icon">🎬</div>
-                    <div class="selected-area-info">
-                        <div class="selected-area-label">Current Selection</div>
-                        <div class="selected-area-name">${escapeHtml(selectedArea?.name || 'None')}</div>
-                    </div>
-                </div>
-
-                <button class="hue-entertainment-activate-btn" onclick="activateEntertainment('${selectedArea?.id}')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
-                    Activate for Hue Sync
-                </button>
-
-                ${selectedArea?.lights && selectedArea.lights.length > 0 ? `
-                <div class="hue-entertainment-lights">
-                    <label>Lights in "${escapeHtml(selectedArea.name)}"</label>
-                    ${selectedArea.lights.map(light => `
-                        <div class="hue-light-item">
-                            <span class="hue-light-icon">💡</span>
-                            <span class="hue-light-name">${escapeHtml(light.name)}</span>
+                            ${area.streamingActive ? '<span class="area-active-badge">STREAMING</span>' : ''}
                         </div>
                     `).join('')}
                 </div>
-                ` : ''}
             </div>
         </div>
     `;
 }
 
-function renderHueRoomContent(room) {
-    const lightsOnCount = room.lights ? room.lights.filter(l => l.state && l.state.on).length : 0;
-    const totalLights = room.lights ? room.lights.length : 0;
-    const statusText = lightsOnCount === 0 ? 'All off' : lightsOnCount === totalLights ? 'All on' : `${lightsOnCount} of ${totalLights} on`;
+function renderSyncBoxContent(areas, activeArea) {
+    const box = syncBoxes[selectedSyncBox];
+    const status = syncBoxStatuses[selectedSyncBox] || {};
+    const exec = status.execution || {};
+    const hue = status.hue || {};
+    const groups = hue.groups || {};
+    const currentGroupId = exec.hueTarget || '';
+    const isSyncing = exec.syncActive;
+    const currentMode = exec.mode || 'video';
+    const currentInput = exec.hdmiSource || 'input1';
+    const hdmi = status.hdmi || {};
+
+    // Helper to get HDMI input name
+    const getHdmiName = (inputKey, defaultNum) => {
+        const input = hdmi[inputKey];
+        return input?.name || `HDMI ${defaultNum}`;
+    };
+
+    // Get syncing status for all boxes
+    const boxStatuses = syncBoxes.map((sb, i) => {
+        const s = syncBoxStatuses[i] || {};
+        return s.execution?.syncActive || false;
+    });
 
     return `
-        <div class="hue-room-content" data-room-id="${room.id}">
-            <div class="hue-room-main-toggle" onclick="toggleHueRoom('${room.id}')">
-                <div class="hue-room-power ${room.isOn ? 'on' : ''}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
-                        <line x1="12" y1="2" x2="12" y2="12"/>
-                    </svg>
+        <div class="hue-entertainment-content">
+            <div class="hue-syncbox-panel">
+                <div class="hue-syncbox-header">
+                    <div class="hue-syncbox-selector">
+                        ${syncBoxes.map((sb, i) => {
+                            const boxSyncing = boxStatuses[i];
+                            return `
+                            <label class="hue-syncbox-radio ${i === selectedSyncBox ? 'selected' : ''} ${boxSyncing ? 'syncing' : ''}"
+                                   onclick="selectSyncBox(${i})">
+                                <input type="radio" name="syncbox" ${i === selectedSyncBox ? 'checked' : ''}>
+                                <span class="radio-name">${escapeHtml(sb.name)}</span>
+                                ${boxSyncing ? '<span class="radio-status">Syncing</span>' : ''}
+                            </label>
+                        `}).join('')}
+                    </div>
+                    <button class="hue-syncbox-toggle-btn ${isSyncing ? 'streaming' : ''}"
+                            onclick="toggleSyncBox(${selectedSyncBox}, ${!isSyncing})">
+                        ${isSyncing ? `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="6" y="4" width="4" height="16"/>
+                            <rect x="14" y="4" width="4" height="16"/>
+                        </svg>
+                        Stop Sync
+                        ` : `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Start Sync
+                        `}
+                    </button>
                 </div>
-                <div class="hue-room-power-label">${room.isOn ? 'On' : 'Off'} · ${statusText}</div>
-            </div>
 
-            <div class="hue-room-brightness-section">
-                <label>Brightness</label>
-                <div class="hue-brightness-control">
-                    <input type="range" min="1" max="254" value="${getAverageRoomBrightness(room)}"
-                           onchange="setHueRoomBrightness('${room.id}', this.value)">
-                    <span class="hue-brightness-value">${Math.round(getAverageRoomBrightness(room) / 254 * 100)}%</span>
-                </div>
-            </div>
-
-            ${room.scenes && room.scenes.length > 0 ? `
-            <div class="hue-room-scenes-section">
-                <label>Scenes</label>
-                <div class="hue-scenes-list">
-                    ${room.scenes.map(scene => `
-                        <button class="hue-scene-btn" onclick="activateHueScene('${scene.id}')">
-                            ${escapeHtml(scene.name)}
-                        </button>
-                    `).join('')}
-                </div>
-            </div>
-            ` : ''}
-
-            <div class="hue-room-lights-section">
-                <label>Lights</label>
-                ${room.lights && room.lights.length > 0 ? room.lights.map(light => `
-                    <div class="hue-light-row ${light.state && light.state.on ? 'light-on' : ''}"
-                         data-light-id="${light.id}"
-                         onclick="toggleHueLight('${light.id}')">
-                        <div class="hue-light-icon">💡</div>
-                        <div class="hue-light-info">
-                            <div class="hue-light-name">${escapeHtml(light.name)}</div>
-                            <div class="hue-light-state">${light.state && light.state.on ? 'On' : 'Off'}${light.state && light.state.on && light.state.bri ? ' · ' + Math.round(light.state.bri / 254 * 100) + '%' : ''}</div>
-                        </div>
-                        <div class="hue-light-toggle">
-                            <div class="toggle-switch ${light.state && light.state.on ? 'on' : ''}">
-                                <div class="toggle-slider"></div>
+                <div class="hue-syncbox-split-layout">
+                    <div class="hue-syncbox-left-column">
+                        <div class="hue-syncbox-grid-section">
+                            <label>Entertainment Area</label>
+                            <div class="hue-syncbox-grid-4col">
+                                ${Object.entries(groups).map(([id, group]) => `
+                                    <button class="hue-syncbox-tile ${id === currentGroupId ? 'selected' : ''}"
+                                            onclick="setSyncBoxArea(${selectedSyncBox}, '${id}')">
+                                        <span class="tile-icon">🎬</span>
+                                        <span class="tile-name">${escapeHtml(group.name)}</span>
+                                        <span class="tile-info">${group.numLights} lights</span>
+                                    </button>
+                                `).join('')}
                             </div>
                         </div>
                     </div>
-                `).join('') : '<div class="no-lights">No lights in this room</div>'}
+
+                    <div class="hue-syncbox-right-column">
+                        <div class="hue-syncbox-grid-section">
+                            <label>HDMI Input</label>
+                            <div class="hue-syncbox-grid-4col">
+                                ${['input1', 'input2', 'input3', 'input4'].map((input, i) => `
+                                    <button class="hue-syncbox-tile ${input === currentInput ? 'selected' : ''}"
+                                            onclick="setSyncBoxInput(${selectedSyncBox}, '${input}')">
+                                        <span class="tile-icon">📺</span>
+                                        <span class="tile-name">${escapeHtml(getHdmiName(input, i + 1))}</span>
+                                        <span class="tile-info">HDMI ${i + 1}</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="hue-syncbox-grid-section">
+                            <label>Sync Mode</label>
+                            <div class="hue-syncbox-grid-4col">
+                                ${['video', 'music', 'game'].map(mode => `
+                                    <button class="hue-syncbox-tile ${mode === currentMode ? 'selected' : ''}"
+                                            onclick="setSyncBoxMode(${selectedSyncBox}, '${mode}')">
+                                        <span class="tile-icon">${mode === 'video' ? '🎬' : mode === 'music' ? '🎵' : '🎮'}</span>
+                                        <span class="tile-name">${mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function openSyncModeModal() {
+    const status = syncBoxStatuses[selectedSyncBox] || {};
+    const exec = status.execution || {};
+    const currentMode = exec.mode || 'video';
+
+    const modal = document.getElementById('syncModeModal');
+    const content = modal.querySelector('.syncbox-modal-options');
+    content.innerHTML = ['video', 'music', 'game'].map(mode => `
+        <button class="syncbox-modal-option ${mode === currentMode ? 'active' : ''}"
+                onclick="setSyncBoxMode(${selectedSyncBox}, '${mode}'); closeSyncModeModal();">
+            <span class="option-icon">${mode === 'video' ? '🎬' : mode === 'music' ? '🎵' : '🎮'}</span>
+            <span class="option-label">${mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
+        </button>
+    `).join('');
+    modal.classList.add('active');
+}
+
+function closeSyncModeModal() {
+    document.getElementById('syncModeModal').classList.remove('active');
+}
+
+function openHdmiInputModal() {
+    const status = syncBoxStatuses[selectedSyncBox] || {};
+    const exec = status.execution || {};
+    const hdmi = status.hdmi || {};
+    const currentInput = exec.hdmiSource || 'input1';
+
+    const getHdmiName = (inputKey, defaultNum) => {
+        const input = hdmi[inputKey];
+        return input?.name || `HDMI ${defaultNum}`;
+    };
+
+    const modal = document.getElementById('hdmiInputModal');
+    const content = modal.querySelector('.syncbox-modal-options');
+    content.innerHTML = ['input1', 'input2', 'input3', 'input4'].map((input, i) => `
+        <button class="syncbox-modal-option ${input === currentInput ? 'active' : ''}"
+                onclick="setSyncBoxInput(${selectedSyncBox}, '${input}'); closeHdmiInputModal();">
+            <span class="option-label">${escapeHtml(getHdmiName(input, i + 1))}</span>
+        </button>
+    `).join('');
+    modal.classList.add('active');
+}
+
+function closeHdmiInputModal() {
+    document.getElementById('hdmiInputModal').classList.remove('active');
+}
+
+async function stopSyncFromBanner() {
+    // Stop sync on all configured sync boxes
+    for (let i = 0; i < syncBoxes.length; i++) {
+        try {
+            await fetch(`/api/syncbox/${i}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: false })
+            });
+        } catch (err) {
+            console.error(`Failed to stop sync on box ${i}:`, err);
+        }
+    }
+    // Reload data
+    await loadHueRooms();
+    for (const box of syncBoxes) {
+        loadSyncBoxStatus(box.index);
+    }
+    renderHueContent();
+}
+
+// Load sync boxes on startup
+loadSyncBoxes();
+
+function renderHueRoomContent(room) {
+    const lightsOnCount = room.lights ? room.lights.filter(l => l.state && l.state.on).length : 0;
+    const totalLights = room.lights ? room.lights.length : 0;
+    const toggleText = room.isOn ? `Turn off ${escapeHtml(room.name)}` : `Turn on ${escapeHtml(room.name)}`;
+    const hasSyncingLights = room.lights && room.lights.some(l => isLightSyncing(l.id));
+    const allLightsSyncing = room.lights && room.lights.length > 0 && room.lights.every(l => isLightSyncing(l.id));
+
+    return `
+        <div class="hue-room-content" data-room-id="${room.id}">
+            ${hasSyncingLights ? `
+            <div class="hue-sync-warning-banner">
+                <div class="sync-warning-text">
+                    <div class="sync-warning-title">Hue Sync is active</div>
+                    <div class="sync-warning-subtitle">Stop syncing to control the lights</div>
+                </div>
+                <button class="sync-warning-stop-btn" onclick="stopSyncFromBanner()">Stop Sync</button>
+            </div>
+            ` : ''}
+            <div class="hue-room-layout">
+                <div class="hue-room-left-column">
+                    <div class="hue-room-main-toggle" onclick="toggleHueRoom('${room.id}')">
+                        <div class="hue-room-power ${room.isOn ? 'on' : ''}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                                <line x1="12" y1="2" x2="12" y2="12"/>
+                            </svg>
+                        </div>
+                        <div class="hue-room-power-label">${toggleText}</div>
+                    </div>
+
+                    <div class="hue-room-brightness-section ${allLightsSyncing ? 'disabled' : ''}">
+                        <label>Brightness</label>
+                        <div class="hue-brightness-control">
+                            <input type="range" min="1" max="254" value="${getAverageRoomBrightness(room)}"
+                                   ${allLightsSyncing ? 'disabled' : ''}
+                                   oninput="this.nextElementSibling.textContent = Math.round(this.value / 254 * 100) + '%'"
+                                   onchange="setHueRoomBrightness('${room.id}', this.value)">
+                            <span class="hue-brightness-value">${Math.round(getAverageRoomBrightness(room) / 254 * 100)}%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hue-room-right-column">
+                    ${room.scenes && room.scenes.length > 0 ? `
+                    <div class="hue-room-scenes-section">
+                        <button class="hue-scenes-open-btn" onclick="openSceneModal('${room.id}', '${escapeHtml(room.name)}')">
+                            <span class="scenes-btn-icon">🎬</span>
+                            <span class="scenes-btn-text">Scenes</span>
+                            <span class="scenes-btn-count">${room.scenes.length}</span>
+                        </button>
+                    </div>
+                    ` : ''}
+
+                    <div class="hue-room-lights-section">
+                        <label>Lights</label>
+                        <div class="hue-lights-grid">
+                        ${room.lights && room.lights.length > 0 ? room.lights.map(light => {
+                            const syncing = isLightSyncing(light.id);
+                            return `
+                            <div class="hue-light-row ${light.state && light.state.on ? 'light-on' : ''} ${syncing ? 'syncing' : ''}"
+                                 data-light-id="${light.id}"
+                                 ${syncing ? '' : `onclick="openLightBrightnessPopup('${light.id}', '${escapeHtml(light.name)}', ${light.state?.bri || 127}, ${light.state?.on || false})"`}>
+                                <div class="hue-light-icon">${syncing ? '🎬' : '💡'}</div>
+                                <div class="hue-light-info">
+                                    <div class="hue-light-name">${escapeHtml(light.name)}</div>
+                                    <div class="hue-light-state ${syncing ? 'sync-active' : ''}">${syncing ? 'Sync Active' : (light.state && light.state.on ? Math.round(light.state.bri / 254 * 100) + '%' : 'Off')}</div>
+                                </div>
+                                ${syncing ? '' : `
+                                <div class="hue-light-toggle" onclick="event.stopPropagation(); toggleHueLight('${light.id}')">
+                                    <div class="toggle-switch ${light.state && light.state.on ? 'on' : ''}">
+                                        <div class="toggle-slider"></div>
+                                    </div>
+                                </div>
+                                `}
+                            </div>
+                        `}).join('') : '<div class="no-lights">No lights in this room</div>'}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -1391,6 +1778,77 @@ async function toggleHueLight(lightId) {
     }
 }
 
+// Light brightness popup
+let currentBrightnessLightId = null;
+let currentBrightnessLightIsOn = false;
+
+function openLightBrightnessPopup(lightId, lightName, currentBri, isOn) {
+    currentBrightnessLightId = lightId;
+    currentBrightnessLightIsOn = isOn;
+    document.getElementById('lightBrightnessTitle').textContent = lightName;
+    const slider = document.getElementById('lightBrightnessSlider');
+    slider.value = currentBri || 127;
+    updateLightBrightnessPreview(slider.value);
+    // Update toggle state
+    const toggle = document.getElementById('lightBrightnessToggle');
+    if (isOn) {
+        toggle.classList.add('on');
+    } else {
+        toggle.classList.remove('on');
+    }
+    document.getElementById('lightBrightnessModal').classList.add('active');
+}
+
+function closeLightBrightnessPopup() {
+    document.getElementById('lightBrightnessModal').classList.remove('active');
+    currentBrightnessLightId = null;
+    currentBrightnessLightIsOn = false;
+}
+
+async function toggleBrightnessPopupLight() {
+    if (!currentBrightnessLightId) return;
+
+    try {
+        const resp = await fetch(`/api/hue/light/${currentBrightnessLightId}/toggle`, { method: 'POST' });
+        if (resp.ok) {
+            currentBrightnessLightIsOn = !currentBrightnessLightIsOn;
+            const toggle = document.getElementById('lightBrightnessToggle');
+            if (currentBrightnessLightIsOn) {
+                toggle.classList.add('on');
+            } else {
+                toggle.classList.remove('on');
+            }
+            await loadHueRooms();
+            renderHueContent();
+        }
+    } catch (err) {
+        console.error('Failed to toggle light:', err);
+    }
+}
+
+function updateLightBrightnessPreview(value) {
+    const percent = Math.round(value / 254 * 100);
+    document.getElementById('lightBrightnessPercent').textContent = percent + '%';
+}
+
+async function setLightBrightness(value) {
+    if (!currentBrightnessLightId) return;
+
+    try {
+        const resp = await fetch(`/api/hue/light/${currentBrightnessLightId}/brightness`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ brightness: parseInt(value) })
+        });
+        if (resp.ok) {
+            await loadHueRooms();
+            renderHueContent();
+        }
+    } catch (err) {
+        console.error('Failed to set brightness:', err);
+    }
+}
+
 async function activateHueScene(sceneId) {
     try {
         const resp = await fetch(`/api/hue/scene/${sceneId}/activate`, { method: 'POST' });
@@ -1398,37 +1856,54 @@ async function activateHueScene(sceneId) {
             hueRooms = await resp.json();
             updateHueSummary(hueRooms);
             renderHueContent();
+            closeSceneModal();
         }
     } catch (err) {
         console.error('Failed to activate scene:', err);
     }
 }
 
-async function activateEntertainment(areaId) {
-    const roomCard = document.querySelector(`.hue-room-card[data-room-id="${areaId}"]`);
-    if (roomCard) roomCard.classList.add('loading');
+// Scene modal
+let currentSceneRoomId = null;
 
-    try {
-        const resp = await fetch(`/api/hue/entertainment/${areaId}/activate`, { method: 'POST' });
-        if (resp.ok) {
-            // Show brief success feedback
-            if (roomCard) {
-                roomCard.classList.add('activated');
-                setTimeout(() => roomCard.classList.remove('activated'), 1500);
-            }
-        }
-    } catch (err) {
-        console.error('Failed to activate entertainment area:', err);
-    } finally {
-        if (roomCard) roomCard.classList.remove('loading');
+function openSceneModal(roomId, roomName) {
+    currentSceneRoomId = roomId;
+    document.getElementById('sceneModalTitle').textContent = `${roomName} Scenes`;
+
+    // Find the room and render its scenes
+    const room = hueRooms.find(r => r.id === roomId);
+    if (room && room.scenes) {
+        const scenesList = document.getElementById('sceneModalList');
+        scenesList.innerHTML = room.scenes.map(scene => `
+            <button class="scene-modal-btn" onclick="activateHueScene('${scene.id}')">
+                ${escapeHtml(scene.name)}
+            </button>
+        `).join('');
     }
+
+    document.getElementById('sceneModal').classList.add('active');
 }
+
+function closeSceneModal() {
+    document.getElementById('sceneModal').classList.remove('active');
+    currentSceneRoomId = null;
+}
+
+// Periodically refresh sync box status when entertainment tab is active
+setInterval(() => {
+    const modal = document.getElementById('hueModal');
+    if (modal && modal.classList.contains('active') && activeHueTab === 'entertainment') {
+        for (const box of syncBoxes) {
+            loadSyncBoxStatus(box.index);
+        }
+    }
+}, 3000); // Every 3 seconds
 
 // Load Hue rooms on page load
 loadHueRooms();
 
-// Refresh Hue state every 30 seconds
-setInterval(loadHueRooms, 30000);
+// Refresh Hue state every second for real-time responsiveness
+setInterval(loadHueRooms, 1000);
 
 // Close modals when clicking outside (on the backdrop)
 document.querySelectorAll('.modal').forEach(modal => {

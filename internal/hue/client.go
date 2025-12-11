@@ -51,15 +51,24 @@ type LightState struct {
 	Reachable  bool      `json:"reachable"`
 }
 
+// EntertainmentStream represents the streaming state of an entertainment area
+type EntertainmentStream struct {
+	Active    bool   `json:"active"`
+	Owner     string `json:"owner,omitempty"`
+	ProxyMode string `json:"proxymode,omitempty"`
+	ProxyNode string `json:"proxynode,omitempty"`
+}
+
 // Group represents a Hue group (room, zone, or entertainment area)
 type Group struct {
-	ID      string     `json:"id"`
-	Name    string     `json:"name"`
-	Lights  []string   `json:"lights"`
-	Type    string     `json:"type"` // Room, Zone, Entertainment, LightGroup
-	Class   string     `json:"class,omitempty"`
-	State   GroupState `json:"state"`
-	Action  LightState `json:"action"`
+	ID      string               `json:"id"`
+	Name    string               `json:"name"`
+	Lights  []string             `json:"lights"`
+	Type    string               `json:"type"` // Room, Zone, Entertainment, LightGroup
+	Class   string               `json:"class,omitempty"`
+	State   GroupState           `json:"state"`
+	Action  LightState           `json:"action"`
+	Stream  *EntertainmentStream `json:"stream,omitempty"`
 }
 
 // GroupState represents the aggregate state of a group
@@ -84,13 +93,14 @@ type Scene struct {
 
 // Room is a convenience type for rooms/zones that includes lights
 type Room struct {
-	ID     string   `json:"id"`
-	Name   string   `json:"name"`
-	Type   string   `json:"type"`
-	Class  string   `json:"class"`
-	IsOn   bool     `json:"isOn"`
-	Lights []*Light `json:"lights"`
-	Scenes []*Scene `json:"scenes"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Type            string   `json:"type"`
+	Class           string   `json:"class"`
+	IsOn            bool     `json:"isOn"`
+	Lights          []*Light `json:"lights"`
+	Scenes          []*Scene `json:"scenes"`
+	StreamingActive bool     `json:"streamingActive,omitempty"`
 }
 
 // NewClient creates a new Hue Bridge client
@@ -426,10 +436,41 @@ func (c *Client) ActivateScene(sceneID string) error {
 	return fmt.Errorf("scene %s not found", sceneID)
 }
 
+// DeactivateAllEntertainment deactivates streaming on all entertainment areas
+func (c *Client) DeactivateAllEntertainment() error {
+	groups, err := c.GetGroups()
+	if err != nil {
+		return err
+	}
+
+	for _, g := range groups {
+		if g.Type == "Entertainment" && g.Stream != nil && g.Stream.Active {
+			// Deactivate this entertainment area
+			if err := c.put("/groups/"+g.ID, map[string]interface{}{
+				"stream": map[string]interface{}{
+					"active": false,
+				},
+			}); err != nil {
+				return fmt.Errorf("failed to deactivate entertainment area %s: %w", g.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
 // ActivateEntertainmentArea sets an entertainment area as active for streaming
 func (c *Client) ActivateEntertainmentArea(groupID string) error {
-	return c.put("/groups/"+groupID+"/action", map[string]interface{}{
-		"on": true,
+	// First deactivate any currently active entertainment areas
+	if err := c.DeactivateAllEntertainment(); err != nil {
+		// Log but continue - the area we want might still activate
+	}
+
+	// Activate streaming on the requested area
+	// This uses PUT to /groups/{id} with stream.active = true
+	return c.put("/groups/"+groupID, map[string]interface{}{
+		"stream": map[string]interface{}{
+			"active": true,
+		},
 	})
 }
 
@@ -471,6 +512,11 @@ func (c *Client) GetRoomsWithDetails() ([]*Room, error) {
 			IsOn:   g.State.AnyOn,
 			Lights: make([]*Light, 0),
 			Scenes: make([]*Scene, 0),
+		}
+
+		// For entertainment areas, check streaming status
+		if g.Type == "Entertainment" && g.Stream != nil {
+			room.StreamingActive = g.Stream.Active
 		}
 
 		// Add lights

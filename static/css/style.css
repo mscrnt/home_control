@@ -1653,10 +1653,11 @@ body.numpad-open .modal-content {
 
 .modal-header-row {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid #0f3460;
+    position: relative;
 }
 
 .modal-header-title {
@@ -1677,6 +1678,10 @@ body.numpad-open .modal-content {
 }
 
 .modal-close-btn {
+    position: absolute;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
     width: 36px;
     height: 36px;
     background: none;
@@ -3472,11 +3477,10 @@ body.tasks-panel-open {
 
 .hue-modal-content {
     flex: 1;
-    overflow-y: auto;
-    padding: 1rem;
+    overflow: hidden;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
 }
 
 .hue-loading {
@@ -3671,18 +3675,17 @@ body.tasks-panel-open {
 
 .hue-light-row {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    padding: 0.75rem;
-    gap: 0.75rem;
-    border-radius: 8px;
+    justify-content: center;
+    padding: 1.2rem 1rem;
+    min-height: 140px;
+    gap: 0.5rem;
+    border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s;
-    margin-top: 0.5rem;
     background: rgba(15, 52, 96, 0.3);
-}
-
-.hue-light-row:first-of-type {
-    margin-top: 0;
+    border: 1px solid transparent;
 }
 
 .hue-light-row:hover {
@@ -3699,33 +3702,49 @@ body.tasks-panel-open {
     pointer-events: none;
 }
 
+.hue-light-row.syncing {
+    background: rgba(156, 39, 176, 0.15);
+    border: 1px solid rgba(156, 39, 176, 0.4);
+    cursor: not-allowed;
+}
+
+.hue-light-state.sync-active {
+    color: #ce93d8;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
 .hue-light-icon {
-    font-size: 1.25rem;
-    min-width: 1.75rem;
+    font-size: 2.5rem;
     text-align: center;
 }
 
 .hue-light-info {
     flex: 1;
+    text-align: center;
     min-width: 0;
+    width: 100%;
 }
 
 .hue-light-name {
-    font-size: 0.95rem;
+    font-size: 1rem;
     color: #fff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .hue-light-state {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     color: #888;
     margin-top: 2px;
 }
 
 .hue-light-toggle {
-    flex-shrink: 0;
+    display: none; /* Hidden in compact grid - whole button is clickable */
 }
 
 .no-lights {
@@ -3792,25 +3811,14 @@ body.tasks-panel-open {
     }
 }
 
-/* Hue Tabs */
+/* Hue Tabs - Fixed header, not scrollable */
 .hue-tabs {
     display: flex;
     gap: 0.5rem;
     padding: 0.75rem 1rem;
-    margin: -1rem -1rem 1rem -1rem;
-    width: calc(100% + 2rem);
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
     background: var(--bg-secondary);
     border-bottom: 2px solid var(--border-color);
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.hue-tabs::-webkit-scrollbar {
-    display: none;
+    flex-shrink: 0;
 }
 
 .hue-tab {
@@ -3820,13 +3828,13 @@ body.tasks-panel-open {
     justify-content: center;
     gap: 0.3rem;
     padding: 0.5rem 0.75rem;
-    border: none;
+    border: 2px solid transparent;
     background: transparent;
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
     flex: 1;
-    min-width: 0;
+    min-width: 80px;
     color: var(--text-secondary);
 }
 
@@ -3837,17 +3845,23 @@ body.tasks-panel-open {
 
 .hue-tab.active {
     background: var(--primary-color);
+    border-color: var(--primary-color);
     color: white;
     font-weight: 600;
 }
 
 .hue-tab.entertainment {
-    border: 1px solid rgba(155, 89, 182, 0.5);
+    color: #d8b4fe;
+}
+
+.hue-tab.entertainment:hover {
+    background: rgba(168, 85, 247, 0.15);
 }
 
 .hue-tab.entertainment.active {
-    background: #9b59b6;
-    border-color: #9b59b6;
+    background: #a855f7;
+    border-color: #a855f7;
+    color: white;
 }
 
 .hue-tab-icon {
@@ -3865,14 +3879,38 @@ body.tasks-panel-open {
 }
 
 .hue-tab-content {
-    padding: 0;
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
 }
 
 /* Hue Room Content (tabbed view) */
 .hue-room-content {
     display: flex;
     flex-direction: column;
+    gap: 1rem;
+}
+
+.hue-room-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.hue-room-left-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     gap: 1.5rem;
+    max-width: 50%;
+}
+
+.hue-room-right-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 50%;
 }
 
 .hue-room-main-toggle {
@@ -3892,8 +3930,8 @@ body.tasks-panel-open {
 }
 
 .hue-room-power {
-    width: 80px;
-    height: 80px;
+    width: 400px;
+    height: 400px;
     border-radius: 50%;
     background: var(--bg-secondary);
     display: flex;
@@ -3903,9 +3941,9 @@ body.tasks-panel-open {
 }
 
 .hue-room-power svg {
-    width: 40px;
-    height: 40px;
-    stroke: var(--text-secondary);
+    width: 240px;
+    height: 240px;
+    stroke: #888;
     transition: stroke 0.3s ease;
 }
 
@@ -3924,11 +3962,20 @@ body.tasks-panel-open {
 }
 
 .hue-room-brightness-section,
-.hue-room-scenes-section,
 .hue-room-lights-section {
     background: var(--card-bg);
     border-radius: 12px;
     padding: 1rem;
+}
+
+.hue-room-scenes-section {
+    padding: 0;
+}
+
+.hue-lights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
 }
 
 .hue-room-brightness-section label,
@@ -3953,9 +4000,16 @@ body.tasks-panel-open {
     flex: 1;
     height: 8px;
     border-radius: 4px;
-    background: var(--bg-secondary);
+    background: linear-gradient(to right, #0f3460, #ffa726);
     -webkit-appearance: none;
     appearance: none;
+    cursor: pointer;
+}
+
+.hue-brightness-control input[type="range"]::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #0f3460, #ffa726);
 }
 
 .hue-brightness-control input[type="range"]::-webkit-slider-thumb {
@@ -3963,7 +4017,25 @@ body.tasks-panel-open {
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: var(--primary-color);
+    background: white;
+    border: 3px solid #ffa726;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    margin-top: -8px;
+}
+
+.hue-brightness-control input[type="range"]::-moz-range-track {
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #0f3460, #ffa726);
+}
+
+.hue-brightness-control input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid #ffa726;
     cursor: pointer;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
@@ -3973,6 +4045,16 @@ body.tasks-panel-open {
     text-align: right;
     font-weight: 600;
     color: var(--text-primary);
+}
+
+/* Disabled brightness when syncing */
+.hue-room-brightness-section.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.hue-room-brightness-section.disabled input[type="range"] {
+    cursor: not-allowed;
 }
 
 .hue-scenes-list {
@@ -4039,15 +4121,15 @@ body.tasks-panel-open {
 }
 
 .hue-entertainment-area-btn .area-name {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #ffffff;
     text-align: center;
 }
 
 .hue-entertainment-area-btn .area-lights {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
+    font-size: 0.8rem;
+    color: #b0b0b0;
 }
 
 .hue-entertainment-selected {
@@ -4118,6 +4200,78 @@ body.tasks-panel-open {
     height: 24px;
 }
 
+.hue-entertainment-activate-btn.already-active {
+    background: linear-gradient(135deg, #27ae60, #229954);
+    cursor: default;
+}
+
+.hue-entertainment-activate-btn.already-active:hover {
+    background: linear-gradient(135deg, #27ae60, #229954);
+    transform: none;
+    box-shadow: none;
+}
+
+.hue-entertainment-activate-btn.streaming {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.hue-entertainment-activate-btn.streaming:hover {
+    background: linear-gradient(135deg, #c0392b, #a93226);
+}
+
+.hue-entertainment-buttons {
+    margin-bottom: 1rem;
+}
+
+/* Entertainment active banner */
+.hue-entertainment-active-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(39, 174, 96, 0.15);
+    border: 1px solid rgba(39, 174, 96, 0.4);
+    border-radius: 8px;
+    color: #2ecc71;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.hue-entertainment-active-banner .active-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2ecc71;
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(46, 204, 113, 0); }
+}
+
+/* Entertainment area active badge */
+.hue-entertainment-area-btn.activated {
+    border-color: #2ecc71;
+    background: rgba(39, 174, 96, 0.15);
+}
+
+.area-active-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    background: #2ecc71;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.hue-entertainment-area-btn {
+    position: relative;
+}
+
 .hue-entertainment-lights {
     background: var(--card-bg);
     border-radius: 12px;
@@ -4146,29 +4300,619 @@ body.tasks-panel-open {
     border-bottom: none;
 }
 
-/* Mobile adjustments for tabs */
-@media (max-width: 600px) {
-    .hue-tab {
-        min-width: 70px;
-        padding: 0.6rem 0.75rem;
-    }
-
-    .hue-tab-icon {
-        font-size: 1.3rem;
-    }
-
-    .hue-tab-name {
-        font-size: 0.7rem;
-        max-width: 60px;
-    }
-
-    .hue-room-power {
-        width: 70px;
-        height: 70px;
-    }
-
-    .hue-room-power svg {
-        width: 35px;
-        height: 35px;
-    }
+/* Sync Box Styles */
+.hue-syncbox-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
 }
+
+.hue-syncbox-tab {
+    padding: 0.5rem 1rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.hue-syncbox-tab:hover {
+    background: var(--bg-secondary);
+    color: var(--text-color);
+}
+
+.hue-syncbox-tab.active {
+    background: var(--orange-primary);
+    border-color: var(--orange-primary);
+    color: white;
+}
+
+.hue-syncbox-panel {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+
+.hue-syncbox-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    gap: 1rem;
+}
+
+.hue-syncbox-selector {
+    display: flex;
+    gap: 1rem;
+    flex: 1;
+}
+
+.hue-syncbox-radio {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem 2.5rem;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--bg-secondary);
+    border: 3px solid transparent;
+}
+
+.hue-syncbox-radio:hover {
+    background: var(--card-bg);
+}
+
+.hue-syncbox-radio.selected {
+    background: var(--card-bg);
+    border-color: var(--primary-color);
+}
+
+.hue-syncbox-radio.syncing {
+    border-color: #a855f7;
+}
+
+.hue-syncbox-radio input[type="radio"] {
+    width: 36px;
+    height: 36px;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+}
+
+.hue-syncbox-radio .radio-name {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.hue-syncbox-radio .radio-status {
+    font-size: 1rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 12px;
+    background: rgba(138, 43, 226, 0.2);
+    color: #a855f7;
+    margin-left: 0.5rem;
+}
+
+.hue-syncbox-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 3rem;
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 2rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    color: white;
+    border: none;
+    /* margin-right: 250px; */
+}
+
+.hue-syncbox-toggle-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 30px rgba(46, 204, 113, 0.4);
+}
+
+.hue-syncbox-toggle-btn.streaming {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.hue-syncbox-toggle-btn.streaming:hover {
+    box-shadow: 0 8px 30px rgba(231, 76, 60, 0.4);
+}
+
+.hue-syncbox-toggle-btn svg {
+    width: 48px;
+    height: 48px;
+}
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Legacy - keep for backwards compat */
+.hue-syncbox-toggle {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: center;
+}
+
+.hue-syncbox-toggle .hue-entertainment-activate-btn {
+    width: 50%;
+    min-width: 200px;
+}
+
+/* Syncbox Split Layout */
+.hue-syncbox-split-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.hue-syncbox-left-column {
+    flex: 1;
+}
+
+.hue-syncbox-right-column {
+    flex: 1;
+}
+
+/* Syncbox Grid Layout */
+.hue-syncbox-grid-section {
+    margin-bottom: 1.5rem;
+}
+
+.hue-syncbox-grid-section label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hue-syncbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+}
+
+.hue-syncbox-grid-4col {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+
+.hue-syncbox-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem 1rem;
+    min-height: 140px;
+    gap: 0.5rem;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(15, 52, 96, 0.3);
+    border: 1px solid transparent;
+}
+
+.hue-syncbox-tile:hover {
+    background: rgba(15, 52, 96, 0.6);
+}
+
+.hue-syncbox-tile.selected {
+    background: rgba(138, 43, 226, 0.2);
+    border-color: #a855f7;
+}
+
+.hue-syncbox-tile .tile-icon {
+    font-size: 2.5rem;
+}
+
+.hue-syncbox-tile .tile-name {
+    font-size: 1rem;
+    color: #fff;
+    font-weight: 500;
+}
+
+.hue-syncbox-tile .tile-info {
+    font-size: 0.85rem;
+    color: #888;
+}
+
+/* Legacy layout styles - keep for backwards compat */
+.hue-syncbox-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+    justify-content: center;
+    max-width: 650px;
+    margin: 0 auto;
+}
+
+.hue-syncbox-areas-column {
+    flex: 1;
+    min-width: 220px;
+    max-width: 300px;
+}
+
+.hue-syncbox-areas-column label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hue-syncbox-settings-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 220px;
+    max-width: 300px;
+}
+
+.hue-syncbox-setting-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1.25rem 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hue-syncbox-setting-btn:hover {
+    background: var(--card-bg);
+    border-color: #a0a0a0;
+}
+
+.hue-syncbox-setting-btn .setting-label {
+    font-size: 0.85rem;
+    color: #b0b0b0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.35rem;
+}
+
+.hue-syncbox-setting-btn .setting-value {
+    font-size: 1.3rem;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.hue-syncbox-areas {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.hue-syncbox-areas .hue-entertainment-area-btn {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+}
+
+.hue-syncbox-areas .hue-entertainment-area-btn .area-name {
+    font-size: 1rem;
+}
+
+.hue-entertainment-notice {
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    color: #c0c0c0;
+    font-size: 0.95rem;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+/* Syncbox Modals */
+.syncbox-modal {
+    z-index: 1100; /* Above the hue modal */
+}
+
+.syncbox-modal .modal-content {
+    max-width: 320px;
+}
+
+.syncbox-modal .modal-header {
+    justify-content: center;
+    position: relative;
+}
+
+.syncbox-modal .modal-header h2 {
+    text-align: center;
+}
+
+.syncbox-modal .modal-close {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.syncbox-modal-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+}
+
+.syncbox-modal-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.syncbox-modal-option:hover {
+    background: var(--card-bg);
+    border-color: var(--text-secondary);
+}
+
+.syncbox-modal-option.active {
+    background: rgba(138, 43, 226, 0.2);
+    border-color: #a855f7;
+}
+
+.syncbox-modal-option .option-icon {
+    font-size: 1.5rem;
+}
+
+.syncbox-modal-option .option-label {
+    font-size: 1.1rem;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* Sync Warning Banner */
+.hue-sync-warning-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(138, 43, 226, 0.15);
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+}
+
+.sync-warning-text {
+    flex: 1;
+}
+
+.sync-warning-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #d8b4fe;
+    margin-bottom: 0.15rem;
+}
+
+.sync-warning-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.sync-warning-stop-btn {
+    padding: 0.5rem 1rem;
+    background: #a855f7;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.sync-warning-stop-btn:hover {
+    background: #9333ea;
+}
+
+/* Light Brightness Popup */
+.light-brightness-modal {
+    z-index: 1100;
+}
+
+.modal-light-brightness {
+    max-width: 400px;
+    width: 90%;
+}
+
+.light-brightness-content {
+    padding: 1.5rem;
+}
+
+.light-brightness-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.light-brightness-toggle-row:hover {
+    background: rgba(15, 52, 96, 0.6);
+}
+
+.light-brightness-toggle-label {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.light-brightness-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.light-brightness-slider-container input[type="range"] {
+    flex: 1;
+    height: 40px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, #333, #ffa726);
+    border-radius: 20px;
+    cursor: pointer;
+}
+
+.light-brightness-slider-container input[type="range"]::-webkit-slider-runnable-track {
+    height: 40px;
+    border-radius: 20px;
+    background: linear-gradient(to right, #333, #ffa726);
+}
+
+.light-brightness-slider-container input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid #ffa726;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    margin-top: 5px;
+}
+
+.light-brightness-slider-container input[type="range"]::-moz-range-track {
+    height: 40px;
+    border-radius: 20px;
+    background: linear-gradient(to right, #333, #ffa726);
+}
+
+.light-brightness-slider-container input[type="range"]::-moz-range-thumb {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid #ffa726;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.light-brightness-percent {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #ffa726;
+    min-width: 60px;
+    text-align: right;
+}
+
+.light-brightness-actions {
+    display: flex;
+    justify-content: center;
+}
+
+/* Scene Open Button */
+.hue-scenes-open-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hue-scenes-open-btn:hover {
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    border-color: var(--primary-color);
+}
+
+.scenes-btn-icon {
+    font-size: 1.5rem;
+}
+
+.scenes-btn-text {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.scenes-btn-count {
+    background: var(--primary-color);
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+}
+
+/* Scene Modal */
+.scene-modal {
+    z-index: 1100;
+}
+
+.modal-scene {
+    max-width: 500px;
+    width: 90%;
+}
+
+.scene-modal-content {
+    padding: 1.5rem;
+}
+
+.scene-modal-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.scene-modal-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    min-height: 60px;
+}
+
+.scene-modal-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
