@@ -66,6 +66,7 @@ func NewClient(clientID, clientSecret, redirectURL, tokenFile string, calendarID
 		Scopes: []string{
 			gcal.CalendarScope,
 			"https://www.googleapis.com/auth/tasks",
+			"https://www.googleapis.com/auth/drive.readonly",
 		},
 		Endpoint: google.Endpoint,
 	}
@@ -134,6 +135,15 @@ func (c *Client) initService(ctx context.Context, token *oauth2.Token) error {
 	}
 	c.service = service
 	return nil
+}
+
+// GetHTTPClient returns an OAuth2 HTTP client for use with other Google APIs
+func (c *Client) GetHTTPClient(ctx context.Context) (*http.Client, error) {
+	token, err := c.loadToken()
+	if err != nil {
+		return nil, fmt.Errorf("no stored token: %w", err)
+	}
+	return c.config.Client(ctx, token), nil
 }
 
 // GetUpcomingEvents fetches events from configured calendars (or all if none specified)

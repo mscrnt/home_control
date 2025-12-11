@@ -30,7 +30,9 @@ body {
 }
 
 .page-nav-btn {
-    background: #16213e;
+    background: rgba(22, 33, 62, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: #e94560;
     text-decoration: none;
     padding: 0 1.25rem;
@@ -45,7 +47,7 @@ body {
 }
 
 .page-nav-btn:hover {
-    background: #0f3460;
+    background: rgba(15, 52, 96, 0.9);
     color: #fff;
 }
 
@@ -125,7 +127,9 @@ body {
 }
 
 .event {
-    background: #16213e;
+    background: rgba(22, 33, 62, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 10px;
     padding: 1rem 1.25rem;
     display: flex;
@@ -431,7 +435,9 @@ body {
 .view-toggle {
     display: flex;
     gap: 0.5rem;
-    background: #16213e;
+    background: rgba(22, 33, 62, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 0.35rem;
     border-radius: 10px;
     width: fit-content;
@@ -449,7 +455,7 @@ body {
 
 .view-btn:hover {
     color: #eee;
-    background: #0f3460;
+    background: rgba(15, 52, 96, 0.9);
 }
 
 .view-btn.active {
@@ -466,7 +472,9 @@ body {
 }
 
 .week-day {
-    background: #16213e;
+    background: rgba(22, 33, 62, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 10px;
     overflow: hidden;
 }
@@ -538,14 +546,16 @@ body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 3px;
-    background: #0f3460;
+    background: rgba(15, 52, 96, 0.6);
     border-radius: 12px 12px 0 0;
     overflow: hidden;
     flex-shrink: 0;
 }
 
 .weekday-header {
-    background: #16213e;
+    background: rgba(22, 33, 62, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 4px 0;
     text-align: center;
     font-weight: 600;
@@ -560,14 +570,16 @@ body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 3px;
-    background: #0f3460;
+    background: rgba(15, 52, 96, 0.6);
     border-radius: 0 0 12px 12px;
     overflow: hidden;
     flex: 1;
 }
 
 .month-day {
-    background: #1a1a2e;
+    background: rgba(26, 26, 46, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 0.5rem;
     display: flex;
     flex-direction: column;
@@ -576,12 +588,12 @@ body {
 }
 
 .month-day.other-month {
-    background: #151525;
+    background: rgba(21, 21, 37, 0.5);
     opacity: 0.5;
 }
 
 .month-day.today {
-    background: #1e2a4a;
+    background: rgba(30, 42, 74, 0.8);
 }
 
 .month-day.today .day-number {
@@ -1446,7 +1458,9 @@ body.numpad-open .modal-content {
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    background: #16213e;
+    background: rgba(22, 33, 62, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 20px;
     cursor: pointer;
     transition: background 0.15s;
@@ -1454,7 +1468,7 @@ body.numpad-open .modal-content {
 }
 
 .calendar-chip:hover {
-    background: #1e3a5f;
+    background: rgba(30, 58, 95, 0.9);
 }
 
 .calendar-chip input[type="checkbox"] {
@@ -4914,5 +4928,120 @@ body.tasks-panel-open {
     background: var(--hover-bg);
     border-color: var(--primary-color);
     color: var(--primary-color);
+}
+
+/* ============================================
+   Page Background Image
+   ============================================ */
+.page-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 1s ease;
+}
+
+.page-background.active {
+    opacity: 0.25;
+}
+
+/* ============================================
+   Screensaver
+   ============================================ */
+.screensaver {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    background: #000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+    cursor: pointer;
+}
+
+.screensaver.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.screensaver-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+}
+
+.screensaver-bg.active {
+    opacity: 1;
+}
+
+.screensaver-clock {
+    position: absolute;
+    bottom: 3rem;
+    right: 3rem;
+    text-align: right;
+    z-index: 10;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.screensaver-time {
+    font-size: 6rem;
+    font-weight: 300;
+    color: #fff;
+    line-height: 1;
+    letter-spacing: -2px;
+}
+
+.screensaver-date {
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 0.5rem;
+}
+
+/* Responsive screensaver for tablets/kiosks */
+@media (max-width: 1200px) {
+    .screensaver-time {
+        font-size: 5rem;
+    }
+
+    .screensaver-date {
+        font-size: 1.25rem;
+    }
+
+    .screensaver-clock {
+        bottom: 2rem;
+        right: 2rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .screensaver-time {
+        font-size: 4rem;
+    }
+
+    .screensaver-date {
+        font-size: 1rem;
+    }
+
+    .screensaver-clock {
+        bottom: 1.5rem;
+        right: 1.5rem;
+    }
 }
 

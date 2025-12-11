@@ -1956,6 +1956,11 @@ function connectWebSocket() {
 }
 
 function showCameraModal(cameraName) {
+    // Dismiss screensaver if active (doorbell takes priority)
+    if (window.dismissScreensaver) {
+        window.dismissScreensaver();
+    }
+
     const modal = document.getElementById('cameraModal');
     const title = document.getElementById('cameraModalTitle');
     const stream = document.getElementById('cameraStream');
@@ -2014,12 +2019,6 @@ function initAudioContext() {
     }
 
     audioEnabled = true;
-
-    // Hide the audio prompt banner
-    const banner = document.getElementById('audioEnableBanner');
-    if (banner) {
-        banner.style.display = 'none';
-    }
 }
 
 // Warm up audio on any user interaction
@@ -2080,12 +2079,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<!-- Audio Enable Banner -->
-<div id="audioEnableBanner" style="position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: white; padding: 12px 20px; text-align: center; z-index: 9999; display: flex; align-items: center; justify-content: center; gap: 10px;">
-    <span>🔔</span>
-    <span>Tap anywhere to enable doorbell sounds</span>
-</div>
-
 <!-- Camera Modal -->
 <div id="cameraModal" class="modal camera-modal">
     <div class="modal-content modal-camera">
@@ -2105,4 +2098,224 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
     </div>
 </div>
+
+<!-- Screensaver Overlay -->
+<div id="screensaver" class="screensaver">
+    <div class="screensaver-bg"></div>
+    <div class="screensaver-bg screensaver-bg-next"></div>
+    <div class="screensaver-clock">
+        <div class="screensaver-time" id="screensaverTime">12:00</div>
+        <div class="screensaver-date" id="screensaverDate">Monday, January 1</div>
+    </div>
+</div>
+
+<!-- Background Image Container -->
+<div id="pageBackground" class="page-background"></div>
+
+<script>
+// Screensaver and Background Image System
+(function() {
+    let screensaverConfig = { timeout: 300, hasScreensaverFolder: false, hasBackgroundFolder: false };
+    let inactivityTimer = null;
+    let screensaverPhotoTimer = null;
+    let screensaverActive = false;
+    let screensaverPhotos = [];
+    let currentPhotoIndex = 0;
+    let currentBgElement = 0;
+
+    // Check if any modal is currently open
+    function isModalOpen() {
+        const modals = document.querySelectorAll('.modal.active');
+        return modals.length > 0;
+    }
+
+    // Load screensaver config
+    async function loadScreensaverConfig() {
+        try {
+            const resp = await fetch('/api/screensaver/config');
+            if (resp.ok) {
+                screensaverConfig = await resp.json();
+                console.log('Screensaver config loaded:', screensaverConfig);
+
+                if (screensaverConfig.hasScreensaverFolder) {
+                    loadScreensaverPhotos();
+                }
+                if (screensaverConfig.hasBackgroundFolder) {
+                    loadBackgroundPhoto();
+                }
+
+                // Start inactivity tracking if timeout is configured (photos are optional)
+                if (screensaverConfig.timeout > 0) {
+                    startInactivityTracking();
+                    console.log(`Screensaver will activate after ${screensaverConfig.timeout} seconds of inactivity`);
+                }
+            }
+        } catch (err) {
+            console.log('Screensaver not configured:', err);
+        }
+    }
+
+    // Load all screensaver photos
+    async function loadScreensaverPhotos() {
+        try {
+            const resp = await fetch('/api/drive/screensaver/photos');
+            if (resp.ok) {
+                screensaverPhotos = await resp.json();
+                console.log(`Loaded ${screensaverPhotos.length} screensaver photos`);
+                // Shuffle the photos
+                screensaverPhotos.sort(() => Math.random() - 0.5);
+            }
+        } catch (err) {
+            console.error('Failed to load screensaver photos:', err);
+        }
+    }
+
+    // Load a random background photo
+    async function loadBackgroundPhoto() {
+        try {
+            const resp = await fetch('/api/drive/background/random');
+            if (resp.ok) {
+                const photo = await resp.json();
+                const bg = document.getElementById('pageBackground');
+                if (bg && photo.id) {
+                    // Use our proxy endpoint for authentication
+                    const photoUrl = `/api/drive/photo/${photo.id}`;
+                    bg.style.backgroundImage = `url(${photoUrl})`;
+                    bg.classList.add('active');
+                    console.log(`Background photo loaded: ${photo.name}`);
+                }
+            }
+        } catch (err) {
+            console.log('No background photo available');
+        }
+    }
+
+    // Inactivity tracking
+    function startInactivityTracking() {
+        const events = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll', 'click'];
+
+        function resetTimer() {
+            if (screensaverActive) {
+                hideScreensaver();
+            }
+
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(() => {
+                showScreensaver();
+            }, screensaverConfig.timeout * 1000);
+        }
+
+        events.forEach(event => {
+            document.addEventListener(event, resetTimer, { passive: true });
+        });
+
+        // Start the initial timer
+        resetTimer();
+    }
+
+    // Show screensaver
+    function showScreensaver() {
+        if (screensaverActive) return;
+
+        // Don't activate screensaver if a modal is open (e.g., camera/doorbell)
+        if (isModalOpen()) {
+            console.log('Screensaver skipped: modal is open');
+            return;
+        }
+
+        screensaverActive = true;
+
+        const screensaver = document.getElementById('screensaver');
+        screensaver.classList.add('active');
+
+        // Update clock immediately
+        updateScreensaverClock();
+
+        // Start clock updates
+        setInterval(updateScreensaverClock, 1000);
+
+        // Show first photo
+        if (screensaverPhotos.length > 0) {
+            showNextPhoto();
+            // Cycle photos every 10 seconds
+            screensaverPhotoTimer = setInterval(showNextPhoto, 10000);
+        }
+    }
+
+    // Hide screensaver
+    function hideScreensaver() {
+        if (!screensaverActive) return;
+        screensaverActive = false;
+
+        const screensaver = document.getElementById('screensaver');
+        screensaver.classList.remove('active');
+
+        // Stop photo cycling
+        if (screensaverPhotoTimer) {
+            clearInterval(screensaverPhotoTimer);
+            screensaverPhotoTimer = null;
+        }
+    }
+
+    // Update screensaver clock
+    function updateScreensaverClock() {
+        const now = new Date();
+        const timeEl = document.getElementById('screensaverTime');
+        const dateEl = document.getElementById('screensaverDate');
+
+        if (timeEl) {
+            timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        if (dateEl) {
+            dateEl.textContent = now.toLocaleDateString([], {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric'
+            });
+        }
+    }
+
+    // Show next photo with crossfade
+    function showNextPhoto() {
+        if (screensaverPhotos.length === 0) return;
+
+        const photo = screensaverPhotos[currentPhotoIndex];
+        // Use our proxy endpoint which handles OAuth authentication
+        const photoUrl = `/api/drive/photo/${photo.id}`;
+
+        console.log(`Loading screensaver photo: ${photo.name} (${photo.id})`);
+
+        const bgs = document.querySelectorAll('.screensaver-bg');
+        const currentBg = bgs[currentBgElement];
+        const nextBg = bgs[1 - currentBgElement];
+
+        // Preload the image before showing
+        const img = new Image();
+        img.onload = () => {
+            nextBg.style.backgroundImage = `url(${photoUrl})`;
+            nextBg.classList.add('active');
+            setTimeout(() => {
+                currentBg.classList.remove('active');
+            }, 1500);
+            currentBgElement = 1 - currentBgElement;
+        };
+        img.onerror = () => {
+            console.error(`Failed to load photo: ${photo.name}`);
+        };
+        img.src = photoUrl;
+
+        currentPhotoIndex = (currentPhotoIndex + 1) % screensaverPhotos.length;
+    }
+
+    // Click/touch to dismiss screensaver
+    document.getElementById('screensaver').addEventListener('click', hideScreensaver);
+    document.getElementById('screensaver').addEventListener('touchstart', hideScreensaver);
+
+    // Expose hideScreensaver globally for doorbell events
+    window.dismissScreensaver = hideScreensaver;
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', loadScreensaverConfig);
+})();
+</script>
 {{end}}
