@@ -1011,77 +1011,6 @@ function updateNotificationBadge(count) {
     }
 }
 
-// Settings Functions
-function openSettings() {
-    const modal = document.getElementById('settingsModal');
-    modal.classList.add('active');
-    loadThemeSetting();
-    loadTimeFormatSetting();
-}
-
-function closeSettings() {
-    document.getElementById('settingsModal').classList.remove('active');
-}
-
-// Time Format Functions
-function getTimeFormat() {
-    return localStorage.getItem('timeFormat') || '12';
-}
-
-function setTimeFormat(format) {
-    localStorage.setItem('timeFormat', format);
-    document.querySelectorAll('.format-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.format === format);
-    });
-}
-
-function loadTimeFormatSetting() {
-    const format = getTimeFormat();
-    document.querySelectorAll('.format-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.format === format);
-    });
-}
-
-function setTheme(theme) {
-    localStorage.setItem('theme', theme);
-    applyTheme(theme);
-
-    // Update button states
-    document.querySelectorAll('.theme-option').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.theme === theme);
-    });
-}
-
-function loadThemeSetting() {
-    const theme = localStorage.getItem('theme') || 'dark';
-    document.querySelectorAll('.theme-option').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.theme === theme);
-    });
-}
-
-function applyTheme(theme) {
-    if (theme === 'auto') {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-    } else {
-        document.documentElement.setAttribute('data-theme', theme);
-    }
-}
-
-// Apply theme on load
-(function() {
-    const theme = localStorage.getItem('theme') || 'dark';
-    applyTheme(theme);
-})();
-
-// Listen for system theme changes when in auto mode
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    const theme = localStorage.getItem('theme');
-    if (theme === 'auto') {
-        applyTheme('auto');
-    }
-});
-
 // Refresh entity states every 30 seconds via AJAX (no page reload)
 async function refreshEntityStates() {
     try {
@@ -4557,6 +4486,8 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- Background Image Container -->
 <div id="pageBackground" class="page-background"></div>
 
+<!-- Settings Module -->
+<script src="/static/js/settings.js"></script>
 <!-- Screensaver Module -->
 <script src="/static/js/screensaver.js"></script>
 {{end}}
