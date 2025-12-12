@@ -526,6 +526,23 @@ func main() {
 	r.Get("/api/spotify/playlists", handleSpotifyPlaylists)
 	r.Get("/api/spotify/playlist/{id}/tracks", handleSpotifyPlaylistTracks)
 	r.Get("/api/spotify/search", handleSpotifySearch)
+	r.Get("/api/spotify/recent", handleSpotifyRecentlyPlayed)
+	r.Get("/api/spotify/top/artists", handleSpotifyTopArtists)
+	r.Get("/api/spotify/top/tracks", handleSpotifyTopTracks)
+	r.Get("/api/spotify/album/{id}", handleSpotifyAlbum)
+	r.Get("/api/spotify/album/{id}/saved", handleSpotifyAlbumSaved)
+	r.Put("/api/spotify/album/{id}/save", handleSpotifyAlbumSave)
+	r.Delete("/api/spotify/album/{id}/save", handleSpotifyAlbumRemove)
+	r.Get("/api/spotify/artist/{id}", handleSpotifyArtist)
+	r.Get("/api/spotify/artist/{id}/albums", handleSpotifyArtistAlbums)
+	r.Get("/api/spotify/artist/{id}/top-tracks", handleSpotifyArtistTopTracks)
+	r.Get("/api/spotify/artist/{id}/following", handleSpotifyArtistFollowing)
+	r.Put("/api/spotify/artist/{id}/follow", handleSpotifyArtistFollow)
+	r.Delete("/api/spotify/artist/{id}/follow", handleSpotifyArtistUnfollow)
+	r.Get("/api/spotify/library/albums", handleSpotifyLibraryAlbums)
+	r.Get("/api/spotify/library/artists", handleSpotifyLibraryArtists)
+	r.Get("/api/spotify/library/tracks", handleSpotifyLibraryTracks)
+	r.Get("/api/spotify/library/shows", handleSpotifyLibraryShows)
 
 	// Icon serving
 	r.Get("/icon/{name}", icons.Handler())
@@ -2901,4 +2918,463 @@ func handleSpotifySearch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
+}
+
+func handleSpotifyRecentlyPlayed(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	items, err := spotifyClient.GetRecentlyPlayed(r.Context(), limit)
+	if err != nil {
+		log.Printf("Error getting recently played: %v", err)
+		http.Error(w, "Failed to get recently played: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": items,
+	})
+}
+
+func handleSpotifyTopArtists(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	timeRange := r.URL.Query().Get("time_range")
+	if timeRange == "" {
+		timeRange = "medium_term"
+	}
+
+	artists, err := spotifyClient.GetTopArtists(r.Context(), limit, timeRange)
+	if err != nil {
+		log.Printf("Error getting top artists: %v", err)
+		http.Error(w, "Failed to get top artists: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": artists,
+	})
+}
+
+func handleSpotifyTopTracks(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	timeRange := r.URL.Query().Get("time_range")
+	if timeRange == "" {
+		timeRange = "medium_term"
+	}
+
+	tracks, err := spotifyClient.GetTopTracks(r.Context(), limit, timeRange)
+	if err != nil {
+		log.Printf("Error getting top tracks: %v", err)
+		http.Error(w, "Failed to get top tracks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": tracks,
+	})
+}
+
+func handleSpotifyAlbum(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	albumID := chi.URLParam(r, "id")
+	if albumID == "" {
+		http.Error(w, "Album ID required", http.StatusBadRequest)
+		return
+	}
+
+	album, err := spotifyClient.GetAlbum(r.Context(), albumID)
+	if err != nil {
+		log.Printf("Error getting album: %v", err)
+		http.Error(w, "Failed to get album: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(album)
+}
+
+func handleSpotifyArtist(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	artistID := chi.URLParam(r, "id")
+	if artistID == "" {
+		http.Error(w, "Artist ID required", http.StatusBadRequest)
+		return
+	}
+
+	artist, err := spotifyClient.GetArtist(r.Context(), artistID)
+	if err != nil {
+		log.Printf("Error getting artist: %v", err)
+		http.Error(w, "Failed to get artist: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(artist)
+}
+
+func handleSpotifyArtistAlbums(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	artistID := chi.URLParam(r, "id")
+	if artistID == "" {
+		http.Error(w, "Artist ID required", http.StatusBadRequest)
+		return
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	albums, err := spotifyClient.GetArtistAlbums(r.Context(), artistID, limit)
+	if err != nil {
+		log.Printf("Error getting artist albums: %v", err)
+		http.Error(w, "Failed to get artist albums: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": albums,
+	})
+}
+
+func handleSpotifyArtistTopTracks(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	artistID := chi.URLParam(r, "id")
+	if artistID == "" {
+		http.Error(w, "Artist ID required", http.StatusBadRequest)
+		return
+	}
+
+	market := r.URL.Query().Get("market")
+	if market == "" {
+		market = "US"
+	}
+
+	tracks, err := spotifyClient.GetArtistTopTracks(r.Context(), artistID, market)
+	if err != nil {
+		log.Printf("Error getting artist top tracks: %v", err)
+		http.Error(w, "Failed to get artist top tracks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tracks": tracks,
+	})
+}
+
+func handleSpotifyAlbumSaved(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	albumID := chi.URLParam(r, "id")
+	if albumID == "" {
+		http.Error(w, "Album ID required", http.StatusBadRequest)
+		return
+	}
+
+	saved, err := spotifyClient.CheckAlbumSaved(r.Context(), albumID)
+	if err != nil {
+		log.Printf("Error checking album saved: %v", err)
+		http.Error(w, "Failed to check album saved: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"saved": saved})
+}
+
+func handleSpotifyAlbumSave(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	albumID := chi.URLParam(r, "id")
+	if albumID == "" {
+		http.Error(w, "Album ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.SaveAlbum(r.Context(), albumID); err != nil {
+		log.Printf("Error saving album: %v", err)
+		http.Error(w, "Failed to save album: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyAlbumRemove(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	albumID := chi.URLParam(r, "id")
+	if albumID == "" {
+		http.Error(w, "Album ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.RemoveAlbum(r.Context(), albumID); err != nil {
+		log.Printf("Error removing album: %v", err)
+		http.Error(w, "Failed to remove album: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyArtistFollowing(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	artistID := chi.URLParam(r, "id")
+	if artistID == "" {
+		http.Error(w, "Artist ID required", http.StatusBadRequest)
+		return
+	}
+
+	following, err := spotifyClient.CheckFollowingArtist(r.Context(), artistID)
+	if err != nil {
+		log.Printf("Error checking artist following: %v", err)
+		http.Error(w, "Failed to check artist following: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"following": following})
+}
+
+func handleSpotifyArtistFollow(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	artistID := chi.URLParam(r, "id")
+	if artistID == "" {
+		http.Error(w, "Artist ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.FollowArtist(r.Context(), artistID); err != nil {
+		log.Printf("Error following artist: %v", err)
+		http.Error(w, "Failed to follow artist: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyArtistUnfollow(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	artistID := chi.URLParam(r, "id")
+	if artistID == "" {
+		http.Error(w, "Artist ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.UnfollowArtist(r.Context(), artistID); err != nil {
+		log.Printf("Error unfollowing artist: %v", err)
+		http.Error(w, "Failed to unfollow artist: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyLibraryAlbums(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	albums, total, err := spotifyClient.GetSavedAlbums(r.Context(), limit, offset)
+	if err != nil {
+		log.Printf("Error getting saved albums: %v", err)
+		http.Error(w, "Failed to get saved albums: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":  albums,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+func handleSpotifyLibraryArtists(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	after := r.URL.Query().Get("after")
+
+	artists, nextAfter, err := spotifyClient.GetFollowedArtists(r.Context(), limit, after)
+	if err != nil {
+		log.Printf("Error getting followed artists: %v", err)
+		http.Error(w, "Failed to get followed artists: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": artists,
+		"after": nextAfter,
+	})
+}
+
+func handleSpotifyLibraryTracks(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	tracks, total, err := spotifyClient.GetLikedSongs(r.Context(), limit, offset)
+	if err != nil {
+		log.Printf("Error getting liked songs: %v", err)
+		http.Error(w, "Failed to get liked songs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":  tracks,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+func handleSpotifyLibraryShows(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	shows, total, err := spotifyClient.GetSavedShows(r.Context(), limit, offset)
+	if err != nil {
+		log.Printf("Error getting saved shows: %v", err)
+		http.Error(w, "Failed to get saved shows: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":  shows,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }

@@ -27,6 +27,11 @@ var Scopes = []string{
 	"playlist-read-private",
 	"playlist-read-collaborative",
 	"user-library-read",
+	"user-library-modify",
+	"user-read-recently-played",
+	"user-top-read",
+	"user-follow-read",
+	"user-follow-modify",
 }
 
 // Token represents OAuth tokens
@@ -273,17 +278,19 @@ type Image struct {
 
 // Artist represents an artist
 type Artist struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	URI  string `json:"uri"`
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	URI    string  `json:"uri"`
+	Images []Image `json:"images,omitempty"`
 }
 
 // Album represents an album
 type Album struct {
-	ID     string   `json:"id"`
-	Name   string   `json:"name"`
-	URI    string   `json:"uri"`
-	Images []Image  `json:"images"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	URI     string   `json:"uri"`
+	Images  []Image  `json:"images"`
+	Artists []Artist `json:"artists,omitempty"`
 }
 
 // Track represents a track
@@ -327,6 +334,12 @@ type Playlist struct {
 type PlaylistTrack struct {
 	AddedAt string `json:"added_at"`
 	Track   Track  `json:"track"`
+}
+
+// RecentlyPlayedItem represents a recently played track
+type RecentlyPlayedItem struct {
+	PlayedAt string `json:"played_at"`
+	Track    Track  `json:"track"`
 }
 
 // SearchResults represents search results
@@ -670,6 +683,87 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string, limit
 	return result.Items, result.Total, nil
 }
 
+// GetRecentlyPlayed returns recently played tracks
+func (c *Client) GetRecentlyPlayed(ctx context.Context, limit int) ([]RecentlyPlayedItem, error) {
+	endpoint := fmt.Sprintf("/me/player/recently-played?limit=%d", limit)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get recently played failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []RecentlyPlayedItem `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Items, nil
+}
+
+// GetTopArtists returns user's top artists
+func (c *Client) GetTopArtists(ctx context.Context, limit int, timeRange string) ([]Artist, error) {
+	if timeRange == "" {
+		timeRange = "medium_term"
+	}
+	endpoint := fmt.Sprintf("/me/top/artists?limit=%d&time_range=%s", limit, timeRange)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get top artists failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []Artist `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Items, nil
+}
+
+// GetTopTracks returns user's top tracks
+func (c *Client) GetTopTracks(ctx context.Context, limit int, timeRange string) ([]Track, error) {
+	if timeRange == "" {
+		timeRange = "medium_term"
+	}
+	endpoint := fmt.Sprintf("/me/top/tracks?limit=%d&time_range=%s", limit, timeRange)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get top tracks failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []Track `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Items, nil
+}
+
 // Search searches for tracks, albums, artists, or playlists
 func (c *Client) Search(ctx context.Context, query string, types []string, limit int) (*SearchResults, error) {
 	params := url.Values{
@@ -695,4 +789,393 @@ func (c *Client) Search(ctx context.Context, query string, types []string, limit
 	}
 
 	return &results, nil
+}
+
+// AlbumFull represents a full album with tracks
+type AlbumFull struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	URI        string   `json:"uri"`
+	Images     []Image  `json:"images"`
+	Artists    []Artist `json:"artists"`
+	TotalTracks int     `json:"total_tracks"`
+	ReleaseDate string  `json:"release_date"`
+	Tracks     struct {
+		Items []Track `json:"items"`
+		Total int     `json:"total"`
+	} `json:"tracks"`
+}
+
+// ArtistFull represents a full artist with details
+type ArtistFull struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	URI        string   `json:"uri"`
+	Images     []Image  `json:"images"`
+	Genres     []string `json:"genres"`
+	Followers  struct {
+		Total int `json:"total"`
+	} `json:"followers"`
+}
+
+// GetAlbum returns album details with tracks
+func (c *Client) GetAlbum(ctx context.Context, albumID string) (*AlbumFull, error) {
+	endpoint := fmt.Sprintf("/albums/%s", albumID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get album failed: %s - %s", resp.Status, string(body))
+	}
+
+	var album AlbumFull
+	if err := json.NewDecoder(resp.Body).Decode(&album); err != nil {
+		return nil, err
+	}
+
+	return &album, nil
+}
+
+// GetArtist returns artist details
+func (c *Client) GetArtist(ctx context.Context, artistID string) (*ArtistFull, error) {
+	endpoint := fmt.Sprintf("/artists/%s", artistID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get artist failed: %s - %s", resp.Status, string(body))
+	}
+
+	var artist ArtistFull
+	if err := json.NewDecoder(resp.Body).Decode(&artist); err != nil {
+		return nil, err
+	}
+
+	return &artist, nil
+}
+
+// GetArtistAlbums returns an artist's albums
+func (c *Client) GetArtistAlbums(ctx context.Context, artistID string, limit int) ([]Album, error) {
+	endpoint := fmt.Sprintf("/artists/%s/albums?include_groups=album,single&limit=%d", artistID, limit)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get artist albums failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []Album `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Items, nil
+}
+
+// GetArtistTopTracks returns an artist's top tracks
+func (c *Client) GetArtistTopTracks(ctx context.Context, artistID string, market string) ([]Track, error) {
+	if market == "" {
+		market = "US"
+	}
+	endpoint := fmt.Sprintf("/artists/%s/top-tracks?market=%s", artistID, market)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get artist top tracks failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Tracks []Track `json:"tracks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Tracks, nil
+}
+
+// SaveAlbum saves an album to the user's library
+func (c *Client) SaveAlbum(ctx context.Context, albumID string) error {
+	endpoint := fmt.Sprintf("/me/albums?ids=%s", albumID)
+
+	resp, err := c.doRequest(ctx, "PUT", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("save album failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// RemoveAlbum removes an album from the user's library
+func (c *Client) RemoveAlbum(ctx context.Context, albumID string) error {
+	endpoint := fmt.Sprintf("/me/albums?ids=%s", albumID)
+
+	resp, err := c.doRequest(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("remove album failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// CheckAlbumSaved checks if an album is saved in the user's library
+func (c *Client) CheckAlbumSaved(ctx context.Context, albumID string) (bool, error) {
+	endpoint := fmt.Sprintf("/me/albums/contains?ids=%s", albumID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("check album saved failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result []bool
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, err
+	}
+
+	if len(result) > 0 {
+		return result[0], nil
+	}
+	return false, nil
+}
+
+// FollowArtist follows an artist
+func (c *Client) FollowArtist(ctx context.Context, artistID string) error {
+	endpoint := fmt.Sprintf("/me/following?type=artist&ids=%s", artistID)
+
+	resp, err := c.doRequest(ctx, "PUT", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("follow artist failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// UnfollowArtist unfollows an artist
+func (c *Client) UnfollowArtist(ctx context.Context, artistID string) error {
+	endpoint := fmt.Sprintf("/me/following?type=artist&ids=%s", artistID)
+
+	resp, err := c.doRequest(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unfollow artist failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// CheckFollowingArtist checks if the user is following an artist
+func (c *Client) CheckFollowingArtist(ctx context.Context, artistID string) (bool, error) {
+	endpoint := fmt.Sprintf("/me/following/contains?type=artist&ids=%s", artistID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("check following artist failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result []bool
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, err
+	}
+
+	if len(result) > 0 {
+		return result[0], nil
+	}
+	return false, nil
+}
+
+// SavedAlbum represents an album saved to the user's library
+type SavedAlbum struct {
+	AddedAt string    `json:"added_at"`
+	Album   AlbumFull `json:"album"`
+}
+
+// SavedTrack represents a track saved to the user's library
+type SavedTrack struct {
+	AddedAt string `json:"added_at"`
+	Track   Track  `json:"track"`
+}
+
+// Show represents a podcast show
+type Show struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Publisher   string  `json:"publisher"`
+	Description string  `json:"description"`
+	URI         string  `json:"uri"`
+	Images      []Image `json:"images"`
+}
+
+// SavedShow represents a show saved to the user's library
+type SavedShow struct {
+	AddedAt string `json:"added_at"`
+	Show    Show   `json:"show"`
+}
+
+// GetSavedAlbums returns albums saved to the user's library
+func (c *Client) GetSavedAlbums(ctx context.Context, limit, offset int) ([]SavedAlbum, int, error) {
+	endpoint := fmt.Sprintf("/me/albums?limit=%d&offset=%d", limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("get saved albums failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []SavedAlbum `json:"items"`
+		Total int          `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, err
+	}
+
+	return result.Items, result.Total, nil
+}
+
+// GetFollowedArtists returns artists the user follows
+func (c *Client) GetFollowedArtists(ctx context.Context, limit int, after string) ([]Artist, string, error) {
+	endpoint := fmt.Sprintf("/me/following?type=artist&limit=%d", limit)
+	if after != "" {
+		endpoint += "&after=" + after
+	}
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, "", fmt.Errorf("get followed artists failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Artists struct {
+			Items   []Artist `json:"items"`
+			Cursors struct {
+				After string `json:"after"`
+			} `json:"cursors"`
+		} `json:"artists"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, "", err
+	}
+
+	return result.Artists.Items, result.Artists.Cursors.After, nil
+}
+
+// GetLikedSongs returns the user's liked songs
+func (c *Client) GetLikedSongs(ctx context.Context, limit, offset int) ([]SavedTrack, int, error) {
+	endpoint := fmt.Sprintf("/me/tracks?limit=%d&offset=%d", limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("get liked songs failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []SavedTrack `json:"items"`
+		Total int          `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, err
+	}
+
+	return result.Items, result.Total, nil
+}
+
+// GetSavedShows returns shows saved to the user's library
+func (c *Client) GetSavedShows(ctx context.Context, limit, offset int) ([]SavedShow, int, error) {
+	endpoint := fmt.Sprintf("/me/shows?limit=%d&offset=%d", limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("get saved shows failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Items []SavedShow `json:"items"`
+		Total int         `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, err
+	}
+
+	return result.Items, result.Total, nil
 }
