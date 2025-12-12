@@ -2144,7 +2144,9 @@ function updateMiniPlayer() {
     // Show mini player only when there's active playback
     if (!spotifyPlayback || !spotifyPlayback.item) {
         miniPlayer.style.display = 'none';
-        updateScreensaverSpotify();
+        if (typeof Screensaver !== 'undefined') {
+            Screensaver.updateSpotify(spotifyPlayback);
+        }
         return;
     }
 
