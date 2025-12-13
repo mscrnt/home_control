@@ -398,12 +398,6 @@ const Entities = (function() {
         `;
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
     async function toggleEntity(entityID) {
         const entityRow = document.querySelector(`.entity-row[data-entity="${entityID}"]`);
 
