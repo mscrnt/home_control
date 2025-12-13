@@ -1,0 +1,227 @@
+/* ===== Camera Modal Styles ===== */
+.camera-modal.active {
+    z-index: 1100; /* Higher than other modals */
+}
+
+.modal-camera {
+    max-width: 90vw;
+    max-height: 90vh;
+    width: auto;
+    padding: 0;
+    overflow: hidden;
+}
+
+.camera-modal-icon {
+    font-size: 1.5rem;
+    margin-right: 0.5rem;
+    animation: ring 0.5s ease-in-out infinite;
+}
+
+@keyframes ring {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(15deg); }
+    75% { transform: rotate(-15deg); }
+}
+
+.camera-stream-container {
+    position: relative;
+    background: #000;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-stream {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+}
+
+.camera-stream[src=""] {
+    display: none;
+}
+
+.camera-stream[src=""] + .camera-loading {
+    display: block;
+}
+
+.camera-loading {
+    display: none;
+    color: #888;
+    font-size: 1rem;
+    position: absolute;
+    text-align: center;
+}
+
+.camera-modal-actions {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    background: var(--bg-secondary);
+}
+
+/* Camera modal header styling */
+.modal-camera .modal-header-row {
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.modal-camera .modal-header-title h3 {
+    color: #fff;
+}
+
+.modal-camera .modal-close-btn {
+    color: #fff;
+    background: rgba(255,255,255,0.2);
+}
+
+.modal-camera .modal-close-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+/* ===== Cameras Modal Styles ===== */
+.modal-cameras {
+    width: 95vw;
+    max-width: 95vw;
+    height: 95vh;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.cameras-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.camera-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.camera-row:hover {
+    background: var(--bg-hover);
+    transform: translateX(4px);
+}
+
+.camera-row:active {
+    transform: translateX(2px);
+}
+
+.camera-icon {
+    font-size: 2rem;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(66, 133, 244, 0.15);
+    border-radius: 12px;
+}
+
+.camera-icon-img {
+    width: 1.5rem;
+    height: 1.5rem;
+    filter: invert(70%) sepia(10%) saturate(200%) hue-rotate(180deg) brightness(95%);
+}
+
+.security-icon-img {
+    width: 2rem;
+    height: 2rem;
+    filter: invert(70%) sepia(10%) saturate(200%) hue-rotate(180deg) brightness(95%);
+}
+
+.camera-info {
+    flex: 1;
+}
+
+.camera-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.camera-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.camera-arrow {
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+}
+
+.camera-arrow svg {
+    width: 100%;
+    height: 100%;
+}
+
+.no-cameras {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+}
+
+/* ===== Camera View Modal ===== */
+.camera-view-modal.active {
+    z-index: 1050;
+}
+
+.modal-camera-view {
+    max-width: 90vw;
+    max-height: 90vh;
+    width: auto;
+    padding: 0;
+    overflow: hidden;
+}
+
+.camera-view-container {
+    position: relative;
+    background: #000;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-view-stream {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+}
+
+.camera-view-stream[src=""] {
+    display: none;
+}
+
+.camera-view-stream[src=""] + .camera-view-loading {
+    display: block;
+}
+
+.camera-view-loading {
+    display: none;
+    color: #888;
+    font-size: 1rem;
+    position: absolute;
+    text-align: center;
+}
+
+.camera-view-actions {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    background: var(--bg-secondary);
+}
