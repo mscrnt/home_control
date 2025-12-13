@@ -698,12 +698,16 @@ type WeekDay struct {
 }
 
 type MonthDay struct {
-	Day     int
-	Date    time.Time
-	InMonth bool
-	IsToday bool
-	Events  []*calendar.Event
+	Day       int
+	Date      time.Time
+	InMonth   bool
+	IsToday   bool
+	Events    []*calendar.Event // Limited events for display
+	AllEvents []*calendar.Event // All events (for modal)
+	MoreCount int               // Number of events beyond the display limit
 }
+
+const maxEventsPerDay = 4 // Max events to show per day in month view
 
 func buildWeekView(events []*calendar.Event) []WeekDay {
 	now := time.Now().In(appConfig.Timezone)
@@ -754,19 +758,36 @@ func buildMonthView(viewDate time.Time, events []*calendar.Event) []MonthDay {
 	// First day of month (based on viewed date)
 	firstOfMonth := time.Date(viewDate.Year(), viewDate.Month(), 1, 0, 0, 0, 0, appConfig.Timezone)
 
+	// Last day of month
+	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+
 	// Start from Sunday of the week containing the first of month
 	startDay := firstOfMonth.AddDate(0, 0, -int(firstOfMonth.Weekday()))
 
+	// End on Saturday of the week containing the last of month
+	endDay := lastOfMonth.AddDate(0, 0, 6-int(lastOfMonth.Weekday()))
+
 	var days []MonthDay
-	for i := 0; i < 42; i++ { // 6 weeks
-		d := startDay.AddDate(0, 0, i)
+	for d := startDay; !d.After(endDay); d = d.AddDate(0, 0, 1) {
 		key := d.Format("2006-01-02")
+		allEvents := eventMap[key]
+		displayEvents := allEvents
+		moreCount := 0
+
+		// Limit events shown per day
+		if len(allEvents) > maxEventsPerDay {
+			displayEvents = allEvents[:maxEventsPerDay]
+			moreCount = len(allEvents) - maxEventsPerDay
+		}
+
 		days = append(days, MonthDay{
-			Day:     d.Day(),
-			Date:    d,
-			InMonth: d.Month() == viewDate.Month(),
-			IsToday: d.Equal(today),
-			Events:  eventMap[key],
+			Day:       d.Day(),
+			Date:      d,
+			InMonth:   d.Month() == viewDate.Month(),
+			IsToday:   d.Equal(today),
+			Events:    displayEvents,
+			AllEvents: allEvents,
+			MoreCount: moreCount,
 		})
 	}
 	return days

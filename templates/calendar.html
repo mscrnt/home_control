@@ -78,13 +78,20 @@
         <div class="month-grid">
             {{range .MonthDays}}
             <div class="month-day {{if .IsToday}}today{{end}} {{if not .InMonth}}other-month{{end}}"
-                 data-date="{{.Date.Format "2006-01-02"}}" onclick="openCreateModal(this.dataset.date)">
+                 data-date="{{.Date.Format "2006-01-02"}}"
+                 {{if gt .MoreCount 0}}data-all-events='[{{range $i, $e := .AllEvents}}{{if $i}},{{end}}{"id":"{{$e.ID}}","calendarId":"{{$e.CalendarID}}","title":"{{$e.Title}}","start":"{{$e.Start.Format "2006-01-02T15:04"}}","end":"{{$e.End.Format "2006-01-02T15:04"}}","allDay":{{$e.AllDay}},"location":"{{$e.Location}}","description":"{{$e.Description}}","colorId":"{{$e.ColorID}}","recurring":{{$e.Recurring}}}{{end}}]'{{end}}
+                 onclick="openCreateModal(this.dataset.date)">
                 <div class="day-number">{{.Day}}</div>
                 {{range .Events}}
                 <div class="month-event" {{if .Color}}style="background-color: {{.Color}}"{{end}}
                      data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
                      onclick="event.stopPropagation(); openEventDetails(this.dataset.event)">
                     {{.Title}}
+                </div>
+                {{end}}
+                {{if gt .MoreCount 0}}
+                <div class="month-event-more" onclick="event.stopPropagation(); showDayEventsModal('{{.Date.Format "2006-01-02"}}', this.parentElement)">
+                    +{{.MoreCount}} more
                 </div>
                 {{end}}
             </div>
@@ -1105,6 +1112,90 @@ function goToDate() {
 function goToToday() {
     const today = new Date().toISOString().split('T')[0];
     window.location.href = `?view=${currentView}&date=${today}`;
+}
+
+function showDayEventsModal(dateStr, dayElement) {
+    // Get all month-event elements in this day cell
+    const eventElements = dayElement.querySelectorAll('.month-event');
+    const events = [];
+
+    eventElements.forEach(el => {
+        if (el.dataset.event) {
+            events.push(JSON.parse(el.dataset.event));
+        }
+    });
+
+    // Also check if there's hidden event data for overflow
+    if (dayElement.dataset.allEvents) {
+        const allEvents = JSON.parse(dayElement.dataset.allEvents);
+        // Use all events instead
+        showEventsListModal(dateStr, allEvents);
+        return;
+    }
+
+    showEventsListModal(dateStr, events);
+}
+
+// Store events for modal access
+let dayEventsModalData = [];
+
+function showEventsListModal(dateStr, events) {
+    dayEventsModalData = events;
+    const date = new Date(dateStr + 'T12:00:00');
+    const dateTitle = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    let html = `
+        <div class="modal-content modal-day-events">
+            <div class="modal-header-row">
+                <div class="modal-header-title">
+                    <h3>${dateTitle}</h3>
+                </div>
+                <button class="modal-close-btn" onclick="closeDayEventsModal()">&times;</button>
+            </div>
+            <div class="day-events-list">
+    `;
+
+    events.forEach((event, index) => {
+        const startTime = event.allDay ? 'All day' : new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        html += `
+            <div class="day-events-item" onclick="openEventFromDayModal(${index})">
+                <div class="day-events-time">${startTime}</div>
+                <div class="day-events-title">${escapeHtml(event.title)}</div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    // Create or reuse modal
+    let modal = document.getElementById('dayEventsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'dayEventsModal';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = html;
+    modal.classList.add('active');
+}
+
+function closeDayEventsModal() {
+    const modal = document.getElementById('dayEventsModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function openEventFromDayModal(index) {
+    const event = dayEventsModalData[index];
+    if (event) {
+        closeDayEventsModal();
+        openEventDetails(JSON.stringify(event));
+    }
 }
 
 // Calendar Filter Functions
