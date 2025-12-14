@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -22,6 +23,16 @@ type Client struct {
 	service     *gcal.Service
 	calendarIDs []string
 	timezone    *time.Location
+
+	// Event cache
+	cacheMu     sync.RWMutex
+	eventCache  map[string]*eventCacheEntry
+	cacheTTL    time.Duration
+}
+
+type eventCacheEntry struct {
+	events    []*Event
+	fetchedAt time.Time
 }
 
 type Event struct {
@@ -76,6 +87,8 @@ func NewClient(clientID, clientSecret, redirectURL, tokenFile string, calendarID
 		tokenFile:   tokenFile,
 		calendarIDs: calendarIDs,
 		timezone:    timezone,
+		eventCache:  make(map[string]*eventCacheEntry),
+		cacheTTL:    60 * time.Second, // Cache for 60 seconds
 	}
 }
 
@@ -220,6 +233,17 @@ func (c *Client) GetEventsInRange(ctx context.Context, start, end time.Time) ([]
 		return nil, fmt.Errorf("calendar service not initialized")
 	}
 
+	// Check cache first
+	cacheKey := fmt.Sprintf("%s_%s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	c.cacheMu.RLock()
+	if entry, ok := c.eventCache[cacheKey]; ok {
+		if time.Since(entry.fetchedAt) < c.cacheTTL {
+			c.cacheMu.RUnlock()
+			return entry.events, nil
+		}
+	}
+	c.cacheMu.RUnlock()
+
 	// Build list of calendar IDs to fetch
 	type calendarInfo struct {
 		ID    string
@@ -270,7 +294,22 @@ func (c *Client) GetEventsInRange(ctx context.Context, start, end time.Time) ([]
 		return result[i].Start.Before(result[j].Start)
 	})
 
+	// Store in cache
+	c.cacheMu.Lock()
+	c.eventCache[cacheKey] = &eventCacheEntry{
+		events:    result,
+		fetchedAt: time.Now(),
+	}
+	c.cacheMu.Unlock()
+
 	return result, nil
+}
+
+// InvalidateCache clears the event cache
+func (c *Client) InvalidateCache() {
+	c.cacheMu.Lock()
+	c.eventCache = make(map[string]*eventCacheEntry)
+	c.cacheMu.Unlock()
 }
 
 // CreateEventOptions holds optional fields for event creation
@@ -416,6 +455,7 @@ func (c *Client) CreateEvent(ctx context.Context, title string, start, end time.
 		log.Printf("Event verified: ID=%s, Summary=%s, Status=%s, Start=%+v", verified.Id, verified.Summary, verified.Status, verified.Start)
 	}
 
+	c.InvalidateCache()
 	return c.convertGoogleEvent(created, calendarID, "#4285f4"), nil
 }
 
@@ -513,6 +553,7 @@ func (c *Client) UpdateEvent(ctx context.Context, calendarID, eventID string, ti
 	}
 
 	log.Printf("Event updated: ID=%s, Status=%s", updated.Id, updated.Status)
+	c.InvalidateCache()
 	return c.convertGoogleEvent(updated, calendarID, "#4285f4"), nil
 }
 
@@ -611,6 +652,7 @@ func (c *Client) PatchEvent(ctx context.Context, calendarID, eventID string, opt
 	}
 
 	log.Printf("Event patched: ID=%s, Status=%s", patched.Id, patched.Status)
+	c.InvalidateCache()
 	return c.convertGoogleEvent(patched, calendarID, "#4285f4"), nil
 }
 
@@ -630,6 +672,7 @@ func (c *Client) MoveEvent(ctx context.Context, sourceCalendarID, eventID, desti
 	}
 
 	log.Printf("Event moved: ID=%s from %s to %s", moved.Id, sourceCalendarID, destinationCalendarID)
+	c.InvalidateCache()
 	return c.convertGoogleEvent(moved, destinationCalendarID, "#4285f4"), nil
 }
 
@@ -664,6 +707,7 @@ func (c *Client) DeleteEvent(ctx context.Context, calendarID, eventID string) er
 	}
 
 	log.Printf("Event deleted: ID=%s from calendar %s", eventID, calendarID)
+	c.InvalidateCache()
 	return nil
 }
 

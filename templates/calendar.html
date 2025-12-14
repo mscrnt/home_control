@@ -2384,5 +2384,142 @@ setTimeout(checkForEventUpdates, 5000);
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', loadScreensaverConfig);
 })();
+
+// ===== AJAX Navigation for Fast View Switching =====
+(function() {
+    let isNavigating = false;
+    const viewCache = new Map();
+    const CACHE_TTL = 60000;  // 60 second cache
+    const VIEW_STORAGE_KEY = 'calendarLastView';
+
+    // Restore last view on page load if no view specified in URL
+    function restoreLastView() {
+        const params = new URLSearchParams(window.location.search);
+        const currentView = params.get('view');
+        const savedView = localStorage.getItem(VIEW_STORAGE_KEY);
+
+        // If no view in URL and we have a saved view that's different from default
+        if (!currentView && savedView && ['day', 'week', 'month'].includes(savedView) && savedView !== 'day') {
+            const date = params.get('date') || '{{.TodayDate}}';
+            const newHref = `?view=${savedView}&date=${date}`;
+            // Use setTimeout to let navigateCalendar be defined first
+            setTimeout(() => navigateCalendar(newHref), 0);
+        }
+    }
+
+    // Save view to localStorage
+    function saveCurrentView(href) {
+        const params = new URLSearchParams(href);
+        const view = params.get('view');
+        if (view && ['day', 'week', 'month'].includes(view)) {
+            localStorage.setItem(VIEW_STORAGE_KEY, view);
+        }
+    }
+
+    // Intercept clicks on calendar navigation links
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('a.view-btn, a.nav-arrow');
+        if (!link) return;
+
+        const href = link.getAttribute('href');
+        if (!href || !href.startsWith('?')) return;
+
+        e.preventDefault();
+        navigateCalendar(href);
+    });
+
+    async function fetchView(href) {
+        const cached = viewCache.get(href);
+        if (cached && Date.now() - cached.time < CACHE_TTL) {
+            return cached.html;
+        }
+        const resp = await fetch(window.location.pathname + href);
+        if (!resp.ok) throw new Error('Failed to load');
+        const html = await resp.text();
+        viewCache.set(href, { html, time: Date.now() });
+        return html;
+    }
+
+    async function navigateCalendar(href) {
+        if (isNavigating) return;
+        isNavigating = true;
+
+        const container = document.querySelector('.calendar-container');
+        const cached = viewCache.get(href);
+        const isCached = cached && Date.now() - cached.time < CACHE_TTL;
+
+        // Only dim if not cached
+        if (!isCached) container.style.opacity = '0.7';
+
+        try {
+            const html = await fetchView(href);
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newContent = doc.querySelector('.calendar-container');
+
+            if (newContent) {
+                container.innerHTML = newContent.innerHTML;
+                history.pushState(null, '', href);
+                saveCurrentView(href);
+
+                initDayTimeline();
+                updateWeatherWidget();
+
+                // Re-apply calendar visibility
+                const hidden = JSON.parse(localStorage.getItem('hiddenCalendars') || '[]');
+                hidden.forEach(id => {
+                    document.querySelectorAll(`[data-calendar-id="${id}"]`).forEach(el => {
+                        if (el.classList.contains('month-event') || el.classList.contains('week-event') || el.classList.contains('day-event')) {
+                            el.style.display = 'none';
+                        }
+                    });
+                    const checkbox = document.querySelector(`input[data-calendar-id="${id}"]`);
+                    if (checkbox) checkbox.checked = false;
+                });
+
+                // Preload other views
+                preloadOtherViews(href);
+            }
+        } catch (err) {
+            console.error('Navigation error:', err);
+            window.location.href = href;
+        } finally {
+            container.style.opacity = '1';
+            isNavigating = false;
+        }
+    }
+
+    function preloadOtherViews(currentHref) {
+        const params = new URLSearchParams(currentHref);
+        const date = params.get('date') || '{{.TodayDate}}';
+        const currentView = params.get('view') || 'day';
+        const views = ['day', 'week', 'month'].filter(v => v !== currentView);
+
+        views.forEach((view, i) => {
+            const href = `?view=${view}&date=${date}`;
+            if (!viewCache.has(href) || Date.now() - viewCache.get(href).time >= CACHE_TTL) {
+                setTimeout(() => fetchView(href).catch(() => {}), 200 * (i + 1));
+            }
+        });
+    }
+
+    // Handle browser back/forward
+    window.addEventListener('popstate', function() {
+        navigateCalendar(window.location.search || '?view=day');
+    });
+
+    // Preload other views after page load
+    setTimeout(() => preloadOtherViews(window.location.search || '?view=day'), 500);
+
+    // Restore saved view on page load (if no view in URL), otherwise save explicit view
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('view')) {
+        // User explicitly navigated to a view - save it
+        saveCurrentView(window.location.search);
+    } else {
+        // No view specified - try to restore saved preference
+        restoreLastView();
+    }
+})();
 </script>
 {{end}}
