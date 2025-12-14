@@ -14,8 +14,11 @@ import (
 
 // Client represents an ADB connection to a device
 type Client struct {
-	deviceAddr string
-	mu         sync.Mutex
+	deviceAddr   string
+	mu           sync.Mutex
+	connected    bool
+	connMu       sync.RWMutex
+	onReconnect  func()
 }
 
 // DeviceStatus contains information about the tablet
@@ -34,6 +37,78 @@ func NewClient(deviceAddr string) *Client {
 	return &Client{
 		deviceAddr: deviceAddr,
 	}
+}
+
+// OnReconnect sets a callback that fires when connection is restored
+func (c *Client) OnReconnect(fn func()) {
+	c.onReconnect = fn
+}
+
+// StartConnectionMonitor starts a background goroutine that monitors
+// the ADB connection and reconnects if it drops
+func (c *Client) StartConnectionMonitor(ctx context.Context, checkInterval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		// Initial connection attempt
+		c.tryConnect(ctx)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.connMu.RLock()
+				wasConnected := c.connected
+				c.connMu.RUnlock()
+
+				isConnected := c.IsConnected(ctx)
+
+				c.connMu.Lock()
+				c.connected = isConnected
+				c.connMu.Unlock()
+
+				if !isConnected {
+					// Try to reconnect
+					if c.tryConnect(ctx) {
+						if wasConnected {
+							// Was connected before, now reconnected
+							fmt.Printf("ADB: Reconnected to %s\n", c.deviceAddr)
+						} else {
+							fmt.Printf("ADB: Connected to %s\n", c.deviceAddr)
+						}
+						if c.onReconnect != nil {
+							c.onReconnect()
+						}
+					}
+				}
+			}
+		}
+	}()
+}
+
+// tryConnect attempts to connect to the device
+func (c *Client) tryConnect(ctx context.Context) bool {
+	err := c.Connect(ctx)
+	if err != nil {
+		return false
+	}
+	// Verify connection worked
+	if c.IsConnected(ctx) {
+		c.connMu.Lock()
+		c.connected = true
+		c.connMu.Unlock()
+		return true
+	}
+	return false
+}
+
+// IsReady returns true if the connection is currently established
+func (c *Client) IsReady() bool {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.connected
 }
 
 // exec runs an ADB command and returns the output

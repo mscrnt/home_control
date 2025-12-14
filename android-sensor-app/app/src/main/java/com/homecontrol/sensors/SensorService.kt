@@ -20,17 +20,6 @@ import java.util.concurrent.TimeUnit
 
 class SensorService : Service(), SensorEventListener {
 
-    companion object {
-        private const val TAG = "SensorService"
-        private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "sensor_service"
-
-        // Preferences keys
-        const val PREF_NAME = "sensor_prefs"
-        const val PREF_SERVER_URL = "server_url"
-        const val PREF_IDLE_TIMEOUT = "idle_timeout"
-    }
-
     private lateinit var sensorManager: SensorManager
     private lateinit var powerManager: PowerManager
     private var proximitySensor: Sensor? = null
@@ -48,12 +37,30 @@ class SensorService : Service(), SensorEventListener {
 
     private var lastProximityNear: Boolean = false
     private var lastLightLevel: Float = -1f
+    private var lastReportedLightLevel: Float = -1f
     private var baselineLightLevel: Float = -1f
     private var lastActivityTime: Long = System.currentTimeMillis()
+    private var lastWakeTime: Long = 0L
     private var screenOn: Boolean = true
 
     private var idleCheckJob: Job? = null
     private var heartbeatJob: Job? = null
+
+    companion object {
+        private const val TAG = "SensorService"
+        private const val NOTIFICATION_ID = 1
+        private const val CHANNEL_ID = "sensor_service"
+
+        // Tuning constants
+        private const val LIGHT_REPORT_THRESHOLD = 0.25f  // Report when light changes by 25%
+        private const val PRESENCE_DETECT_THRESHOLD = 0.35f  // Detect presence at 35% light drop
+        private const val WAKE_COOLDOWN_MS = 3000L  // Don't try to wake again for 3 seconds
+
+        // Preferences keys
+        const val PREF_NAME = "sensor_prefs"
+        const val PREF_SERVER_URL = "server_url"
+        const val PREF_IDLE_TIMEOUT = "idle_timeout"
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -147,28 +154,37 @@ class SensorService : Service(), SensorEventListener {
         // Set baseline on first reading
         if (baselineLightLevel < 0) {
             baselineLightLevel = lux
+            lastReportedLightLevel = lux
         }
 
-        // Only report significant changes (more than 10% difference)
-        if (lastLightLevel < 0 || kotlin.math.abs(lux - lastLightLevel) / (lastLightLevel + 1) > 0.1) {
-            lastLightLevel = lux
-            Log.d(TAG, "Light changed: $lux lux")
+        // Track current level for presence detection
+        lastLightLevel = lux
+
+        // Only report to server for brightness adjustment when change is significant (25%)
+        // This reduces unnecessary brightness flickering
+        if (lastReportedLightLevel < 0 ||
+            kotlin.math.abs(lux - lastReportedLightLevel) / (lastReportedLightLevel + 1) > LIGHT_REPORT_THRESHOLD) {
+            lastReportedLightLevel = lux
+            Log.d(TAG, "Light reported: $lux lux (baseline: $baselineLightLevel)")
             reportLight(lux)
+        }
 
-            // Detect presence based on light drop (someone blocking the sensor)
-            // If light drops more than 50% from baseline, consider someone present
-            if (baselineLightLevel > 20 && lux < baselineLightLevel * 0.5) {
-                Log.d(TAG, "Light drop detected - presence assumed")
-                lastActivityTime = System.currentTimeMillis()
-                if (!screenOn) {
-                    wakeScreen()
-                }
-            }
+        // Detect presence based on light drop (someone blocking the sensor)
+        val now = System.currentTimeMillis()
+        if (baselineLightLevel > 20 && lux < baselineLightLevel * (1 - PRESENCE_DETECT_THRESHOLD)) {
+            Log.d(TAG, "Light drop detected - presence assumed (${lux} < ${baselineLightLevel * (1 - PRESENCE_DETECT_THRESHOLD)})")
+            lastActivityTime = now
 
-            // Update baseline slowly when light is stable and high
-            if (lux > baselineLightLevel * 0.8) {
-                baselineLightLevel = baselineLightLevel * 0.9f + lux * 0.1f
+            // Wake screen with cooldown to avoid rapid on/off
+            if (!screenOn && (now - lastWakeTime) > WAKE_COOLDOWN_MS) {
+                lastWakeTime = now
+                wakeScreen()
             }
+        }
+
+        // Update baseline slowly when light is stable and high
+        if (lux > baselineLightLevel * 0.8) {
+            baselineLightLevel = baselineLightLevel * 0.95f + lux * 0.05f
         }
     }
 

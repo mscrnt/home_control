@@ -446,59 +446,59 @@ func main() {
 		tabletClient = adb.NewClient(cfg.TabletADBAddr)
 		ctx := context.Background()
 
-		// Try to connect
-		if err := tabletClient.Connect(ctx); err != nil {
-			log.Printf("Warning: Failed to connect to tablet at %s: %v", cfg.TabletADBAddr, err)
-		} else {
-			log.Printf("Tablet ADB client connected to %s", cfg.TabletADBAddr)
+		// Start connection monitor - will auto-reconnect if connection drops
+		tabletClient.OnReconnect(func() {
+			log.Printf("Tablet ADB connection restored to %s", cfg.TabletADBAddr)
+		})
+		tabletClient.StartConnectionMonitor(ctx, 10*time.Second) // Check every 10 seconds
+		log.Printf("Tablet ADB client monitoring %s (auto-reconnect enabled)", cfg.TabletADBAddr)
 
-			// Start proximity monitoring if enabled
-			if cfg.TabletProximityEnabled {
-				idleTimeout := time.Duration(cfg.TabletIdleTimeout) * time.Second
-				proximityMonitor = adb.NewProximityMonitor(tabletClient, 500*time.Millisecond, idleTimeout)
+		// Start proximity monitoring if enabled
+		if cfg.TabletProximityEnabled {
+			idleTimeout := time.Duration(cfg.TabletIdleTimeout) * time.Second
+			proximityMonitor = adb.NewProximityMonitor(tabletClient, 500*time.Millisecond, idleTimeout)
 
-				// Track last activity for idle timeout
-				var lastActivity time.Time
-				var screenOn bool = true
+			// Track last activity for idle timeout
+			var lastActivity time.Time
+			var screenOn bool = true
 
-				proximityMonitor.OnApproach(func() {
-					lastActivity = time.Now()
-					if !screenOn {
-						if err := tabletClient.WakeScreen(context.Background()); err == nil {
-							screenOn = true
-							log.Println("Tablet: Screen woken by proximity")
+			proximityMonitor.OnApproach(func() {
+				lastActivity = time.Now()
+				if !screenOn {
+					if err := tabletClient.WakeScreen(context.Background()); err == nil {
+						screenOn = true
+						log.Println("Tablet: Screen woken by proximity")
+					}
+				}
+			})
+
+			proximityMonitor.OnDepart(func() {
+				// Start idle timer - screen will sleep after timeout
+				go func() {
+					time.Sleep(idleTimeout)
+					if time.Since(lastActivity) >= idleTimeout && screenOn {
+						if err := tabletClient.SleepScreen(context.Background()); err == nil {
+							screenOn = false
+							log.Println("Tablet: Screen sleeping due to idle")
 						}
 					}
-				})
+				}()
+			})
 
-				proximityMonitor.OnDepart(func() {
-					// Start idle timer - screen will sleep after timeout
-					go func() {
-						time.Sleep(idleTimeout)
-						if time.Since(lastActivity) >= idleTimeout && screenOn {
-							if err := tabletClient.SleepScreen(context.Background()); err == nil {
-								screenOn = false
-								log.Println("Tablet: Screen sleeping due to idle")
-							}
-						}
-					}()
-				})
+			proximityMonitor.Start(ctx)
+			log.Printf("Tablet proximity monitoring enabled (idle timeout: %ds)", cfg.TabletIdleTimeout)
+		}
 
-				proximityMonitor.Start(ctx)
-				log.Printf("Tablet proximity monitoring enabled (idle timeout: %ds)", cfg.TabletIdleTimeout)
-			}
-
-			// Start auto-brightness if enabled
-			if cfg.TabletAutoBrightness {
-				brightnessController = adb.NewBrightnessController(
-					tabletClient,
-					5*time.Second, // Check every 5 seconds
-					cfg.TabletMinBrightness,
-					cfg.TabletMaxBrightness,
-				)
-				brightnessController.Start(ctx)
-				log.Printf("Tablet auto-brightness enabled (range: %d-%d)", cfg.TabletMinBrightness, cfg.TabletMaxBrightness)
-			}
+		// Start auto-brightness if enabled
+		if cfg.TabletAutoBrightness {
+			brightnessController = adb.NewBrightnessController(
+				tabletClient,
+				5*time.Second, // Check every 5 seconds
+				cfg.TabletMinBrightness,
+				cfg.TabletMaxBrightness,
+			)
+			brightnessController.Start(ctx)
+			log.Printf("Tablet auto-brightness enabled (range: %d-%d)", cfg.TabletMinBrightness, cfg.TabletMaxBrightness)
 		}
 	}
 
