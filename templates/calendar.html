@@ -33,14 +33,30 @@
     <div class="month-view">
         <div class="view-title-nav">
             {{if .Calendars}}
-            <div class="calendar-picker">
-                {{range .Calendars}}
-                <label class="calendar-chip" style="--cal-color: {{.Color}}">
-                    <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
-                    <span class="chip-dot"></span>
-                    <span class="chip-name">{{.Name}}</span>
-                </label>
-                {{end}}
+            <div class="calendar-dropdown">
+                <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
+                    <span>Calendars</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="calendar-dropdown-menu">
+                    {{range .Calendars}}
+                    <div class="calendar-option" data-calendar-id="{{.ID}}">
+                        <label class="calendar-checkbox">
+                            <input type="checkbox" {{if .Visible}}checked{{end}}
+                                   data-calendar-id="{{.ID}}"
+                                   onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
+                            <span class="checkmark" style="--cal-color: {{.Color}}"></span>
+                        </label>
+                        <span class="calendar-name">{{.Name}}</span>
+                        <button type="button" class="calendar-color-btn"
+                                style="background: {{.Color}}"
+                                data-calendar-id="{{.ID}}"
+                                data-current-color="{{.Color}}"
+                                onclick="openColorPalette(event, '{{.ID}}')">
+                        </button>
+                    </div>
+                    {{end}}
+                </div>
             </div>
             {{end}}
             <div class="view-title-row">
@@ -102,14 +118,30 @@
     <div class="week-view">
         <div class="view-title-nav">
             {{if .Calendars}}
-            <div class="calendar-picker">
-                {{range .Calendars}}
-                <label class="calendar-chip" style="--cal-color: {{.Color}}">
-                    <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
-                    <span class="chip-dot"></span>
-                    <span class="chip-name">{{.Name}}</span>
-                </label>
-                {{end}}
+            <div class="calendar-dropdown">
+                <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
+                    <span>Calendars</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="calendar-dropdown-menu">
+                    {{range .Calendars}}
+                    <div class="calendar-option" data-calendar-id="{{.ID}}">
+                        <label class="calendar-checkbox">
+                            <input type="checkbox" {{if .Visible}}checked{{end}}
+                                   data-calendar-id="{{.ID}}"
+                                   onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
+                            <span class="checkmark" style="--cal-color: {{.Color}}"></span>
+                        </label>
+                        <span class="calendar-name">{{.Name}}</span>
+                        <button type="button" class="calendar-color-btn"
+                                style="background: {{.Color}}"
+                                data-calendar-id="{{.ID}}"
+                                data-current-color="{{.Color}}"
+                                onclick="openColorPalette(event, '{{.ID}}')">
+                        </button>
+                    </div>
+                    {{end}}
+                </div>
             </div>
             {{end}}
             <div class="view-title-row">
@@ -171,14 +203,30 @@
     <div class="day-view">
         <div class="view-title-nav">
             {{if .Calendars}}
-            <div class="calendar-picker">
-                {{range .Calendars}}
-                <label class="calendar-chip" style="--cal-color: {{.Color}}">
-                    <input type="checkbox" checked data-calendar-id="{{.ID}}" onchange="filterCalendars()">
-                    <span class="chip-dot"></span>
-                    <span class="chip-name">{{.Name}}</span>
-                </label>
-                {{end}}
+            <div class="calendar-dropdown">
+                <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
+                    <span>Calendars</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="calendar-dropdown-menu">
+                    {{range .Calendars}}
+                    <div class="calendar-option" data-calendar-id="{{.ID}}">
+                        <label class="calendar-checkbox">
+                            <input type="checkbox" {{if .Visible}}checked{{end}}
+                                   data-calendar-id="{{.ID}}"
+                                   onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
+                            <span class="checkmark" style="--cal-color: {{.Color}}"></span>
+                        </label>
+                        <span class="calendar-name">{{.Name}}</span>
+                        <button type="button" class="calendar-color-btn"
+                                style="background: {{.Color}}"
+                                data-calendar-id="{{.ID}}"
+                                data-current-color="{{.Color}}"
+                                onclick="openColorPalette(event, '{{.ID}}')">
+                        </button>
+                    </div>
+                    {{end}}
+                </div>
             </div>
             {{end}}
             <div class="view-title-row">
@@ -322,7 +370,7 @@
 
             <div class="form-group">
                 <label for="eventTitle">Title</label>
-                <input type="text" id="eventTitle" class="form-input" placeholder="Event title" readonly onfocus="activateKeyboard(this)">
+                <input type="text" id="eventTitle" class="form-input" placeholder="Event title">
             </div>
 
             <div class="form-group">
@@ -388,13 +436,13 @@
             <div class="form-group location-group">
                 <label for="eventLocation">Location</label>
                 <input type="text" id="eventLocation" class="form-input" placeholder="Add location"
-                       autocomplete="off" onfocus="activateKeyboard(this)" oninput="searchPlaces(this.value)">
+                       autocomplete="off" oninput="searchPlaces(this.value)">
                 <div id="locationSuggestions" class="location-suggestions"></div>
             </div>
 
             <div class="form-group">
                 <label for="eventDescription">Description</label>
-                <textarea id="eventDescription" class="form-input form-textarea" placeholder="Add description" readonly onfocus="activateKeyboard(this)"></textarea>
+                <textarea id="eventDescription" class="form-input form-textarea" placeholder="Add description"></textarea>
             </div>
 
             <div class="form-group">
@@ -608,6 +656,30 @@
     </div>
 </div>
 
+<!-- Color Palette Popup -->
+<div id="colorPalettePopup" class="color-palette-popup">
+    <div class="color-palette-grid">
+        <button type="button" class="color-swatch" data-color="#e94560" style="background: #e94560"></button>
+        <button type="button" class="color-swatch" data-color="#f44336" style="background: #f44336"></button>
+        <button type="button" class="color-swatch" data-color="#ff5722" style="background: #ff5722"></button>
+        <button type="button" class="color-swatch" data-color="#ff9800" style="background: #ff9800"></button>
+        <button type="button" class="color-swatch" data-color="#ffc107" style="background: #ffc107"></button>
+        <button type="button" class="color-swatch" data-color="#8bc34a" style="background: #8bc34a"></button>
+        <button type="button" class="color-swatch" data-color="#4caf50" style="background: #4caf50"></button>
+        <button type="button" class="color-swatch" data-color="#009688" style="background: #009688"></button>
+        <button type="button" class="color-swatch" data-color="#00bcd4" style="background: #00bcd4"></button>
+        <button type="button" class="color-swatch" data-color="#03a9f4" style="background: #03a9f4"></button>
+        <button type="button" class="color-swatch" data-color="#2196f3" style="background: #2196f3"></button>
+        <button type="button" class="color-swatch" data-color="#3f51b5" style="background: #3f51b5"></button>
+        <button type="button" class="color-swatch" data-color="#673ab7" style="background: #673ab7"></button>
+        <button type="button" class="color-swatch" data-color="#9c27b0" style="background: #9c27b0"></button>
+        <button type="button" class="color-swatch" data-color="#e91e63" style="background: #e91e63"></button>
+        <button type="button" class="color-swatch" data-color="#795548" style="background: #795548"></button>
+        <button type="button" class="color-swatch" data-color="#607d8b" style="background: #607d8b"></button>
+        <button type="button" class="color-swatch" data-color="#9e9e9e" style="background: #9e9e9e"></button>
+    </div>
+</div>
+
 <script>
 let currentEventType = 'event';
 let currentEvent = null; // Currently selected event for viewing/editing
@@ -798,7 +870,6 @@ function setSelectedColor(colorId) {
 
 function closeModal(id) {
     document.getElementById(id).classList.remove('active');
-    hideKeyboard();
 }
 
 function toggleTimeInputs() {
@@ -1198,9 +1269,28 @@ function openEventFromDayModal(index) {
     }
 }
 
+// Calendar Dropdown Functions
+function toggleCalendarDropdown(event) {
+    event.stopPropagation();
+    const menu = document.querySelector('.calendar-dropdown-menu');
+    if (menu) {
+        menu.classList.toggle('open');
+    }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.calendar-dropdown-menu')) {
+        const menu = document.querySelector('.calendar-dropdown-menu');
+        if (menu) {
+            menu.classList.remove('open');
+        }
+    }
+});
+
 // Calendar Filter Functions
 function filterCalendars() {
-    const checkboxes = document.querySelectorAll('.calendar-chip input[type="checkbox"]');
+    const checkboxes = document.querySelectorAll('.calendar-option input[type="checkbox"]');
     const activeCalendarIds = new Set();
 
     checkboxes.forEach(cb => {
@@ -1221,6 +1311,152 @@ function filterCalendars() {
         } catch (e) {}
     });
 }
+
+// Toggle calendar visibility and save to server
+async function toggleCalendarVisibility(calendarId, visible) {
+    // Get current color for this calendar
+    const colorBtn = document.querySelector(`.calendar-option[data-calendar-id="${calendarId}"] .calendar-color-btn`);
+    const color = colorBtn ? colorBtn.dataset.currentColor : '';
+
+    try {
+        const response = await fetch(`/api/calendar/prefs/${encodeURIComponent(calendarId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visible: visible, color: color })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to save calendar preference');
+        }
+    } catch (err) {
+        console.error('Error saving calendar preference:', err);
+    }
+
+    // Apply filter immediately
+    filterCalendars();
+}
+
+// Update calendar color and save to server
+async function updateCalendarColor(calendarId, color) {
+    // Get current visibility for this calendar
+    const checkbox = document.querySelector(`.calendar-option[data-calendar-id="${calendarId}"] input[type="checkbox"]`);
+    const visible = checkbox ? checkbox.checked : true;
+
+    try {
+        const response = await fetch(`/api/calendar/prefs/${encodeURIComponent(calendarId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visible: visible, color: color })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to save calendar color');
+            return;
+        }
+
+        // Update the checkmark color in the dropdown
+        const checkmark = document.querySelector(`.calendar-option[data-calendar-id="${calendarId}"] .checkmark`);
+        if (checkmark) {
+            checkmark.style.setProperty('--cal-color', color);
+        }
+
+        // Update the color button background
+        const colorBtn = document.querySelector(`.calendar-option[data-calendar-id="${calendarId}"] .calendar-color-btn`);
+        if (colorBtn) {
+            colorBtn.style.background = color;
+            colorBtn.dataset.currentColor = color;
+        }
+
+        // Update all events from this calendar with new color
+        document.querySelectorAll('[data-event]').forEach(el => {
+            try {
+                const event = JSON.parse(el.dataset.event);
+                if (event.calendarId === calendarId) {
+                    // Update inline styles based on element type
+                    if (el.style.backgroundColor) {
+                        el.style.backgroundColor = color;
+                    }
+                    if (el.style.borderLeftColor) {
+                        el.style.borderLeftColor = color;
+                    }
+                    el.style.setProperty('--event-color', color);
+                }
+            } catch (e) {}
+        });
+
+    } catch (err) {
+        console.error('Error saving calendar color:', err);
+    }
+}
+
+// Color palette state
+let colorPaletteCalendarId = null;
+
+// Open color palette popup
+function openColorPalette(event, calendarId) {
+    event.stopPropagation();
+    const popup = document.getElementById('colorPalettePopup');
+    const btn = event.currentTarget;
+
+    colorPaletteCalendarId = calendarId;
+
+    // Position the popup near the button but ensure it stays in viewport
+    const btnRect = btn.getBoundingClientRect();
+    const popupWidth = 200;
+    const popupHeight = 160;
+
+    let left = btnRect.left;
+    let top = btnRect.bottom + 8;
+
+    // Ensure popup stays within viewport
+    if (left + popupWidth > window.innerWidth) {
+        left = window.innerWidth - popupWidth - 16;
+    }
+    if (left < 16) {
+        left = 16;
+    }
+    if (top + popupHeight > window.innerHeight) {
+        top = btnRect.top - popupHeight - 8;
+    }
+
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    popup.classList.add('open');
+}
+
+// Close color palette popup
+function closeColorPalette() {
+    const popup = document.getElementById('colorPalettePopup');
+    popup.classList.remove('open');
+    colorPaletteCalendarId = null;
+}
+
+// Handle color swatch click
+document.addEventListener('DOMContentLoaded', function() {
+    const popup = document.getElementById('colorPalettePopup');
+    if (popup) {
+        popup.addEventListener('click', function(e) {
+            const swatch = e.target.closest('.color-swatch');
+            if (swatch && colorPaletteCalendarId) {
+                const color = swatch.dataset.color;
+                updateCalendarColor(colorPaletteCalendarId, color);
+                closeColorPalette();
+            }
+        });
+    }
+
+    // Close palette when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.color-palette-popup') && !e.target.closest('.calendar-color-btn')) {
+            closeColorPalette();
+        }
+    });
+});
+
+// Initialize calendar filtering on page load
+document.addEventListener('DOMContentLoaded', function() {
+    filterCalendars();
+});
 
 // Settings Functions
 function openSettings() {
@@ -1855,168 +2091,6 @@ async function clearCompletedTasks() {
     }
 }
 
-// ===== Camera/Doorbell WebSocket =====
-let ws = null;
-let wsReconnectTimer = null;
-let cameraModalTimeout = null;
-
-function connectWebSocket() {
-    if (ws && ws.readyState === WebSocket.OPEN) return;
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-
-    ws.onopen = () => {
-        console.log('WebSocket connected');
-        if (wsReconnectTimer) {
-            clearTimeout(wsReconnectTimer);
-            wsReconnectTimer = null;
-        }
-    };
-
-    ws.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'doorbell') {
-                showCameraModal(data.payload.camera || 'doorbell');
-            }
-        } catch (e) {
-            console.error('WebSocket message error:', e);
-        }
-    };
-
-    ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        // Reconnect after 5 seconds
-        wsReconnectTimer = setTimeout(connectWebSocket, 5000);
-    };
-
-    ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-    };
-}
-
-function showCameraModal(cameraName) {
-    // Dismiss screensaver if active (doorbell takes priority)
-    if (window.dismissScreensaver) {
-        window.dismissScreensaver();
-    }
-
-    const modal = document.getElementById('cameraModal');
-    const title = document.getElementById('cameraModalTitle');
-    const stream = document.getElementById('cameraStream');
-
-    title.textContent = 'Doorbell';
-
-    // Use snapshot first, then try stream
-    stream.src = `/api/camera/${cameraName}/stream`;
-    stream.onerror = () => {
-        stream.src = `/api/camera/${cameraName}/snapshot`;
-    };
-
-    modal.classList.add('active');
-
-    // Play doorbell sound
-    playDoorbellSound();
-
-    // Auto-close after 60 seconds
-    if (cameraModalTimeout) {
-        clearTimeout(cameraModalTimeout);
-    }
-    cameraModalTimeout = setTimeout(() => {
-        closeCameraModal();
-    }, 60000);
-}
-
-function closeCameraModal() {
-    const modal = document.getElementById('cameraModal');
-    const stream = document.getElementById('cameraStream');
-
-    modal.classList.remove('active');
-    stream.src = '';
-
-    if (cameraModalTimeout) {
-        clearTimeout(cameraModalTimeout);
-        cameraModalTimeout = null;
-    }
-}
-
-// Global AudioContext - needs user interaction to work
-let doorbellAudioCtx = null;
-let audioEnabled = false;
-
-// Initialize audio context on first user interaction
-function initAudioContext() {
-    if (audioEnabled) return;
-
-    if (!doorbellAudioCtx) {
-        doorbellAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        console.log('AudioContext initialized, state:', doorbellAudioCtx.state);
-    }
-    if (doorbellAudioCtx.state === 'suspended') {
-        doorbellAudioCtx.resume().then(() => {
-            console.log('AudioContext resumed');
-        });
-    }
-
-    audioEnabled = true;
-}
-
-// Warm up audio on any user interaction
-document.addEventListener('click', initAudioContext, { once: true });
-document.addEventListener('touchstart', initAudioContext, { once: true });
-
-function playDoorbellSound() {
-    console.log('playDoorbellSound called');
-
-    // Create AudioContext if needed
-    if (!doorbellAudioCtx) {
-        doorbellAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    // Resume if suspended (browser autoplay policy)
-    if (doorbellAudioCtx.state === 'suspended') {
-        console.log('AudioContext suspended, attempting resume...');
-        doorbellAudioCtx.resume();
-    }
-
-    try {
-        const ctx = doorbellAudioCtx;
-
-        // First ding - higher pitch
-        const osc1 = ctx.createOscillator();
-        const gain1 = ctx.createGain();
-        osc1.connect(gain1);
-        gain1.connect(ctx.destination);
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(932, ctx.currentTime); // Bb5
-        gain1.gain.setValueAtTime(0.6, ctx.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
-        osc1.start(ctx.currentTime);
-        osc1.stop(ctx.currentTime + 0.8);
-
-        // Second ding - lower pitch (classic ding-dong)
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(698, ctx.currentTime + 0.3); // F5
-        gain2.gain.setValueAtTime(0, ctx.currentTime);
-        gain2.gain.setValueAtTime(0.6, ctx.currentTime + 0.3);
-        gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.2);
-        osc2.start(ctx.currentTime + 0.3);
-        osc2.stop(ctx.currentTime + 1.2);
-
-        console.log('Doorbell sound playing, ctx state:', ctx.state);
-    } catch (e) {
-        console.error('Could not play doorbell sound:', e);
-    }
-}
-
-// Connect WebSocket on page load
-connectWebSocket();
-
 // ===== Calendar Event Auto-Refresh =====
 let lastEventsHash = '';
 
@@ -2069,6 +2143,9 @@ setInterval(checkForEventUpdates, 60000);
 // Also check once shortly after page load to initialize the hash
 setTimeout(checkForEventUpdates, 5000);
 </script>
+
+<!-- Camera/Doorbell WebSocket Module -->
+<script src="/static/js/camera.js"></script>
 
 <!-- Camera Modal -->
 <div id="cameraModal" class="modal camera-modal">

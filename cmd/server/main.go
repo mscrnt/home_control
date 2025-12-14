@@ -115,6 +115,25 @@ type SyncBoxConfig struct {
 	AccessToken string
 }
 
+// CalendarPrefs stores user preferences for calendar display
+type CalendarPrefs struct {
+	Calendars map[string]CalendarPref `json:"calendars"`
+}
+
+// CalendarPref stores display preferences for a single calendar
+type CalendarPref struct {
+	Visible bool   `json:"visible"`
+	Color   string `json:"color"` // Hex color, empty = use Google's default
+}
+
+// CalendarWithPrefs combines calendar info with user preferences for template rendering
+type CalendarWithPrefs struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Color   string `json:"color"`
+	Visible bool   `json:"visible"`
+}
+
 var haClient *homeassistant.Client
 var hueClient *hue.Client
 var hueStreamer *hue.EntertainmentStreamer
@@ -128,6 +147,8 @@ var driveClient *drive.Client
 var spotifyClient *spotify.Client
 var wsHub *websocket.Hub
 var appConfig Config
+var calendarPrefs *CalendarPrefs
+var calendarPrefsFile string
 
 func main() {
 	// Load .env file if present (for local dev)
@@ -250,6 +271,10 @@ func main() {
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
 			log.Printf("Warning: Failed to create data directory: %v", err)
 		}
+
+		// Set up calendar preferences file path and load prefs
+		calendarPrefsFile = filepath.Join(dataDir, "calendar_prefs.json")
+		calendarPrefs = loadCalendarPrefs()
 
 		redirectURL := cfg.BaseURL + "/auth/google/callback"
 		tokenFile := filepath.Join(dataDir, "token.json")
@@ -441,6 +466,8 @@ func main() {
 	r.Get("/api/calendar/events", handleGetCalendarEvents)
 	r.Get("/api/calendar/colors", handleGetColors)
 	r.Get("/api/calendar/calendars", handleGetCalendars)
+	r.Get("/api/calendar/prefs", handleGetCalendarPrefs)
+	r.Put("/api/calendar/prefs/{calendarID}", handleUpdateCalendarPref)
 	r.Post("/api/calendar/event", handleCreateEvent)
 	r.Get("/api/calendar/event/{calendarID}/{eventID}", handleGetEvent)
 	r.Put("/api/calendar/event/{calendarID}/{eventID}", handleUpdateEvent)
@@ -553,7 +580,6 @@ func main() {
 
 func handleCalendar(w http.ResponseWriter, r *http.Request) {
 	var events []*calendar.Event
-	var calendars []calendar.CalendarInfo
 	var authorized bool
 
 	view := r.URL.Query().Get("view")
@@ -605,6 +631,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		endDate = startDate.AddDate(0, 0, 14)
 	}
 
+	var calendarsWithPrefs []CalendarWithPrefs
 	if calClient != nil {
 		authorized = calClient.IsAuthorized()
 		if authorized {
@@ -613,9 +640,19 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Printf("Error fetching calendar events: %v", err)
 			}
-			calendars, err = calClient.GetConfiguredCalendars(r.Context())
+			calendarsWithPrefs, err = getCalendarsWithPrefs(r.Context())
 			if err != nil {
-				log.Printf("Error fetching calendars: %v", err)
+				log.Printf("Error fetching calendars with prefs: %v", err)
+			}
+			// Apply custom colors from preferences to events
+			colorMap := make(map[string]string)
+			for _, cal := range calendarsWithPrefs {
+				colorMap[cal.ID] = cal.Color
+			}
+			for i := range events {
+				if customColor, ok := colorMap[events[i].CalendarID]; ok && customColor != "" {
+					events[i].Color = customColor
+				}
 			}
 		}
 	}
@@ -632,7 +669,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		"Events":            events,
 		"EventsByDay":       eventsByDay,
 		"View":              view,
-		"Calendars":         calendars,
+		"Calendars":         calendarsWithPrefs,
 		"CurrentDate":       baseDate.Format("2006-01-02"),
 		"PrevDate":          prevDate,
 		"NextDate":          nextDate,
@@ -1641,6 +1678,62 @@ func handleGetCalendars(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(calendars)
+}
+
+func handleGetCalendarPrefs(w http.ResponseWriter, r *http.Request) {
+	if calendarPrefs == nil {
+		calendarPrefs = &CalendarPrefs{Calendars: make(map[string]CalendarPref)}
+	}
+
+	// Return calendars with preferences merged
+	calendarsWithPrefs, err := getCalendarsWithPrefs(r.Context())
+	if err != nil {
+		log.Printf("Error getting calendars with prefs: %v", err)
+		http.Error(w, "Failed to get calendars: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(calendarsWithPrefs)
+}
+
+func handleUpdateCalendarPref(w http.ResponseWriter, r *http.Request) {
+	calendarID := chi.URLParam(r, "calendarID")
+	if calendarID == "" {
+		http.Error(w, "Calendar ID required", http.StatusBadRequest)
+		return
+	}
+
+	// Decode URL-encoded calendar ID to match Google Calendar API format
+	decodedID, err := url.QueryUnescape(calendarID)
+	if err != nil {
+		decodedID = calendarID // Fall back to original if decode fails
+	}
+
+	var pref CalendarPref
+	if err := json.NewDecoder(r.Body).Decode(&pref); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if calendarPrefs == nil {
+		calendarPrefs = &CalendarPrefs{Calendars: make(map[string]CalendarPref)}
+	}
+
+	calendarPrefs.Calendars[decodedID] = pref
+
+	if err := saveCalendarPrefs(); err != nil {
+		log.Printf("Error saving calendar prefs: %v", err)
+		http.Error(w, "Failed to save preferences: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":    true,
+		"calendarId": decodedID,
+		"pref":       pref,
+	})
 }
 
 func handlePlacesAutocomplete(w http.ResponseWriter, r *http.Request) {
@@ -3398,4 +3491,83 @@ func handleSpotifyLibraryShows(w http.ResponseWriter, r *http.Request) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// loadCalendarPrefs loads calendar preferences from disk
+func loadCalendarPrefs() *CalendarPrefs {
+	prefs := &CalendarPrefs{
+		Calendars: make(map[string]CalendarPref),
+	}
+
+	if calendarPrefsFile == "" {
+		return prefs
+	}
+
+	data, err := os.ReadFile(calendarPrefsFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Warning: Failed to read calendar prefs: %v", err)
+		}
+		return prefs
+	}
+
+	if err := json.Unmarshal(data, prefs); err != nil {
+		log.Printf("Warning: Failed to parse calendar prefs: %v", err)
+		return &CalendarPrefs{Calendars: make(map[string]CalendarPref)}
+	}
+
+	return prefs
+}
+
+// saveCalendarPrefs saves calendar preferences to disk
+func saveCalendarPrefs() error {
+	if calendarPrefsFile == "" {
+		return fmt.Errorf("calendar prefs file not configured")
+	}
+
+	data, err := json.MarshalIndent(calendarPrefs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal calendar prefs: %w", err)
+	}
+
+	if err := os.WriteFile(calendarPrefsFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write calendar prefs: %w", err)
+	}
+
+	return nil
+}
+
+// getCalendarsWithPrefs merges calendar info with user preferences
+func getCalendarsWithPrefs(ctx context.Context) ([]CalendarWithPrefs, error) {
+	if calClient == nil {
+		return nil, fmt.Errorf("calendar client not initialized")
+	}
+
+	calendars, err := calClient.GetConfiguredCalendars(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]CalendarWithPrefs, 0, len(calendars))
+	for _, cal := range calendars {
+		pref, exists := calendarPrefs.Calendars[cal.ID]
+
+		cwp := CalendarWithPrefs{
+			ID:      cal.ID,
+			Name:    cal.Name,
+			Color:   cal.Color,
+			Visible: true, // Default to visible
+		}
+
+		if exists {
+			cwp.Visible = pref.Visible
+			if pref.Color != "" {
+				cwp.Color = pref.Color
+			}
+		}
+
+		result = append(result, cwp)
+	}
+
+	return result, nil
 }

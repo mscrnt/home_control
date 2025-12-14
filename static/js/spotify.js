@@ -421,8 +421,7 @@ const Spotify = (function() {
                         <img src="/icon/magnifying-glass" class="spotify-search-icon" alt="">
                         <input type="text" id="spotifySearchInput" class="spotify-search-input"
                                placeholder="What do you want to listen to?"
-                               onfocus="activateKeyboard(this, Spotify.performSearch)"
-                               onkeydown="if(event.key==='Enter'){Spotify.performSearch();hideKeyboard();}"
+                               onkeydown="if(event.key==='Enter'){Spotify.performSearch();}"
                                oninput="Spotify.toggleSearchClear()">
                         <button class="spotify-search-clear" id="spotifySearchClear" onclick="Spotify.clearSearch()" style="display:none;">
                             <img src="/icon/xmark" alt="Clear">
@@ -1980,7 +1979,6 @@ const Spotify = (function() {
         }
         toggleSearchClear();
         switchBrowseTab('home');
-        hideKeyboard();
     }
 
     async function performSearch() {
