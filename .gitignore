@@ -7,3 +7,14 @@ token.json
 client_secret*.json
 fontawesome-pro-6.7.2-web/*
 CLAUDE.md
+# Android build artifacts
+android-sensor-app/.gradle/
+android-sensor-app/.idea/
+android-sensor-app/build/
+android-sensor-app/app/build/
+android-sensor-app/local.properties
+android-sensor-app/*.iml
+android-sensor-app/app/*.iml
+android-sensor-app/captures/
+android-sensor-app/.externalNativeBuild/
+android-sensor-app/.cxx/

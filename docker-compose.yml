@@ -7,4 +7,5 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+      - ~/.android:/root/.android:ro
     restart: unless-stopped

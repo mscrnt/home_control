@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"home_control/internal/calendar"
@@ -25,6 +26,7 @@ import (
 	"home_control/internal/syncbox"
 	"home_control/internal/tasks"
 	"home_control/internal/weather"
+	"home_control/internal/adb"
 	"home_control/internal/websocket"
 
 	"github.com/go-chi/chi/v5"
@@ -46,6 +48,7 @@ var quietPaths = map[string]bool{
 // quietPrefixes are path prefixes that shouldn't spam logs
 var quietPrefixes = []string{
 	"/api/syncbox/",
+	"/api/tablet/sensor/",
 }
 
 // ConditionalLogger is a middleware that skips logging for certain paths
@@ -106,6 +109,13 @@ type Config struct {
 	// Spotify settings
 	SpotifyClientID     string
 	SpotifyClientSecret string
+	// Tablet ADB settings
+	TabletADBAddr          string
+	TabletProximityEnabled bool
+	TabletIdleTimeout      int  // Seconds before screen sleeps after no proximity
+	TabletAutoBrightness   bool
+	TabletMinBrightness    int
+	TabletMaxBrightness    int
 }
 
 // SyncBoxConfig holds configuration for a single Hue Sync Box
@@ -149,6 +159,22 @@ var wsHub *websocket.Hub
 var appConfig Config
 var calendarPrefs *CalendarPrefs
 var calendarPrefsFile string
+var tabletClient *adb.Client
+var proximityMonitor *adb.ProximityMonitor
+var brightnessController *adb.BrightnessController
+
+// Sensor state from Android app (HCC)
+var sensorState struct {
+	sync.RWMutex
+	ProximityNear    bool
+	LightLevel       float64
+	LastProximityAt  time.Time
+	LastLightAt      time.Time
+	ScreenIdleAt     time.Time // when screen should turn off due to no proximity
+	IdleTimeoutSecs  int       // seconds before screen turns off (from app config)
+}
+
+var tabletIdleTimeout = 60 * time.Second // default 60 seconds
 
 func main() {
 	// Load .env file if present (for local dev)
@@ -227,8 +253,14 @@ func main() {
 		DriveScreensaverFolder: getEnv("DRIVE_SCREENSAVER_FOLDER", ""),
 		DriveBackgroundFolder:  getEnv("DRIVE_BACKGROUND_FOLDER", ""),
 		ScreensaverTimeout:     parseIntEnv("SCREENSAVER_TIMEOUT", 300),
-		SpotifyClientID:        getEnv("SPOTIFY_CLIENT_ID", ""),
-		SpotifyClientSecret:    getEnv("SPOTIFY_CLIENT_SECRET", ""),
+		SpotifyClientID:           getEnv("SPOTIFY_CLIENT_ID", ""),
+		SpotifyClientSecret:       getEnv("SPOTIFY_CLIENT_SECRET", ""),
+		TabletADBAddr:             getEnv("TABLET_ADB_ADDR", ""),
+		TabletProximityEnabled:    getEnv("TABLET_PROXIMITY_ENABLED", "false") == "true",
+		TabletIdleTimeout:         parseIntEnv("TABLET_IDLE_TIMEOUT", 60),
+		TabletAutoBrightness:      getEnv("TABLET_AUTO_BRIGHTNESS", "false") == "true",
+		TabletMinBrightness:       parseIntEnv("TABLET_MIN_BRIGHTNESS", 20),
+		TabletMaxBrightness:       parseIntEnv("TABLET_MAX_BRIGHTNESS", 255),
 	}
 	appConfig = cfg
 	log.Printf("Using timezone: %s", loc.String())
@@ -409,6 +441,67 @@ func main() {
 		log.Printf("MQTT client connecting to %s:%d", cfg.MQTTHost, cfg.MQTTPort)
 	}
 
+	// Initialize Tablet ADB client
+	if cfg.TabletADBAddr != "" {
+		tabletClient = adb.NewClient(cfg.TabletADBAddr)
+		ctx := context.Background()
+
+		// Try to connect
+		if err := tabletClient.Connect(ctx); err != nil {
+			log.Printf("Warning: Failed to connect to tablet at %s: %v", cfg.TabletADBAddr, err)
+		} else {
+			log.Printf("Tablet ADB client connected to %s", cfg.TabletADBAddr)
+
+			// Start proximity monitoring if enabled
+			if cfg.TabletProximityEnabled {
+				idleTimeout := time.Duration(cfg.TabletIdleTimeout) * time.Second
+				proximityMonitor = adb.NewProximityMonitor(tabletClient, 500*time.Millisecond, idleTimeout)
+
+				// Track last activity for idle timeout
+				var lastActivity time.Time
+				var screenOn bool = true
+
+				proximityMonitor.OnApproach(func() {
+					lastActivity = time.Now()
+					if !screenOn {
+						if err := tabletClient.WakeScreen(context.Background()); err == nil {
+							screenOn = true
+							log.Println("Tablet: Screen woken by proximity")
+						}
+					}
+				})
+
+				proximityMonitor.OnDepart(func() {
+					// Start idle timer - screen will sleep after timeout
+					go func() {
+						time.Sleep(idleTimeout)
+						if time.Since(lastActivity) >= idleTimeout && screenOn {
+							if err := tabletClient.SleepScreen(context.Background()); err == nil {
+								screenOn = false
+								log.Println("Tablet: Screen sleeping due to idle")
+							}
+						}
+					}()
+				})
+
+				proximityMonitor.Start(ctx)
+				log.Printf("Tablet proximity monitoring enabled (idle timeout: %ds)", cfg.TabletIdleTimeout)
+			}
+
+			// Start auto-brightness if enabled
+			if cfg.TabletAutoBrightness {
+				brightnessController = adb.NewBrightnessController(
+					tabletClient,
+					5*time.Second, // Check every 5 seconds
+					cfg.TabletMinBrightness,
+					cfg.TabletMaxBrightness,
+				)
+				brightnessController.Start(ctx)
+				log.Printf("Tablet auto-brightness enabled (range: %d-%d)", cfg.TabletMinBrightness, cfg.TabletMaxBrightness)
+			}
+		}
+	}
+
 	// Load templates with custom functions
 	funcMap := template.FuncMap{
 		"formatDate":     formatDate,
@@ -506,6 +599,16 @@ func main() {
 
 	// Webhook for Home Assistant doorbell events
 	r.Post("/api/webhook/doorbell", handleDoorbellWebhook)
+
+	// Tablet ADB control routes
+	r.Get("/api/tablet/status", handleGetTabletStatus)
+	r.Post("/api/tablet/screen/wake", handleTabletWake)
+	r.Post("/api/tablet/screen/sleep", handleTabletSleep)
+	r.Post("/api/tablet/brightness", handleSetTabletBrightness)
+	r.Post("/api/tablet/auto-brightness", handleSetTabletAutoBrightness)
+	r.Post("/api/tablet/sensor/proximity", handleTabletProximity)
+	r.Post("/api/tablet/sensor/light", handleTabletLight)
+	r.Get("/api/tablet/sensor/state", handleGetSensorState)
 
 	// Hue API routes
 	r.Get("/api/hue/rooms", handleGetHueRooms)
@@ -3570,4 +3673,252 @@ func getCalendarsWithPrefs(ctx context.Context) ([]CalendarWithPrefs, error) {
 	}
 
 	return result, nil
+}
+
+// Tablet ADB control handlers
+
+func handleGetTabletStatus(w http.ResponseWriter, r *http.Request) {
+	if tabletClient == nil {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	status, err := tabletClient.GetStatus(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to get tablet status: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Add sensor data from HCC app
+	sensorState.RLock()
+	response := map[string]interface{}{
+		"connected":       status.Connected,
+		"screenOn":        status.ScreenOn,
+		"batteryLevel":    status.BatteryLevel,
+		"batteryCharging": status.BatteryCharging,
+		"brightness":      status.Brightness,
+		"screenTimeout":   status.ScreenTimeout,
+		"proximityNear":   sensorState.ProximityNear,
+		"lightLevel":      sensorState.LightLevel,
+		"lastProximityAt": sensorState.LastProximityAt,
+		"lastLightAt":     sensorState.LastLightAt,
+	}
+	sensorState.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleTabletWake(w http.ResponseWriter, r *http.Request) {
+	if tabletClient == nil {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := tabletClient.WakeScreen(r.Context()); err != nil {
+		http.Error(w, "Failed to wake screen: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+func handleTabletSleep(w http.ResponseWriter, r *http.Request) {
+	if tabletClient == nil {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := tabletClient.SleepScreen(r.Context()); err != nil {
+		http.Error(w, "Failed to sleep screen: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+func handleSetTabletBrightness(w http.ResponseWriter, r *http.Request) {
+	if tabletClient == nil {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Brightness int `json:"brightness"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := tabletClient.SetBrightness(r.Context(), req.Brightness); err != nil {
+		http.Error(w, "Failed to set brightness: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":    true,
+		"brightness": req.Brightness,
+	})
+}
+
+func handleSetTabletAutoBrightness(w http.ResponseWriter, r *http.Request) {
+	if brightnessController == nil {
+		http.Error(w, "Auto-brightness not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	brightnessController.SetEnabled(req.Enabled)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"enabled": req.Enabled,
+	})
+}
+
+// handleTabletProximity receives proximity sensor data from HCC app
+func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Near        bool `json:"near"`
+		IdleTimeout int  `json:"idleTimeout"` // seconds
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sensorState.Lock()
+	wasNear := sensorState.ProximityNear
+	sensorState.ProximityNear = req.Near
+	sensorState.LastProximityAt = time.Now()
+	if req.IdleTimeout > 0 {
+		sensorState.IdleTimeoutSecs = req.IdleTimeout
+		tabletIdleTimeout = time.Duration(req.IdleTimeout) * time.Second
+	}
+
+	// Handle screen wake/sleep based on proximity
+	if req.Near && !wasNear {
+		// Someone approached - wake the screen
+		sensorState.ScreenIdleAt = time.Time{} // clear idle timer
+		sensorState.Unlock()
+		if tabletClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			tabletClient.WakeScreen(ctx)
+		}
+	} else if !req.Near && wasNear {
+		// Someone left - start idle timer
+		sensorState.ScreenIdleAt = time.Now().Add(tabletIdleTimeout)
+		sensorState.Unlock()
+	} else if !req.Near {
+		// Still no one near - check if idle timer expired
+		idleAt := sensorState.ScreenIdleAt
+		sensorState.Unlock()
+		if !idleAt.IsZero() && time.Now().After(idleAt) {
+			if tabletClient != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				tabletClient.SleepScreen(ctx)
+			}
+			sensorState.Lock()
+			sensorState.ScreenIdleAt = time.Time{} // clear after sleeping
+			sensorState.Unlock()
+		}
+	} else {
+		sensorState.Unlock()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+	})
+}
+
+// handleTabletLight receives light sensor data from HCC app
+func handleTabletLight(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Lux float64 `json:"lux"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sensorState.Lock()
+	sensorState.LightLevel = req.Lux
+	sensorState.LastLightAt = time.Now()
+	sensorState.Unlock()
+
+	// Adjust brightness based on light level if auto-brightness is enabled
+	if tabletClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Map lux to brightness (0-255)
+		// 0-10 lux: dim room -> 10-30 brightness
+		// 10-100 lux: indoor -> 30-100 brightness
+		// 100-1000 lux: bright indoor -> 100-200 brightness
+		// 1000+ lux: direct sunlight -> 200-255 brightness
+		brightness := luxToBrightness(req.Lux)
+		tabletClient.SetBrightness(ctx, brightness)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":    true,
+		"brightness": luxToBrightness(req.Lux),
+	})
+}
+
+// luxToBrightness maps light level to screen brightness (0-255)
+func luxToBrightness(lux float64) int {
+	if lux <= 0 {
+		return 10
+	}
+	if lux < 10 {
+		// Dim room: 10-30
+		return 10 + int(lux*2)
+	}
+	if lux < 100 {
+		// Indoor: 30-100
+		return 30 + int((lux-10)*0.78)
+	}
+	if lux < 1000 {
+		// Bright indoor: 100-200
+		return 100 + int((lux-100)*0.11)
+	}
+	// Direct sunlight: 200-255
+	brightness := 200 + int((lux-1000)*0.005)
+	if brightness > 255 {
+		brightness = 255
+	}
+	return brightness
+}
+
+// handleGetSensorState returns the current sensor state
+func handleGetSensorState(w http.ResponseWriter, r *http.Request) {
+	sensorState.RLock()
+	defer sensorState.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"proximityNear":   sensorState.ProximityNear,
+		"lightLevel":      sensorState.LightLevel,
+		"lastProximityAt": sensorState.LastProximityAt,
+		"lastLightAt":     sensorState.LastLightAt,
+		"screenIdleAt":    sensorState.ScreenIdleAt,
+		"idleTimeoutSecs": sensorState.IdleTimeoutSecs,
+	})
 }
