@@ -35,14 +35,35 @@ import (
 )
 
 var pageTemplates map[string]*template.Template
+var templateFuncMap template.FuncMap
+
+// devMode enables hot-reloading of templates (set via DEV_MODE env var)
+var devMode = os.Getenv("DEV_MODE") == "true"
+
+// getTemplate returns a template, re-parsing in dev mode for hot reload
+func getTemplate(page string) *template.Template {
+	if devMode {
+		t, err := template.New("").Funcs(templateFuncMap).ParseFiles(
+			filepath.Join("templates", "base.html"),
+			filepath.Join("templates", page+".html"),
+		)
+		if err != nil {
+			log.Printf("Template parse error for %s: %v", page, err)
+			return pageTemplates[page] // fallback to cached
+		}
+		return t
+	}
+	return pageTemplates[page]
+}
 
 // quietPaths are endpoints that get polled frequently and shouldn't spam logs
 var quietPaths = map[string]bool{
-	"/api/hue/rooms":       true,
-	"/api/ha/states":       true,
-	"/api/entities":        true,
-	"/api/syncbox":         true,
+	"/api/hue/rooms":        true,
+	"/api/ha/states":        true,
+	"/api/entities":         true,
+	"/api/syncbox":          true,
 	"/api/spotify/playback": true,
+	"/api/calendar/events":  true,
 }
 
 // quietPrefixes are path prefixes that shouldn't spam logs
@@ -503,7 +524,7 @@ func main() {
 	}
 
 	// Load templates with custom functions
-	funcMap := template.FuncMap{
+	templateFuncMap = template.FuncMap{
 		"formatDate":     formatDate,
 		"formatTime":     formatTime,
 		"formatDateTime": formatDateTime,
@@ -520,7 +541,7 @@ func main() {
 	pageTemplates = make(map[string]*template.Template)
 	pages := []string{"calendar", "home"}
 	for _, page := range pages {
-		t, err := template.New("").Funcs(funcMap).ParseFiles(
+		t, err := template.New("").Funcs(templateFuncMap).ParseFiles(
 			filepath.Join("templates", "base.html"),
 			filepath.Join("templates", page+".html"),
 		)
@@ -821,7 +842,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		data["DayEvents"] = dayEvents
 	}
 
-	pageTemplates["calendar"].ExecuteTemplate(w, "base", data)
+	getTemplate("calendar").ExecuteTemplate(w, "base", data)
 }
 
 type DayEvents struct {
@@ -1140,7 +1161,7 @@ func handleHome(cfg Config) http.HandlerFunc {
 			"WeatherConfigured": appConfig.OpenWeatherAPIKey != "",
 			"Cameras":           cameras,
 		}
-		pageTemplates["home"].ExecuteTemplate(w, "base", data)
+		getTemplate("home").ExecuteTemplate(w, "base", data)
 	}
 }
 

@@ -2,22 +2,22 @@
    Hue Logo Styles
    ============================================ */
 .hue-logo {
-    height: 3rem;
+    height: 1.8rem;
     width: auto;
     filter: brightness(0) invert(1);
 }
 
 .hue-logo-modal {
-    height: 3rem;
+    height: 2rem;
     width: auto;
     filter: brightness(0) invert(1);
-    margin-right: 0.75rem;
+    margin-right: 0.25rem;
 }
 
-.modal-header-lightbulb {
-    width: 2rem;
-    height: 2rem;
-    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
+/* Light theme: make Hue logos dark */
+[data-theme="light"] .hue-logo,
+[data-theme="light"] .hue-logo-modal {
+    filter: brightness(0) invert(0.2);
 }
 
 /* ============================================
@@ -56,7 +56,7 @@
     align-items: center;
     justify-content: center;
     height: 200px;
-    color: #888;
+    color: var(--text-muted);
     font-size: 1.1rem;
 }
 
@@ -64,16 +64,16 @@
    Hue Room Card
    ============================================ */
 .hue-room-card {
-    background: #1a1a2e;
+    background: var(--bg-secondary);
     border-radius: 12px;
     overflow: hidden;
-    border: 1px solid #0f3460;
+    border: 1px solid var(--border);
     transition: all 0.2s;
 }
 
 .hue-room-card.room-on {
     border-color: #ffa726;
-    background: linear-gradient(135deg, #1a1a2e 0%, #1e2a40 100%);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-elevated) 100%);
 }
 
 .hue-room-header {
@@ -88,7 +88,7 @@
 }
 
 .hue-room-header:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-tertiary);
 }
 
 .hue-room-icon {
@@ -105,7 +105,7 @@
 .hue-room-name {
     font-size: 1.1rem;
     font-weight: 500;
-    color: #fff;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -113,7 +113,7 @@
 
 .hue-room-status {
     font-size: 0.85rem;
-    color: #888;
+    color: var(--text-muted);
     margin-top: 2px;
 }
 
@@ -130,7 +130,7 @@
     height: 36px;
     background: none;
     border: none;
-    color: #888;
+    color: var(--text-muted);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -140,8 +140,8 @@
 }
 
 .hue-room-expand:hover {
-    background: #0f3460;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .hue-room-expand svg {
@@ -161,8 +161,8 @@
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.3s ease;
-    background: rgba(0, 0, 0, 0.2);
-    border-top: 1px solid rgba(15, 52, 96, 0.5);
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-light);
 }
 
 .hue-room-card.expanded .hue-room-details {
@@ -171,7 +171,7 @@
 
 .hue-room-brightness {
     padding: 1rem;
-    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+    border-bottom: 1px solid var(--border-light);
 }
 
 .hue-room-brightness label,
@@ -179,7 +179,7 @@
 .hue-room-lights label {
     display: block;
     font-size: 0.85rem;
-    color: #888;
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -189,7 +189,7 @@
     width: 100%;
     height: 8px;
     border-radius: 4px;
-    background: #0f3460;
+    background: var(--bg-tertiary);
     appearance: none;
     cursor: pointer;
 }
@@ -210,7 +210,7 @@
    ============================================ */
 .hue-room-scenes {
     padding: 1rem;
-    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+    border-bottom: 1px solid var(--border-light);
 }
 
 .hue-scenes-grid {
@@ -221,10 +221,10 @@
 
 .hue-scene-btn {
     padding: 0.75rem 1rem;
-    background: #0f3460;
-    border: 1px solid #1e4d7b;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    color: #fff;
+    color: var(--text-primary);
     font-size: 0.9rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -234,7 +234,7 @@
 }
 
 .hue-scene-btn:hover {
-    background: #1e4d7b;
+    background: var(--bg-elevated);
     border-color: #ffa726;
 }
 
@@ -260,12 +260,12 @@
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s;
-    background: rgba(15, 52, 96, 0.3);
+    background: var(--bg-tertiary);
     border: 1px solid transparent;
 }
 
 .hue-light-row:hover {
-    background: rgba(15, 52, 96, 0.6);
+    background: var(--bg-elevated);
 }
 
 .hue-light-row.light-on {
@@ -306,7 +306,7 @@
 
 .hue-light-name {
     font-size: 1rem;
-    color: #fff;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -315,7 +315,7 @@
 
 .hue-light-state {
     font-size: 0.85rem;
-    color: #888;
+    color: var(--text-muted);
     margin-top: 2px;
 }
 
@@ -324,7 +324,7 @@
 }
 
 .no-lights {
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.9rem;
     padding: 0.5rem 0;
 }
@@ -340,7 +340,7 @@
    ============================================ */
 .hue-room-card.entertainment-area {
     border-color: #9c27b0;
-    background: linear-gradient(135deg, #1a1a2e 0%, #2a1a3e 100%);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(156, 39, 176, 0.15) 100%);
 }
 
 .hue-room-card.entertainment-area .hue-room-header:hover {
@@ -363,7 +363,7 @@
 
 .hue-room-card.entertainment-area.activated {
     border-color: #4caf50;
-    background: linear-gradient(135deg, #1a2e1a 0%, #1a3e2a 100%);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(76, 175, 80, 0.15) 100%);
 }
 
 .hue-room-card.entertainment-area.activated .entertainment-activate-icon {
@@ -421,7 +421,7 @@
 }
 
 .hue-tab:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-tertiary);
     color: var(--text-primary);
 }
 
@@ -527,7 +527,7 @@
 .hue-room-power svg {
     width: 240px;
     height: 240px;
-    stroke: #888;
+    stroke: var(--text-muted);
     transition: stroke 0.3s ease;
 }
 
@@ -713,13 +713,13 @@
 .hue-entertainment-area-btn .area-name {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--text-primary);
     text-align: center;
 }
 
 .hue-entertainment-area-btn .area-lights {
     font-size: 0.8rem;
-    color: #b0b0b0;
+    color: var(--text-muted);
 }
 
 .hue-entertainment-selected {
@@ -1061,7 +1061,7 @@
     display: block;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--text-secondary);
     margin-bottom: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1090,12 +1090,12 @@
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s;
-    background: rgba(15, 52, 96, 0.3);
+    background: var(--bg-tertiary);
     border: 1px solid transparent;
 }
 
 .hue-syncbox-tile:hover {
-    background: rgba(15, 52, 96, 0.6);
+    background: var(--bg-elevated);
 }
 
 .hue-syncbox-tile.selected {
@@ -1109,13 +1109,13 @@
 
 .hue-syncbox-tile .tile-name {
     font-size: 1rem;
-    color: #fff;
+    color: var(--text-primary);
     font-weight: 500;
 }
 
 .hue-syncbox-tile .tile-info {
     font-size: 0.85rem;
-    color: #888;
+    color: var(--text-muted);
 }
 
 /* Legacy layout styles - keep for backwards compat */
@@ -1138,7 +1138,7 @@
     display: block;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--text-secondary);
     margin-bottom: 0.5rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1172,7 +1172,7 @@
 
 .hue-syncbox-setting-btn .setting-label {
     font-size: 0.85rem;
-    color: #b0b0b0;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 0.35rem;
@@ -1180,7 +1180,7 @@
 
 .hue-syncbox-setting-btn .setting-value {
     font-size: 1.3rem;
-    color: #ffffff;
+    color: var(--text-primary);
     font-weight: 600;
 }
 
@@ -1205,7 +1205,7 @@
     padding: 1rem;
     background: var(--bg-secondary);
     border-radius: 8px;
-    color: #c0c0c0;
+    color: var(--text-secondary);
     font-size: 0.95rem;
     text-align: center;
     margin-bottom: 1rem;
@@ -1273,7 +1273,7 @@
 
 .syncbox-modal-option .option-label {
     font-size: 1.1rem;
-    color: #ffffff;
+    color: var(--text-primary);
     font-weight: 600;
 }
 
@@ -1354,7 +1354,7 @@
 }
 
 .light-brightness-toggle-row:hover {
-    background: rgba(15, 52, 96, 0.6);
+    background: var(--bg-tertiary);
 }
 
 .light-brightness-toggle-label {
@@ -1375,7 +1375,7 @@
     height: 40px;
     -webkit-appearance: none;
     appearance: none;
-    background: linear-gradient(to right, #333, #ffa726);
+    background: linear-gradient(to right, var(--bg-tertiary), #ffa726);
     border-radius: 20px;
     cursor: pointer;
 }
@@ -1383,7 +1383,7 @@
 .light-brightness-slider-container input[type="range"]::-webkit-slider-runnable-track {
     height: 40px;
     border-radius: 20px;
-    background: linear-gradient(to right, #333, #ffa726);
+    background: linear-gradient(to right, var(--bg-tertiary), #ffa726);
 }
 
 .light-brightness-slider-container input[type="range"]::-webkit-slider-thumb {
@@ -1401,7 +1401,7 @@
 .light-brightness-slider-container input[type="range"]::-moz-range-track {
     height: 40px;
     border-radius: 20px;
-    background: linear-gradient(to right, #333, #ffa726);
+    background: linear-gradient(to right, var(--bg-tertiary), #ffa726);
 }
 
 .light-brightness-slider-container input[type="range"]::-moz-range-thumb {
@@ -1437,15 +1437,15 @@
     gap: 0.75rem;
     width: 100%;
     padding: 1rem 1.5rem;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 2px solid var(--border-color);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    border: 2px solid var(--border);
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .hue-scenes-open-btn:hover {
-    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-elevated) 100%);
     border-color: var(--primary-color);
 }
 
@@ -1511,4 +1511,178 @@
     background: var(--hover-bg);
     border-color: var(--primary-color);
     color: var(--primary-color);
+}
+
+/* ============================================
+   Light Theme Overrides
+   ============================================ */
+[data-theme="light"] .hue-room-power {
+    background: var(--bg-elevated);
+    border: 3px solid var(--border);
+}
+
+[data-theme="light"] .hue-room-power svg {
+    stroke: var(--text-muted);
+}
+
+[data-theme="light"] .hue-room-power.on {
+    border-color: var(--accent);
+    background: var(--bg-elevated);
+    box-shadow: 0 0 30px rgba(45, 84, 94, 0.3);
+}
+
+[data-theme="light"] .hue-room-power.on svg {
+    stroke: var(--accent);
+}
+
+[data-theme="light"] .hue-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+[data-theme="light"] .hue-light-row {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+}
+
+[data-theme="light"] .hue-light-row.light-on {
+    background: rgba(45, 84, 94, 0.1);
+    border-color: var(--accent);
+}
+
+[data-theme="light"] .hue-scenes-open-btn {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .hue-scenes-open-btn:hover {
+    border-color: var(--accent);
+}
+
+[data-theme="light"] .scenes-btn-count {
+    background: var(--accent);
+}
+
+[data-theme="light"] .hue-scene-btn:hover {
+    border-color: var(--accent);
+}
+
+[data-theme="light"] .hue-room-card.room-on {
+    border-color: var(--accent);
+}
+
+[data-theme="light"] .hue-tabs {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .hue-tab:hover {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .hue-room-card {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .hue-room-header:hover {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .hue-room-details {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .hue-syncbox-tile {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+}
+
+[data-theme="light"] .hue-syncbox-tile:hover {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .hue-syncbox-radio {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .hue-syncbox-radio:hover {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .hue-entertainment-area-btn {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .hue-entertainment-area-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+}
+
+[data-theme="light"] .light-brightness-toggle-row {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .light-brightness-toggle-row:hover {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .scene-modal-btn {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .scene-modal-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+[data-theme="light"] .syncbox-modal-option {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+[data-theme="light"] .syncbox-modal-option:hover {
+    background: var(--bg-secondary);
+}
+
+/* Entertainment tab light theme - uses warm plum to complement Sand Tan palette */
+[data-theme="light"] .hue-tab.entertainment {
+    color: #7c3aed;
+}
+
+[data-theme="light"] .hue-tab.entertainment:hover {
+    background: rgba(124, 58, 237, 0.12);
+    color: #6d28d9;
+}
+
+[data-theme="light"] .hue-tab.entertainment.active {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: white;
+}
+
+/* Sync warning banner light theme */
+[data-theme="light"] .hue-sync-warning-banner {
+    background: rgba(124, 58, 237, 0.1);
+    border-color: rgba(124, 58, 237, 0.3);
+}
+
+[data-theme="light"] .sync-warning-title {
+    color: #6d28d9;
+}
+
+[data-theme="light"] .sync-warning-subtitle {
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .sync-warning-stop-btn {
+    background: #7c3aed;
+}
+
+[data-theme="light"] .sync-warning-stop-btn:hover {
+    background: #6d28d9;
 }

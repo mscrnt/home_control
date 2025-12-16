@@ -25,7 +25,7 @@
         <div class="group-card" onclick="openGroupModal('{{$group.Name}}')" data-group="{{$group.Name}}">
             <div class="group-card-icon">{{if eq $group.Name "Tesla"}}<img src="/icon/tesla-svgrepo-com" class="group-icon group-icon-tesla" alt="">{{else if eq $group.Name "Security"}}<img src="/icon/lock" class="group-icon" alt="">{{else if eq $group.Name "Home"}}<img src="/icon/house-chimney" class="group-icon" alt="">{{else if eq $group.Name "Climate"}}<img src="/icon/temperature-high" class="group-icon" alt="">{{else if eq $group.Name "Lights"}}<img src="/icon/lightbulb" class="group-icon" alt="">{{else}}{{$group.Icon}}{{end}}</div>
             <div class="group-card-info">
-                <div class="group-card-name">{{$group.Name}}</div>
+                <div class="group-card-name">{{if eq $group.Name "Tesla"}}<img src="/icon/tesla-motors-logo-svgrepo-com" class="tesla-logo" alt="Tesla">{{else}}{{$group.Name}}{{end}}</div>
                 <div class="group-card-summary" id="summary-{{$group.Name}}">
                     {{len $group.Cards}} device{{if ne (len $group.Cards) 1}}s{{end}}
                 </div>
@@ -39,7 +39,7 @@
         {{end}}
         <!-- Hue Lights Card -->
         <div class="group-card" onclick="openHueModal()" data-group="Hue">
-            <div class="group-card-icon"><img src="/icon/lightbulb" class="group-icon" alt=""></div>
+            <div class="group-card-icon"><img src="/icon/lightbulb-hue-svgrepo-com" class="group-icon" alt=""></div>
             <div class="group-card-info">
                 <div class="group-card-name"><img src="/icon/philipshue-svgrepo-com" class="hue-logo" alt="Philips Hue"></div>
                 <div class="group-card-summary" id="summary-Hue">Loading...</div>
@@ -54,7 +54,7 @@
         <div class="group-card" onclick="openSpotifyModal()" data-group="Spotify" id="spotifyCard" style="display: none;">
             <div class="group-card-icon"><img src="/icon/spotify" class="group-icon group-icon-spotify" alt=""></div>
             <div class="group-card-info">
-                <div class="group-card-name">Spotify</div>
+                <div class="group-card-name"><img src="/icon/spotify-1-logo-svgrepo-com" class="spotify-logo" alt="Spotify"></div>
                 <div class="group-card-summary" id="summary-Spotify">Not playing</div>
             </div>
             <div class="group-card-arrow">
@@ -245,7 +245,6 @@
         <div class="modal-header-row">
             <div class="modal-header-title">
                 <img src="/icon/philipshue-svgrepo-com" class="hue-logo-modal" alt="Philips Hue">
-                <img src="/icon/lightbulb" class="modal-header-lightbulb" alt="">
             </div>
             <button class="modal-close-btn" onclick="closeHueModal()">&times;</button>
         </div>
@@ -260,8 +259,7 @@
     <div class="modal-content modal-spotify-fullscreen">
         <div class="modal-header-row">
             <div class="modal-header-title">
-                <img src="/icon/spotify" class="spotify-logo-modal" alt="Spotify">
-                <h3>Spotify</h3>
+                <img src="/icon/spotify-1-logo-svgrepo-com" class="spotify-logo-modal" alt="Spotify">
             </div>
             <button class="modal-close-btn" onclick="closeSpotifyModal()">&times;</button>
         </div>

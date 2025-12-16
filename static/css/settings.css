@@ -5,10 +5,10 @@
     width: 40px;
     height: 40px;
     padding: 0;
-    background: #16213e;
+    background: var(--bg-secondary);
     border: none;
     border-radius: 8px;
-    color: #888;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
     display: flex;
@@ -17,12 +17,12 @@
 }
 
 .settings-btn:hover {
-    background: #0f3460;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .settings-btn:active {
-    background: #e94560;
+    background: var(--accent);
     color: white;
 }
 
@@ -41,7 +41,7 @@
 .settings-section {
     margin-bottom: 1.5rem;
     padding-bottom: 1.5rem;
-    border-bottom: 1px solid #1a1a2e;
+    border-bottom: 1px solid var(--border-light);
 }
 
 .settings-section:last-of-type {
@@ -53,7 +53,7 @@
 .settings-section-title {
     font-size: 0.85rem;
     font-weight: 600;
-    color: #888;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin: 0 0 1rem 0;
@@ -61,7 +61,7 @@
 
 .settings-hint {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-muted);
     margin: 0.5rem 0 0 0;
     line-height: 1.4;
 }
@@ -87,23 +87,23 @@
     align-items: center;
     gap: 8px;
     padding: 16px 12px;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border: 2px solid transparent;
     border-radius: 12px;
-    color: #888;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .theme-option:hover {
-    background: #1e3a5f;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .theme-option.active {
-    background: #16213e;
-    border-color: #e94560;
-    color: #eee;
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+    color: var(--text-primary);
 }
 
 .theme-option svg {
@@ -127,10 +127,10 @@
 .format-btn {
     flex: 1;
     padding: 12px 16px;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border: 2px solid transparent;
     border-radius: 8px;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
@@ -139,14 +139,14 @@
 }
 
 .format-btn:hover {
-    background: #1e3a5f;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .format-btn.active {
-    background: #16213e;
-    border-color: #e94560;
-    color: #eee;
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+    color: var(--text-primary);
 }
 
 /* ============================================
@@ -157,7 +157,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border-radius: 8px;
     font-size: 0.9rem;
 }
@@ -169,9 +169,9 @@
 }
 
 .weather-status.connected .status-dot {
-    background: #00b894;
+    background: var(--success);
 }
 
 .weather-status.disconnected .status-dot {
-    background: #636e72;
+    background: var(--text-muted);
 }

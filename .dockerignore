@@ -23,3 +23,6 @@ data/
 # Documentation
 *.md
 LICENSE
+
+# Android app (separate project, not needed for server)
+android-sensor-app/

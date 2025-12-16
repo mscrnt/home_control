@@ -5,7 +5,13 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      - DEV_MODE=true  # Remove this line for production
+      - ICONS_DEV_PATH=/app/icons  # Remove this line for production
     volumes:
       - ./data:/app/data
       - ~/.android:/root/.android:ro
+      - ./static:/app/static
+      - ./templates:/app/templates
+      - ./internal/icons/svg:/app/icons:ro  # Remove this line for production
     restart: unless-stopped

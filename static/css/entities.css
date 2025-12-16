@@ -10,8 +10,9 @@
 }
 
 .group-card {
-    background: rgba(22, 33, 62, 0.6);
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-radius: 24px;
     padding: 2.75rem 2rem;
     display: flex;
@@ -21,15 +22,26 @@
     gap: 1.75rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px var(--shadow);
     min-height: 360px;
     text-align: center;
 }
 
 .group-card:hover {
-    background: rgba(30, 42, 74, 0.7);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.25);
+    border-color: var(--accent);
+    box-shadow: 0 8px 24px var(--shadow);
     transform: translateY(-2px);
+}
+
+[data-theme="light"] .group-card {
+    background: rgba(253, 251, 248, 0.5);
+    border: 1px solid var(--border);
+}
+
+[data-theme="light"] .group-card:hover {
+    background: rgba(255, 255, 255, 0.9);
 }
 
 .group-card:active {
@@ -47,14 +59,37 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(233, 69, 96, 0.1);
+    background: var(--accent-soft);
     border-radius: 18px;
 }
 
 .group-card-icon .group-icon {
-    width: 3.25rem;
-    height: 3.25rem;
+    width: 5rem;
+    height: 5rem;
     filter: brightness(0) invert(1);
+}
+
+/* Hue lightbulb icon - larger to match other icons visually */
+.group-card-icon .group-icon[src*="lightbulb-hue"] {
+    width: 8rem;
+    height: 8rem;
+}
+
+/* Light theme: make group icons dark */
+[data-theme="light"] .group-card-icon .group-icon {
+    filter: brightness(0) invert(0.25);
+}
+
+/* Tesla logo for card */
+.tesla-logo {
+    height: 1.5rem;
+    width: auto;
+    max-width: 8rem;
+    filter: brightness(0) invert(1);
+}
+
+[data-theme="light"] .tesla-logo {
+    filter: brightness(0) invert(0.2);
 }
 
 .group-card-info {
@@ -69,7 +104,7 @@
 .group-card-name {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -78,7 +113,7 @@
 
 .group-card-summary {
     font-size: 1rem;
-    color: #888;
+    color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -86,7 +121,7 @@
 }
 
 .group-card-arrow {
-    color: #666;
+    color: var(--text-muted);
     transition: transform 0.2s;
 }
 
@@ -96,7 +131,7 @@
 }
 
 .group-card:hover .group-card-arrow {
-    color: #e94560;
+    color: var(--accent);
     transform: translateX(4px);
 }
 
@@ -111,10 +146,10 @@
     gap: 0.75rem;
     font-size: 1.3rem;
     font-weight: 600;
-    color: #aaa;
+    color: var(--text-secondary);
     margin-bottom: 1rem;
     padding-bottom: 0.5rem;
-    border-bottom: 2px solid #0f3460;
+    border-bottom: 2px solid var(--border);
 }
 
 .group-icon {
@@ -128,7 +163,7 @@
 }
 
 .card {
-    background: #16213e;
+    background: var(--bg-secondary);
     border-radius: 14px;
     padding: 1.5rem;
     display: flex;
@@ -149,13 +184,13 @@
 .card-switch:hover,
 .card-fan:hover,
 .card-lock:hover {
-    background: #1e2a4a;
+    background: var(--bg-tertiary);
     transform: translateY(-2px);
 }
 
 .card-on {
-    border-color: #e94560;
-    background: #1e2a4a;
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
 }
 
 .card-loading {
@@ -183,14 +218,14 @@
 }
 
 .card-state {
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1rem;
     margin-top: 0.3rem;
     text-transform: capitalize;
 }
 
 .card-on .card-state {
-    color: #e94560;
+    color: var(--accent);
 }
 
 .no-cards {
@@ -199,7 +234,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #666;
+    color: var(--text-muted);
     text-align: center;
     gap: 0.5rem;
     font-size: 1.2rem;
@@ -210,7 +245,7 @@
 .card-binary_sensor .card-state {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #4fc3f7;
+    color: var(--info);
 }
 
 /* Weather */
@@ -238,7 +273,7 @@
     justify-content: center;
     align-items: center;
     padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--border);
     position: relative;
 }
 
@@ -252,7 +287,7 @@
     margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .group-modal-icon {
@@ -274,7 +309,7 @@
     height: 36px;
     background: none;
     border: none;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1.75rem;
     cursor: pointer;
     display: flex;
@@ -285,8 +320,8 @@
 }
 
 .modal-close-btn:hover {
-    background: #0f3460;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .group-modal-content {
@@ -301,7 +336,7 @@
     align-items: center;
     gap: 1rem;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--border);
     transition: background 0.2s;
 }
 
@@ -314,7 +349,7 @@
 }
 
 .entity-toggleable:hover {
-    background: #1a1a2e;
+    background: var(--bg-input);
 }
 
 .entity-loading {
@@ -336,7 +371,7 @@
 .entity-name {
     font-size: 1rem;
     font-weight: 500;
-    color: #eee;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -344,13 +379,13 @@
 
 .entity-state {
     font-size: 0.9rem;
-    color: #888;
+    color: var(--text-secondary);
     margin-top: 0.15rem;
     text-transform: capitalize;
 }
 
 .entity-on .entity-state {
-    color: #e94560;
+    color: var(--accent);
 }
 
 /* Toggle Switch */
@@ -361,16 +396,16 @@
 .toggle-switch {
     width: 52px;
     height: 28px;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border-radius: 14px;
     position: relative;
     transition: background 0.2s;
-    border: 2px solid #0f3460;
+    border: 2px solid var(--border);
 }
 
 .toggle-switch.on {
-    background: #e94560;
-    border-color: #e94560;
+    background: var(--accent);
+    border-color: var(--accent);
 }
 
 .toggle-slider {
@@ -379,7 +414,7 @@
     left: 2px;
     width: 20px;
     height: 20px;
-    background: #eee;
+    background: var(--text-primary);
     border-radius: 50%;
     transition: transform 0.2s;
 }
@@ -485,7 +520,7 @@
     flex-direction: column;
     gap: 0.75rem;
     padding-top: 0.5rem;
-    border-top: 1px solid #0f3460;
+    border-top: 1px solid var(--border);
 }
 
 .climate-temp-control {
@@ -499,9 +534,9 @@
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    border: 2px solid #0f3460;
-    background: #1a1a2e;
-    color: #eee;
+    border: 2px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-primary);
     font-size: 1.75rem;
     font-weight: 300;
     cursor: pointer;
@@ -513,13 +548,13 @@
 }
 
 .climate-btn:hover {
-    background: #0f3460;
-    border-color: #e94560;
+    background: var(--bg-tertiary);
+    border-color: var(--accent);
 }
 
 .climate-btn:active {
-    background: #e94560;
-    border-color: #e94560;
+    background: var(--accent);
+    border-color: var(--accent);
     transform: scale(0.95);
 }
 
@@ -531,12 +566,12 @@
 .climate-target-temp {
     font-size: 2.5rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .climate-temp-unit {
     font-size: 1.25rem;
-    color: #888;
+    color: var(--text-secondary);
     margin-left: 2px;
 }
 
@@ -560,22 +595,22 @@
 
 .climate-fan-label {
     font-size: 0.9rem;
-    color: #888;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
 .climate-fan-select {
     padding: 0.5rem 0.75rem;
-    background: #1a1a2e;
-    border: 2px solid #0f3460;
+    background: var(--bg-input);
+    border: 2px solid var(--border);
     border-radius: 8px;
-    color: #eee;
+    color: var(--text-primary);
     font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
     transition: border-color 0.2s;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238197AC' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.5rem center;
     padding-right: 1.75rem;
@@ -583,7 +618,7 @@
 
 .climate-fan-select:hover,
 .climate-fan-select:focus {
-    border-color: #e94560;
+    border-color: var(--accent);
     outline: none;
 }
 
@@ -591,17 +626,17 @@
     width: 100%;
     max-width: 200px;
     padding: 0.6rem 1rem;
-    background: #1a1a2e;
-    border: 2px solid #0f3460;
+    background: var(--bg-input);
+    border: 2px solid var(--border);
     border-radius: 8px;
-    color: #eee;
+    color: var(--text-primary);
     font-size: 1rem;
     font-weight: 500;
     text-align: center;
     cursor: pointer;
     transition: border-color 0.2s;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238197AC' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     padding-right: 2rem;
@@ -609,7 +644,7 @@
 
 .climate-mode-select:hover,
 .climate-mode-select:focus {
-    border-color: #e94560;
+    border-color: var(--accent);
     outline: none;
 }
 
@@ -624,8 +659,8 @@
     font-size: 0.85rem;
     font-weight: 600;
     text-transform: capitalize;
-    background: #1a1a2e;
-    color: #888;
+    background: var(--bg-input);
+    color: var(--text-secondary);
 }
 
 .climate-action.heating {
@@ -683,8 +718,8 @@
     letter-spacing: 0.5px;
     padding: 0.2rem 0.6rem;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    color: #888;
+    background: var(--accent-soft);
+    color: var(--text-secondary);
 }
 
 .thermostat-display .thermostat-action.heating {
@@ -751,7 +786,7 @@
 .thermostat-temps-single .temp-target {
     font-size: 3.5rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .thermostat-temps-single sup {
@@ -772,7 +807,7 @@
 .thermostat-current .current-temp {
     font-size: 3rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .thermostat-buttons {
@@ -787,23 +822,23 @@
     height: 48px;
     border-radius: 50%;
     border: none;
-    background: #1a1a2e;
-    color: #eee;
+    background: var(--bg-input);
+    color: var(--text-primary);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px var(--shadow);
 }
 
 .thermostat-btn:hover {
-    background: #2a2a4e;
+    background: var(--bg-tertiary);
     transform: scale(1.05);
 }
 
 .thermostat-btn:active {
-    background: #e94560;
+    background: var(--accent);
     transform: scale(0.95);
 }
 
@@ -815,7 +850,7 @@
 .thermostat-footer {
     margin-top: 0.75rem;
     padding-top: 0.75rem;
-    border-top: 1px solid #0f3460;
+    border-top: 1px solid var(--border);
 }
 
 .thermostat-footer .climate-mode-row {
@@ -848,7 +883,7 @@
 .thermostat-controls-right.single .temp-target {
     font-size: 2.5rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
     line-height: 1;
 }
 
@@ -909,8 +944,8 @@
     height: 32px;
     border-radius: 50%;
     border: none;
-    background: #1a1a2e;
-    color: #888;
+    background: var(--bg-input);
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -951,7 +986,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #888;
+    color: var(--text-secondary);
 }
 
 .thermostat-setpoint.heat .setpoint-label {
@@ -977,7 +1012,7 @@
 
 /* ===== Light Group Expandable Controls ===== */
 .light-group-card {
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--border);
 }
 
 .light-group-card:last-child {
@@ -998,7 +1033,7 @@
     height: 32px;
     background: none;
     border: none;
-    color: #888;
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1008,8 +1043,8 @@
 }
 
 .light-group-expand:hover {
-    background: #0f3460;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .light-group-expand svg {
@@ -1026,7 +1061,7 @@
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.3s ease;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--shadow);
 }
 
 .light-group-card.expanded .light-group-members {
@@ -1035,7 +1070,7 @@
 
 .light-member {
     padding: 0.75rem 1.5rem 0.75rem 3rem;
-    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+    border-bottom: 1px solid var(--border-light);
 }
 
 .light-member:last-child {

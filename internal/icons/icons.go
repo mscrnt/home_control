@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +13,10 @@ import (
 
 //go:embed svg/*.svg
 var svgFS embed.FS
+
+// DevIconsPath is the filesystem path to check for icons during development.
+// Set via ICONS_DEV_PATH env var. If empty or path doesn't exist, uses embedded.
+var DevIconsPath = os.Getenv("ICONS_DEV_PATH")
 
 // Handler returns an http.HandlerFunc that serves SVG icons
 func Handler() http.HandlerFunc {
@@ -31,15 +36,32 @@ func Handler() http.HandlerFunc {
 			}
 		}
 
-		// Read the SVG file
-		data, err := fs.ReadFile(svgFS, filepath.Join("svg", name+".svg"))
+		var data []byte
+		var err error
+
+		// Try filesystem first if DevIconsPath is set
+		if DevIconsPath != "" {
+			fsPath := filepath.Join(DevIconsPath, name+".svg")
+			data, err = os.ReadFile(fsPath)
+		}
+
+		// Fall back to embedded if filesystem failed or not configured
+		if data == nil || err != nil {
+			data, err = fs.ReadFile(svgFS, filepath.Join("svg", name+".svg"))
+		}
+
 		if err != nil {
 			http.Error(w, "icon not found", http.StatusNotFound)
 			return
 		}
 
 		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Header().Set("Cache-Control", "public, max-age=31536000") // Cache for 1 year
+		// Short cache for dev, long for prod
+		if DevIconsPath != "" {
+			w.Header().Set("Cache-Control", "no-cache")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=31536000")
+		}
 		w.Write(data)
 	}
 }

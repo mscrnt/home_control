@@ -1,3 +1,101 @@
+/* ============================================
+   Theme CSS Variables
+   ============================================ */
+:root {
+    /* Dark theme (default) */
+    --bg-primary: #0E141C;
+    --bg-secondary: #1a2332;
+    --bg-tertiary: #314B6E;
+    --bg-elevated: #1e2d42;
+    --bg-input: #0E141C;
+    --bg-hover: #607EA2;
+
+    --text-primary: #BDB3A3;
+    --text-secondary: #8197AC;
+    --text-muted: #607EA2;
+
+    --accent: #8197AC;          /* Weldon Blue */
+    --accent-hover: #9AADBC;     /* Lighter Weldon Blue */
+    --accent-soft: rgba(129, 151, 172, 0.25);
+
+    --border: #314B6E;
+    --border-light: #1e2d42;
+
+    --success: #7A9E8A;          /* Muted teal-green */
+    --danger: #C45B5B;           /* Muted red */
+    --info: #607EA2;             /* Rackley */
+
+    --shadow: rgba(0, 0, 0, 0.4);
+    --overlay: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="dark"] {
+    --bg-primary: #0E141C;
+    --bg-secondary: #1a2332;
+    --bg-tertiary: #314B6E;
+    --bg-elevated: #1e2d42;
+    --bg-input: #0E141C;
+    --bg-hover: #607EA2;
+
+    --text-primary: #BDB3A3;
+    --text-secondary: #8197AC;
+    --text-muted: #607EA2;
+
+    --accent: #8197AC;          /* Weldon Blue */
+    --accent-hover: #9AADBC;     /* Lighter Weldon Blue */
+    --accent-soft: rgba(129, 151, 172, 0.25);
+
+    --border: #314B6E;
+    --border-light: #1e2d42;
+
+    --success: #7A9E8A;          /* Muted teal-green */
+    --danger: #C45B5B;           /* Muted red */
+    --info: #607EA2;             /* Rackley */
+
+    --shadow: rgba(0, 0, 0, 0.4);
+    --overlay: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="light"] {
+    --bg-primary: rgba(225, 179, 130, 0.8);      /* Sand Tan - main background */
+    --bg-secondary: #f5ebe0;    /* Light cream - cards */
+    --bg-tertiary: #ecdcc8;     /* Warm beige - subtle elevation */
+    --bg-elevated: #fdfbf8;     /* Near white - modals/elevated */
+    --bg-input: #f2e8da;        /* Warm cream for inputs */
+    --bg-hover: #e8d4bc;        /* Sand tan lighter - hover */
+
+    --text-primary: #12343b;    /* Night Blue Shadow - primary text */
+    --text-secondary: #2d545e;  /* Night Blue - secondary text */
+    --text-muted: #5a7a82;      /* Muted blue-grey */
+
+    --accent: #2d545e;          /* Night Blue - accent */
+    --accent-hover: #12343b;    /* Night Blue Shadow - accent hover */
+    --accent-soft: rgba(45, 84, 94, 0.15);
+
+    --border: #c89666;          /* Sand Tan Shadow - borders */
+    --border-light: #d4a878;    /* Lighter sand - subtle borders */
+
+    --success: #4a7a5a;         /* Muted green */
+    --danger: #a54545;          /* Muted red */
+    --info: #2d545e;            /* Night Blue */
+
+    --shadow: rgba(18, 52, 59, 0.12);
+    --overlay: rgba(18, 52, 59, 0.6);
+}
+
+/* Light theme icon overrides - make icons dark instead of white */
+[data-theme="light"] .notification-icon,
+[data-theme="light"] .nav-icon {
+    filter: brightness(0) invert(0.25);
+}
+
+[data-theme="light"] .page-nav-btn:hover .nav-icon {
+    filter: brightness(0) invert(0);
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
 * {
     margin: 0;
     padding: 0;
@@ -10,8 +108,8 @@ html {
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #eee;
+    background: var(--bg-primary);
+    color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
 }
@@ -48,7 +146,7 @@ body {
     height: 44px;
     border-radius: 12px;
     border: none;
-    background: rgba(22, 33, 62, 0.6);
+    background: var(--bg-secondary);
     backdrop-filter: blur(8px);
     cursor: pointer;
     display: flex;
@@ -58,7 +156,7 @@ body {
 }
 
 .notification-btn:hover {
-    background: rgba(30, 42, 74, 0.8);
+    background: var(--bg-tertiary);
 }
 
 .notification-icon {
@@ -76,7 +174,7 @@ body {
     height: 18px;
     padding: 0 5px;
     border-radius: 9px;
-    background: #e94560;
+    background: var(--accent);
     color: #fff;
     font-size: 0.7rem;
     font-weight: 600;
@@ -86,10 +184,10 @@ body {
 }
 
 .page-nav-btn {
-    background: rgba(22, 33, 62, 0.6);
+    background: var(--bg-secondary);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    color: #fff;
+    color: var(--text-primary);
     text-decoration: none;
     padding: 0 1.25rem;
     height: 44px;
@@ -103,8 +201,8 @@ body {
 }
 
 .page-nav-btn:hover {
-    background: rgba(30, 42, 74, 0.8);
-    color: #fff;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .page-nav-btn:hover .nav-icon {
@@ -130,20 +228,20 @@ body {
 
 /* Person */
 .card-person .card-state {
-    color: #4caf50;
+    color: var(--success);
 }
 
 .card-person.card-on {
-    border-color: #4caf50;
+    border-color: var(--success);
 }
 
 /* Lock */
 .card-lock.card-on {
-    border-color: #4caf50;
+    border-color: var(--success);
 }
 
 .card-lock.card-on .card-state {
-    color: #4caf50;
+    color: var(--success);
 }
 
 /* Fan */
@@ -167,16 +265,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-    background: #1a1a2e;
+    background: var(--bg-primary);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #0f3460;
+    background: var(--bg-tertiary);
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #16213e;
+    background: var(--bg-hover);
 }
 
 /* Modal */
@@ -187,7 +285,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--overlay);
     z-index: 1000;
     align-items: center;
     justify-content: center;
@@ -198,7 +296,7 @@ body {
 }
 
 .modal-content {
-    background: #16213e;
+    background: var(--bg-secondary);
     border-radius: 16px;
     width: 95vw;
     max-width: 95vw;
@@ -227,18 +325,18 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--border);
 }
 
 .modal-header h2 {
     font-size: 1.3rem;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .modal-close {
     background: none;
     border: none;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1.5rem;
     cursor: pointer;
     padding: 0.5rem;
@@ -246,7 +344,7 @@ body {
 }
 
 .modal-close:hover {
-    color: #e94560;
+    color: var(--accent);
 }
 
 .modal-body {
@@ -258,7 +356,7 @@ body {
     justify-content: flex-end;
     gap: 1rem;
     padding: 1.25rem 1.5rem;
-    border-top: 1px solid #0f3460;
+    border-top: 1px solid var(--border);
 }
 
 /* Event details */
@@ -266,17 +364,17 @@ body {
     display: flex;
     gap: 1rem;
     padding: 0.75rem 0;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--border);
 }
 
 .detail-label {
-    color: #888;
+    color: var(--text-secondary);
     min-width: 80px;
     font-weight: 500;
 }
 
 .detail-value {
-    color: #eee;
+    color: var(--text-primary);
     flex: 1;
 }
 
@@ -287,7 +385,7 @@ body {
 
 .form-group label {
     display: block;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 0.95rem;
     margin-bottom: 0.5rem;
 }
@@ -295,16 +393,16 @@ body {
 .form-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    background: #1a1a2e;
-    border: 2px solid #0f3460;
+    background: var(--bg-input);
+    border: 2px solid var(--border);
     border-radius: 8px;
-    color: #eee;
+    color: var(--text-primary);
     font-size: 1rem;
 }
 
 .form-input:focus {
     outline: none;
-    border-color: #e94560;
+    border-color: var(--accent);
 }
 
 .form-row {
@@ -332,7 +430,7 @@ body {
 .type-toggle {
     display: flex;
     gap: 0;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border-radius: 8px;
     padding: 4px;
     margin-bottom: 1rem;
@@ -344,7 +442,7 @@ body {
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
@@ -352,18 +450,18 @@ body {
 }
 
 .type-btn:hover {
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .type-btn.active {
-    background: #e94560;
+    background: var(--accent);
     color: white;
 }
 
 /* Select dropdown styling */
 select.form-input {
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238197AC' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 1rem center;
     padding-right: 2.5rem;
@@ -381,25 +479,25 @@ select.form-input {
 }
 
 .modal-btn.primary {
-    background: #e94560;
+    background: var(--accent);
     color: white;
 }
 
 .modal-btn.primary:hover {
-    background: #d63550;
+    background: var(--accent-hover);
 }
 
 .modal-btn.secondary {
-    background: #0f3460;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .modal-btn.secondary:hover {
-    background: #1e3a5f;
+    background: var(--bg-hover);
 }
 
 .modal-btn.danger {
-    background: #d63031;
+    background: var(--danger);
     color: white;
 }
 
@@ -414,7 +512,7 @@ select.form-input {
 
 /* Text utilities */
 .text-muted {
-    color: #666;
+    color: var(--text-muted);
     font-size: 0.9rem;
 }
 
@@ -440,7 +538,7 @@ select.form-input {
 
 .color-option.active {
     border-color: white;
-    box-shadow: 0 0 0 2px #e94560;
+    box-shadow: 0 0 0 2px var(--accent);
 }
 
 
@@ -449,7 +547,7 @@ select.form-input {
     display: flex;
     align-items: center;
     gap: 4px;
-    background: #1a1a2e;
+    background: var(--bg-input);
     padding: 8px 12px;
     border-radius: 8px;
 }
@@ -464,10 +562,10 @@ select.form-input {
 .time-btn {
     width: 40px;
     height: 28px;
-    background: #16213e;
+    background: var(--bg-secondary);
     border: none;
     border-radius: 4px;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 0.9rem;
     cursor: pointer;
     display: flex;
@@ -477,37 +575,37 @@ select.form-input {
 }
 
 .time-btn:hover {
-    background: #1e3a5f;
-    color: #eee;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .time-btn:active {
-    background: #e94560;
+    background: var(--accent);
     color: white;
 }
 
 .time-field {
     width: 40px;
     height: 36px;
-    background: #0f3460;
+    background: var(--bg-tertiary);
     border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.3rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .time-field:hover {
-    background: #1e3a5f;
+    background: var(--bg-hover);
 }
 
 .time-field.active {
-    background: #e94560;
-    box-shadow: 0 0 0 2px #e94560;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
 }
 
 .time-field.ampm-field {
@@ -518,7 +616,7 @@ select.form-input {
 .time-separator {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #666;
+    color: var(--text-muted);
     padding: 0 2px;
 }
 
@@ -536,7 +634,7 @@ select.form-input {
     top: 100%;
     left: 0;
     right: 0;
-    background: #16213e;
+    background: var(--bg-secondary);
     border-radius: 0 0 8px 8px;
     max-height: 200px;
     overflow-y: auto;
@@ -551,8 +649,8 @@ select.form-input {
 .location-suggestion {
     padding: 12px 16px;
     cursor: pointer;
-    border-bottom: 1px solid #1a1a2e;
-    color: #eee;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-primary);
     font-size: 0.95rem;
     display: flex;
     align-items: flex-start;
@@ -565,7 +663,7 @@ select.form-input {
 
 .location-suggestion:hover,
 .location-suggestion:active {
-    background: #1e3a5f;
+    background: var(--bg-tertiary);
 }
 
 .suggestion-icon {
@@ -585,12 +683,12 @@ select.form-input {
     left: 0;
     right: 0;
     padding: 0.5rem;
-    background: #0a0a1a;
+    background: var(--bg-primary);
     border-radius: 16px 16px 0 0;
     z-index: 2000;
     transform: translateY(100%);
     transition: transform 0.3s ease;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 -4px 20px var(--shadow);
 }
 
 .number-pad.active {
@@ -602,17 +700,17 @@ select.form-input {
     justify-content: space-between;
     align-items: center;
     padding: 0.5rem 0.5rem 0.75rem;
-    border-bottom: 1px solid #1a1a2e;
+    border-bottom: 1px solid var(--border-light);
     margin-bottom: 0.5rem;
 }
 
 .numpad-title {
-    color: #888;
+    color: var(--text-secondary);
     font-size: 0.9rem;
 }
 
 .numpad-done {
-    background: #e94560;
+    background: var(--accent);
     color: white;
     border: none;
     padding: 0.5rem 1.25rem;
@@ -631,10 +729,10 @@ select.form-input {
 
 .numpad-key {
     height: 56px;
-    background: #16213e;
+    background: var(--bg-secondary);
     border: none;
     border-radius: 8px;
-    color: #eee;
+    color: var(--text-primary);
     font-size: 1.5rem;
     font-weight: 500;
     cursor: pointer;
@@ -645,20 +743,20 @@ select.form-input {
 }
 
 .numpad-key:hover {
-    background: #1e2a4a;
+    background: var(--bg-tertiary);
 }
 
 .numpad-key:active {
-    background: #e94560;
+    background: var(--accent);
 }
 
 .numpad-clear {
-    background: #0f3460;
-    color: #e94560;
+    background: var(--bg-tertiary);
+    color: var(--accent);
 }
 
 .numpad-ok {
-    background: #e94560;
+    background: var(--accent);
     color: white;
 }
 
@@ -674,16 +772,16 @@ body.numpad-open .modal-content {
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
-    background: #16213e;
+    background: var(--bg-secondary);
     border: none;
     border-radius: 8px;
-    color: #eee;
+    color: var(--text-primary);
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .weather-widget:hover {
-    background: #0f3460;
+    background: var(--bg-tertiary);
 }
 
 .weather-icon {
@@ -709,12 +807,12 @@ body.numpad-open .modal-content {
 .weather-error {
     padding: 2rem;
     text-align: center;
-    color: #888;
+    color: var(--text-secondary);
 }
 
 /* Current Weather */
 .weather-current {
-    background: linear-gradient(135deg, #1e3a5f 0%, #0f3460 100%);
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
     border-radius: 12px;
     padding: 1.25rem;
     margin-bottom: 1rem;
@@ -740,13 +838,13 @@ body.numpad-open .modal-content {
 .weather-current-temp {
     font-size: 3rem;
     font-weight: 300;
-    color: #fff;
+    color: var(--text-primary);
     line-height: 1;
 }
 
 .weather-current-condition {
     font-size: 1rem;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     margin-top: 0.25rem;
 }
 
@@ -763,7 +861,7 @@ body.numpad-open .modal-content {
     align-items: center;
     gap: 0.15rem;
     padding: 0.5rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--shadow);
     border-radius: 8px;
 }
 
@@ -775,12 +873,12 @@ body.numpad-open .modal-content {
 .weather-detail-value {
     font-size: 1rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-primary);
 }
 
 .weather-detail-label {
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     text-transform: uppercase;
 }
 
@@ -789,7 +887,7 @@ body.numpad-open .modal-content {
     justify-content: center;
     gap: 1.25rem;
     padding-top: 0.75rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid var(--border-light);
 }
 
 .weather-sun,
@@ -807,7 +905,7 @@ body.numpad-open .modal-content {
 .sun-time,
 .moon-phase {
     font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-secondary);
 }
 
 /* Weather Sections */
@@ -818,7 +916,7 @@ body.numpad-open .modal-content {
 .weather-section-title {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #888;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 0.75rem;
@@ -831,7 +929,7 @@ body.numpad-open .modal-content {
     overflow-x: auto;
     padding-bottom: 0.5rem;
     scrollbar-width: thin;
-    scrollbar-color: #0f3460 transparent;
+    scrollbar-color: var(--bg-tertiary) transparent;
 }
 
 .weather-hourly::-webkit-scrollbar {
@@ -843,7 +941,7 @@ body.numpad-open .modal-content {
 }
 
 .weather-hourly::-webkit-scrollbar-thumb {
-    background: #0f3460;
+    background: var(--bg-tertiary);
     border-radius: 2px;
 }
 
@@ -853,7 +951,7 @@ body.numpad-open .modal-content {
     align-items: center;
     gap: 0.35rem;
     padding: 0.6rem 0.75rem;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border-radius: 10px;
     min-width: 52px;
     flex-shrink: 0;
@@ -861,7 +959,7 @@ body.numpad-open .modal-content {
 
 .hourly-time {
     font-size: 0.7rem;
-    color: #888;
+    color: var(--text-secondary);
     white-space: nowrap;
 }
 
@@ -872,12 +970,12 @@ body.numpad-open .modal-content {
 .hourly-temp {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .hourly-pop {
     font-size: 0.65rem;
-    color: #4fc3f7;
+    color: var(--info);
 }
 
 /* Daily Forecast */
@@ -893,13 +991,13 @@ body.numpad-open .modal-content {
     align-items: center;
     gap: 0.5rem;
     padding: 0.6rem 0.75rem;
-    background: #1a1a2e;
+    background: var(--bg-input);
     border-radius: 8px;
 }
 
 .daily-day {
     font-size: 0.85rem;
-    color: #eee;
+    color: var(--text-primary);
     font-weight: 500;
 }
 
@@ -910,7 +1008,7 @@ body.numpad-open .modal-content {
 
 .daily-pop {
     font-size: 0.75rem;
-    color: #4fc3f7;
+    color: var(--info);
     min-width: 50px;
 }
 
@@ -923,14 +1021,14 @@ body.numpad-open .modal-content {
 .daily-high {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #eee;
+    color: var(--text-primary);
     min-width: 32px;
     text-align: right;
 }
 
 .daily-low {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--text-muted);
     min-width: 32px;
     text-align: right;
 }

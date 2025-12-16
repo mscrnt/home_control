@@ -167,36 +167,38 @@
                 </div>
             </div>
         </div>
-        {{range .WeekDays}}
-        <div class="week-day {{if .IsToday}}today{{end}}" data-date="{{.Date.Format "2006-01-02"}}">
-            <div class="week-day-header" onclick="openCreateModal('{{.Date.Format "2006-01-02"}}')">
-                <span class="week-day-name">{{.DayName}}</span>
-                <span class="week-day-date">{{.DateStr}}</span>
-                <span class="add-event-hint">+ Add</span>
-            </div>
-            <div class="week-day-events">
-                {{range .Events}}
-                <div class="event" {{if .Color}}style="border-left-color: {{.Color}}"{{end}}
-                     data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
-                     onclick="openEventDetails(this.dataset.event)">
-                    <div class="event-time">
-                        {{if .AllDay}}
-                        <span class="all-day">All day</span>
-                        {{else}}
-                        {{formatTime .Start}}
-                        {{end}}
-                    </div>
-                    <div class="event-details">
-                        <div class="event-title">{{.Title}}</div>
-                    </div>
+        <div class="week-days-scroll">
+            {{range .WeekDays}}
+            <div class="week-day {{if .IsToday}}today{{end}}" data-date="{{.Date.Format "2006-01-02"}}">
+                <div class="week-day-header" onclick="openCreateModal('{{.Date.Format "2006-01-02"}}')">
+                    <span class="week-day-name">{{.DayName}}</span>
+                    <span class="week-day-date">{{.DateStr}}</span>
+                    <span class="add-event-hint">+ Add</span>
                 </div>
-                {{end}}
-                {{if not .Events}}
-                <div class="no-events-small" onclick="openCreateModal('{{.Date.Format "2006-01-02"}}')">Tap to add event</div>
-                {{end}}
+                <div class="week-day-events">
+                    {{range .Events}}
+                    <div class="event" {{if .Color}}style="border-left-color: {{.Color}}"{{end}}
+                         data-event='{"id":"{{.ID}}","calendarId":"{{.CalendarID}}","title":"{{.Title}}","start":"{{.Start.Format "2006-01-02T15:04"}}","end":"{{.End.Format "2006-01-02T15:04"}}","allDay":{{.AllDay}},"location":"{{.Location}}","description":"{{.Description}}","colorId":"{{.ColorID}}","recurring":{{.Recurring}}}'
+                         onclick="openEventDetails(this.dataset.event)">
+                        <div class="event-time">
+                            {{if .AllDay}}
+                            <span class="all-day">All day</span>
+                            {{else}}
+                            {{formatTime .Start}}
+                            {{end}}
+                        </div>
+                        <div class="event-details">
+                            <div class="event-title">{{.Title}}</div>
+                        </div>
+                    </div>
+                    {{end}}
+                    {{if not .Events}}
+                    <div class="no-events-small" onclick="openCreateModal('{{.Date.Format "2006-01-02"}}')">Tap to add event</div>
+                    {{end}}
+                </div>
             </div>
+            {{end}}
         </div>
-        {{end}}
     </div>
     {{else}}
     {{/* Day view - 24-hour timeline */}}
@@ -1629,9 +1631,15 @@ function addCurrentTimeLine() {
     const timeline = document.getElementById('dayTimeline');
     if (!timeline) return;
 
-    // Check if viewing today
+    const eventsContainer = timeline.querySelector('.timeline-events');
+    if (!eventsContainer) return;
+
+    // Check if viewing today (use local date for comparison)
     const viewDate = '{{.CurrentDate}}';
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
     if (viewDate !== today) return;
 
     // Remove existing line if any
@@ -1639,7 +1647,6 @@ function addCurrentTimeLine() {
     if (existing) existing.remove();
 
     // Create and position the line
-    const now = new Date();
     const minutes = now.getHours() * 60 + now.getMinutes();
     const hourHeight = 60;
     const top = (minutes / 60) * hourHeight;
@@ -1648,7 +1655,7 @@ function addCurrentTimeLine() {
     line.className = 'current-time-line';
     line.style.top = top + 'px';
 
-    timeline.querySelector('.timeline-events').appendChild(line);
+    eventsContainer.appendChild(line);
 }
 
 function scrollToCurrentTime() {
