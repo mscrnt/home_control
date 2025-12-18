@@ -2528,5 +2528,255 @@ setTimeout(checkForEventUpdates, 5000);
         restoreLastView();
     }
 })();
+
+// Async event loading - fetch and render events after page shell loads
+{{if .AsyncLoad}}
+(function() {
+    const view = '{{.View}}';
+    const currentDate = '{{.CurrentDate}}';
+
+    async function loadEventsAsync() {
+        try {
+            const resp = await fetch(`/api/calendar/events?view=${view}&date=${currentDate}`);
+            if (!resp.ok) throw new Error('Failed to fetch events');
+            const events = await resp.json();
+            renderEvents(events);
+        } catch (err) {
+            console.error('Error loading events:', err);
+        }
+    }
+
+    function renderEvents(events) {
+        if (view === 'month') {
+            renderMonthEvents(events);
+        } else if (view === 'week') {
+            renderWeekEvents(events);
+        } else if (view === 'day') {
+            renderDayEvents(events);
+        }
+        // Re-apply calendar filtering after events are loaded
+        filterCalendars();
+    }
+
+    function renderMonthEvents(events) {
+        // Group events by date
+        const eventsByDate = {};
+        events.forEach(event => {
+            const startDate = event.start.split('T')[0];
+            if (!eventsByDate[startDate]) eventsByDate[startDate] = [];
+            eventsByDate[startDate].push(event);
+        });
+
+        // Render into month day cells
+        document.querySelectorAll('.month-day').forEach(cell => {
+            const date = cell.dataset.date;
+            const dayEvents = eventsByDate[date] || [];
+
+            // Clear any existing events (except day number)
+            cell.querySelectorAll('.month-event, .month-event-more').forEach(el => el.remove());
+
+            // Add events (max 3, then "+X more")
+            const maxVisible = 3;
+            dayEvents.slice(0, maxVisible).forEach(event => {
+                const div = document.createElement('div');
+                div.className = 'month-event';
+                if (event.color) div.style.backgroundColor = event.color;
+                div.dataset.event = JSON.stringify({
+                    id: event.id,
+                    calendarId: event.calendarId,
+                    title: event.title,
+                    start: event.start,
+                    end: event.end,
+                    allDay: event.allDay,
+                    location: event.location || '',
+                    description: event.description || '',
+                    colorId: event.colorId || '',
+                    recurring: event.recurring || false
+                });
+                div.dataset.calendarId = event.calendarId;
+                div.textContent = event.title;
+                div.onclick = function(e) {
+                    e.stopPropagation();
+                    openEventDetails(this.dataset.event);
+                };
+                cell.appendChild(div);
+            });
+
+            if (dayEvents.length > maxVisible) {
+                const moreDiv = document.createElement('div');
+                moreDiv.className = 'month-event-more';
+                moreDiv.textContent = `+${dayEvents.length - maxVisible} more`;
+                cell.dataset.allEvents = JSON.stringify(dayEvents.map(e => ({
+                    id: e.id,
+                    calendarId: e.calendarId,
+                    title: e.title,
+                    start: e.start,
+                    end: e.end,
+                    allDay: e.allDay,
+                    location: e.location || '',
+                    description: e.description || '',
+                    colorId: e.colorId || '',
+                    recurring: e.recurring || false
+                })));
+                moreDiv.onclick = function(e) {
+                    e.stopPropagation();
+                    showDayEventsModal(date, cell);
+                };
+                cell.appendChild(moreDiv);
+            }
+        });
+    }
+
+    function renderWeekEvents(events) {
+        // Group events by date
+        const eventsByDate = {};
+        events.forEach(event => {
+            const startDate = event.start.split('T')[0];
+            if (!eventsByDate[startDate]) eventsByDate[startDate] = [];
+            eventsByDate[startDate].push(event);
+        });
+
+        document.querySelectorAll('.week-day').forEach(dayEl => {
+            const date = dayEl.dataset.date;
+            const dayEvents = eventsByDate[date] || [];
+            const eventsContainer = dayEl.querySelector('.week-day-events');
+            if (!eventsContainer) return;
+
+            // Clear existing events
+            eventsContainer.innerHTML = '';
+
+            dayEvents.forEach(event => {
+                const div = document.createElement('div');
+                div.className = 'event';
+                if (event.color) div.style.borderLeftColor = event.color;
+                div.dataset.event = JSON.stringify({
+                    id: event.id,
+                    calendarId: event.calendarId,
+                    title: event.title,
+                    start: event.start,
+                    end: event.end,
+                    allDay: event.allDay,
+                    location: event.location || '',
+                    description: event.description || '',
+                    colorId: event.colorId || '',
+                    recurring: event.recurring || false
+                });
+                div.dataset.calendarId = event.calendarId;
+                div.onclick = function(e) {
+                    e.stopPropagation();
+                    openEventDetails(this.dataset.event);
+                };
+
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'event-title';
+                titleDiv.textContent = event.title;
+                div.appendChild(titleDiv);
+
+                if (!event.allDay) {
+                    const timeDiv = document.createElement('div');
+                    timeDiv.className = 'event-time';
+                    const startTime = event.start.split('T')[1]?.substring(0, 5) || '';
+                    timeDiv.textContent = formatTimeValue(startTime);
+                    div.appendChild(timeDiv);
+                }
+
+                eventsContainer.appendChild(div);
+            });
+
+            if (dayEvents.length === 0) {
+                const noEvents = document.createElement('div');
+                noEvents.className = 'no-events-small';
+                noEvents.textContent = 'Tap to add event';
+                noEvents.onclick = function() { openCreateModal(date); };
+                eventsContainer.appendChild(noEvents);
+            }
+        });
+    }
+
+    function renderDayEvents(events) {
+        const allDayContainer = document.querySelector('.all-day-events');
+        const timelineContainer = document.querySelector('.timeline-events');
+
+        if (allDayContainer) allDayContainer.innerHTML = '';
+        if (timelineContainer) {
+            // Keep current time line if it exists
+            const timeLine = timelineContainer.querySelector('.current-time-line');
+            timelineContainer.innerHTML = '';
+            if (timeLine) timelineContainer.appendChild(timeLine);
+        }
+
+        events.forEach(event => {
+            const eventData = JSON.stringify({
+                id: event.id,
+                calendarId: event.calendarId,
+                title: event.title,
+                start: event.start,
+                end: event.end,
+                allDay: event.allDay,
+                location: event.location || '',
+                description: event.description || '',
+                colorId: event.colorId || '',
+                recurring: event.recurring || false
+            });
+
+            if (event.allDay) {
+                if (!allDayContainer) return;
+                const div = document.createElement('div');
+                div.className = 'all-day-event';
+                if (event.color) div.style.backgroundColor = event.color;
+                div.dataset.event = eventData;
+                div.dataset.calendarId = event.calendarId;
+                div.textContent = event.title;
+                div.onclick = function() { openEventDetails(this.dataset.event); };
+                allDayContainer.appendChild(div);
+            } else {
+                if (!timelineContainer) return;
+                const div = document.createElement('div');
+                div.className = 'timeline-event';
+                if (event.color) {
+                    div.style.backgroundColor = event.color;
+                    div.style.setProperty('--event-color', event.color);
+                }
+                const startTime = event.start.split('T')[1]?.substring(0, 5) || '00:00';
+                const endTime = event.end.split('T')[1]?.substring(0, 5) || '00:00';
+                div.dataset.start = startTime;
+                div.dataset.end = endTime;
+                div.dataset.event = eventData;
+                div.dataset.calendarId = event.calendarId;
+                div.onclick = function() { openEventDetails(this.dataset.event); };
+
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'timeline-event-time';
+                div.appendChild(timeDiv);
+
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'timeline-event-title';
+                titleDiv.textContent = event.title;
+                div.appendChild(titleDiv);
+
+                if (event.location) {
+                    const locDiv = document.createElement('div');
+                    locDiv.className = 'timeline-event-location';
+                    locDiv.textContent = event.location;
+                    div.appendChild(locDiv);
+                }
+
+                timelineContainer.appendChild(div);
+            }
+        });
+
+        // Reposition timeline events
+        positionTimelineEvents();
+        updateTimelineEventTimes();
+    }
+
+    // Load events on page ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadEventsAsync);
+    } else {
+        loadEventsAsync();
+    }
+})();
+{{end}}
 </script>
 {{end}}

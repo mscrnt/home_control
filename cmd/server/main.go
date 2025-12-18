@@ -197,6 +197,22 @@ var sensorState struct {
 
 var tabletIdleTimeout = 60 * time.Second // default 60 seconds
 
+// Calendar cache for faster page loads
+var calendarCache struct {
+	sync.RWMutex
+	Events           []*calendar.Event
+	EventsStart      time.Time
+	EventsEnd        time.Time
+	EventsUpdatedAt  time.Time
+	Calendars        []CalendarWithPrefs
+	CalendarsUpdatedAt time.Time
+	CacheDuration    time.Duration
+}
+
+func init() {
+	calendarCache.CacheDuration = 30 * time.Second // Refresh cache every 30 seconds
+}
+
 func main() {
 	// Load .env file if present (for local dev)
 	_ = godotenv.Load()
@@ -712,6 +728,9 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		view = "day"
 	}
 
+	// Async loading - render shell immediately, load events via JavaScript
+	asyncLoad := r.URL.Query().Get("async") == "true"
+
 	// Parse date parameter (defaults to today)
 	dateStr := r.URL.Query().Get("date")
 	var baseDate time.Time
@@ -761,22 +780,27 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		authorized = calClient.IsAuthorized()
 		if authorized {
 			var err error
-			events, err = calClient.GetEventsInRange(r.Context(), startDate, endDate)
-			if err != nil {
-				log.Printf("Error fetching calendar events: %v", err)
-			}
-			calendarsWithPrefs, err = getCalendarsWithPrefs(r.Context())
+			// Always fetch calendars (needed for dropdown)
+			calendarsWithPrefs, err = getCachedCalendarsWithPrefs(r.Context())
 			if err != nil {
 				log.Printf("Error fetching calendars with prefs: %v", err)
 			}
-			// Apply custom colors from preferences to events
-			colorMap := make(map[string]string)
-			for _, cal := range calendarsWithPrefs {
-				colorMap[cal.ID] = cal.Color
-			}
-			for i := range events {
-				if customColor, ok := colorMap[events[i].CalendarID]; ok && customColor != "" {
-					events[i].Color = customColor
+
+			// Only fetch events if not async loading
+			if !asyncLoad {
+				events, err = getCachedEventsInRange(r.Context(), startDate, endDate)
+				if err != nil {
+					log.Printf("Error fetching calendar events: %v", err)
+				}
+				// Apply custom colors from preferences to events
+				colorMap := make(map[string]string)
+				for _, cal := range calendarsWithPrefs {
+					colorMap[cal.ID] = cal.Color
+				}
+				for i := range events {
+					if customColor, ok := colorMap[events[i].CalendarID]; ok && customColor != "" {
+						events[i].Color = customColor
+					}
 				}
 			}
 		}
@@ -800,6 +824,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		"NextDate":          nextDate,
 		"TodayDate":         todayDate,
 		"WeatherConfigured": appConfig.OpenWeatherAPIKey != "",
+		"AsyncLoad":         asyncLoad,
 	}
 
 	// Add view-specific data
@@ -1029,11 +1054,26 @@ func handleGetCalendarEvents(w http.ResponseWriter, r *http.Request) {
 		endDate = startDate.AddDate(0, 0, 14)
 	}
 
-	events, err := calClient.GetEventsInRange(r.Context(), startDate, endDate)
+	// Use cached events for faster response
+	events, err := getCachedEventsInRange(r.Context(), startDate, endDate)
 	if err != nil {
 		log.Printf("Error fetching calendar events: %v", err)
 		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
 		return
+	}
+
+	// Apply calendar colors from preferences
+	calendarsWithPrefs, err := getCachedCalendarsWithPrefs(r.Context())
+	if err == nil {
+		colorMap := make(map[string]string)
+		for _, cal := range calendarsWithPrefs {
+			colorMap[cal.ID] = cal.Color
+		}
+		for i := range events {
+			if customColor, ok := colorMap[events[i].CalendarID]; ok && customColor != "" {
+				events[i].Color = customColor
+			}
+		}
 	}
 
 	// Return events as JSON
@@ -1500,6 +1540,9 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// Invalidate calendar cache after creating event
+	invalidateCalendarCache()
+
 	json.NewEncoder(w).Encode(event)
 }
 
@@ -1591,6 +1634,8 @@ func handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateCalendarCache()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(event)
 }
@@ -1678,6 +1723,8 @@ func handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateCalendarCache()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(event)
 }
@@ -1696,6 +1743,8 @@ func handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to delete event: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	invalidateCalendarCache()
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1730,6 +1779,8 @@ func handleMoveEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to move event: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	invalidateCalendarCache()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(event)
@@ -3660,6 +3711,100 @@ func saveCalendarPrefs() error {
 	}
 
 	return nil
+}
+
+// getCachedCalendarsWithPrefs returns cached calendars or fetches fresh ones
+func getCachedCalendarsWithPrefs(ctx context.Context) ([]CalendarWithPrefs, error) {
+	calendarCache.RLock()
+	if time.Since(calendarCache.CalendarsUpdatedAt) < calendarCache.CacheDuration && len(calendarCache.Calendars) > 0 {
+		result := calendarCache.Calendars
+		calendarCache.RUnlock()
+		return result, nil
+	}
+	calendarCache.RUnlock()
+
+	// Cache miss or expired - fetch fresh data
+	calendars, err := getCalendarsWithPrefs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	calendarCache.Lock()
+	calendarCache.Calendars = calendars
+	calendarCache.CalendarsUpdatedAt = time.Now()
+	calendarCache.Unlock()
+
+	return calendars, nil
+}
+
+// getCachedEventsInRange returns cached events if the range overlaps and cache is fresh
+func getCachedEventsInRange(ctx context.Context, start, end time.Time) ([]*calendar.Event, error) {
+	calendarCache.RLock()
+	cacheValid := time.Since(calendarCache.EventsUpdatedAt) < calendarCache.CacheDuration &&
+		len(calendarCache.Events) > 0 &&
+		!calendarCache.EventsStart.IsZero() &&
+		(start.Equal(calendarCache.EventsStart) || start.After(calendarCache.EventsStart)) &&
+		(end.Equal(calendarCache.EventsEnd) || end.Before(calendarCache.EventsEnd))
+
+	if cacheValid {
+		// Filter events to requested range
+		var filtered []*calendar.Event
+		for _, e := range calendarCache.Events {
+			if (e.Start.Equal(start) || e.Start.After(start)) && e.Start.Before(end) {
+				filtered = append(filtered, e)
+			} else if e.End.After(start) && (e.End.Before(end) || e.End.Equal(end)) {
+				filtered = append(filtered, e)
+			} else if e.Start.Before(start) && e.End.After(end) {
+				filtered = append(filtered, e)
+			}
+		}
+		calendarCache.RUnlock()
+		return filtered, nil
+	}
+	calendarCache.RUnlock()
+
+	// Cache miss - fetch fresh data with a wider range for future requests
+	// Always fetch 30 days to maximize cache hits
+	wideStart := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	wideEnd := wideStart.AddDate(0, 0, 45) // 45 days ahead
+
+	if calClient == nil || !calClient.IsAuthorized() {
+		return nil, fmt.Errorf("calendar not authorized")
+	}
+
+	events, err := calClient.GetEventsInRange(ctx, wideStart, wideEnd)
+	if err != nil {
+		return nil, err
+	}
+
+	calendarCache.Lock()
+	calendarCache.Events = events
+	calendarCache.EventsStart = wideStart
+	calendarCache.EventsEnd = wideEnd
+	calendarCache.EventsUpdatedAt = time.Now()
+	calendarCache.Unlock()
+
+	// Filter to requested range
+	var filtered []*calendar.Event
+	for _, e := range events {
+		if (e.Start.Equal(start) || e.Start.After(start)) && e.Start.Before(end) {
+			filtered = append(filtered, e)
+		} else if e.End.After(start) && (e.End.Before(end) || e.End.Equal(end)) {
+			filtered = append(filtered, e)
+		} else if e.Start.Before(start) && e.End.After(end) {
+			filtered = append(filtered, e)
+		}
+	}
+
+	return filtered, nil
+}
+
+// invalidateCalendarCache clears the calendar cache (call after creating/updating/deleting events)
+func invalidateCalendarCache() {
+	calendarCache.Lock()
+	calendarCache.EventsUpdatedAt = time.Time{}
+	calendarCache.CalendarsUpdatedAt = time.Time{}
+	calendarCache.Unlock()
 }
 
 // getCalendarsWithPrefs merges calendar info with user preferences
