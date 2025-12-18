@@ -39,6 +39,36 @@ func NewClient(deviceAddr string) *Client {
 	}
 }
 
+// SetAddress updates the device address and reconnects
+func (c *Client) SetAddress(ctx context.Context, addr string) error {
+	c.mu.Lock()
+	oldAddr := c.deviceAddr
+	c.deviceAddr = addr
+	c.mu.Unlock()
+
+	c.connMu.Lock()
+	c.connected = false
+	c.connMu.Unlock()
+
+	// Try to connect to new address
+	if c.tryConnect(ctx) {
+		return nil
+	}
+
+	// Revert if connection failed
+	c.mu.Lock()
+	c.deviceAddr = oldAddr
+	c.mu.Unlock()
+	return fmt.Errorf("failed to connect to %s", addr)
+}
+
+// GetAddress returns the current device address
+func (c *Client) GetAddress() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.deviceAddr
+}
+
 // OnReconnect sets a callback that fires when connection is restored
 func (c *Client) OnReconnect(fn func()) {
 	c.onReconnect = fn

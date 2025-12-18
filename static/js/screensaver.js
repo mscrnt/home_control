@@ -252,9 +252,20 @@ const Screensaver = (function() {
         }
     }
 
+    // Listen for proximity wake events from WebSocket module
+    function setupProximityWakeListener() {
+        window.addEventListener('ws:proximity_wake', function() {
+            if (isActive) {
+                console.log('Screensaver dismissed by proximity wake');
+                hide();
+            }
+        });
+    }
+
     // Initialize the screensaver module
     function init() {
         setupDismissHandlers();
+        setupProximityWakeListener();
         loadConfig();
     }
 

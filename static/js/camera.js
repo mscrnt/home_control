@@ -1,8 +1,6 @@
-// Camera/Doorbell WebSocket Module
+// Camera/Doorbell Module
 const Camera = (function() {
     // State variables
-    let ws = null;
-    let wsReconnectTimer = null;
     let cameraModalTimeout = null;
     let doorbellAudioCtx = null;
     let audioEnabled = false;
@@ -22,42 +20,6 @@ const Camera = (function() {
         }
 
         audioEnabled = true;
-    }
-
-    function connectWebSocket() {
-        if (ws && ws.readyState === WebSocket.OPEN) return;
-
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-
-        ws.onopen = () => {
-            console.log('WebSocket connected');
-            if (wsReconnectTimer) {
-                clearTimeout(wsReconnectTimer);
-                wsReconnectTimer = null;
-            }
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'doorbell') {
-                    showCameraModal(data.payload.camera || 'doorbell');
-                }
-            } catch (e) {
-                console.error('WebSocket message error:', e);
-            }
-        };
-
-        ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            // Reconnect after 5 seconds
-            wsReconnectTimer = setTimeout(connectWebSocket, 5000);
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
     }
 
     function showCameraModal(cameraName) {
@@ -158,8 +120,10 @@ const Camera = (function() {
         document.addEventListener('click', initAudioContext, { once: true });
         document.addEventListener('touchstart', initAudioContext, { once: true });
 
-        // Connect WebSocket
-        connectWebSocket();
+        // Listen for doorbell events from WebSocket module
+        window.addEventListener('ws:doorbell', function(e) {
+            showCameraModal(e.detail.camera || 'doorbell');
+        });
     }
 
     // Public API
@@ -167,8 +131,7 @@ const Camera = (function() {
         init,
         showCameraModal,
         closeCameraModal,
-        playDoorbellSound,
-        connectWebSocket
+        playDoorbellSound
     };
 })();
 

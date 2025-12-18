@@ -33,19 +33,15 @@ class MainActivity : AppCompatActivity() {
         startButton.setOnClickListener { startService() }
         stopButton.setOnClickListener { stopService() }
 
-        // Auto-start service if server URL is configured
-        val prefs = getSharedPreferences(SensorService.PREF_NAME, Context.MODE_PRIVATE)
-        val serverUrl = prefs.getString(SensorService.PREF_SERVER_URL, "") ?: ""
-        if (serverUrl.isNotEmpty() && serverUrl != "http://192.168.1.100:8080") {
-            startService()
-            // Minimize to background after starting
-            moveTaskToBack(true)
-        }
+        // Auto-start service (uses default URL if not configured)
+        startService()
+        // Minimize to background after starting
+        moveTaskToBack(true)
     }
 
     private fun loadPreferences() {
         val prefs = getSharedPreferences(SensorService.PREF_NAME, Context.MODE_PRIVATE)
-        serverUrlInput.setText(prefs.getString(SensorService.PREF_SERVER_URL, "http://192.168.1.100:8080"))
+        serverUrlInput.setText(prefs.getString(SensorService.PREF_SERVER_URL, SensorService.DEFAULT_SERVER_URL))
         idleTimeoutInput.setText((prefs.getLong(SensorService.PREF_IDLE_TIMEOUT, 60000) / 1000).toString())
     }
 

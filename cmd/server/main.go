@@ -69,7 +69,7 @@ var quietPaths = map[string]bool{
 // quietPrefixes are path prefixes that shouldn't spam logs
 var quietPrefixes = []string{
 	"/api/syncbox/",
-	"/api/tablet/sensor/",
+	"/api/tablet/",
 }
 
 // ConditionalLogger is a middleware that skips logging for certain paths
@@ -630,6 +630,7 @@ func main() {
 	r.Post("/api/tablet/sensor/proximity", handleTabletProximity)
 	r.Post("/api/tablet/sensor/light", handleTabletLight)
 	r.Get("/api/tablet/sensor/state", handleGetSensorState)
+	r.Post("/api/tablet/adb/port", handleTabletAdbPort)
 
 	// Hue API routes
 	r.Get("/api/hue/rooms", handleGetHueRooms)
@@ -3839,6 +3840,10 @@ func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 			defer cancel()
 			tabletClient.WakeScreen(ctx)
 		}
+		// Broadcast to dismiss screensaver on all connected clients
+		if wsHub != nil {
+			wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
+		}
 	} else if !req.Near && wasNear {
 		// Someone left - start idle timer
 		sensorState.ScreenIdleAt = time.Now().Add(tabletIdleTimeout)
@@ -3941,5 +3946,55 @@ func handleGetSensorState(w http.ResponseWriter, r *http.Request) {
 		"lastLightAt":     sensorState.LastLightAt,
 		"screenIdleAt":    sensorState.ScreenIdleAt,
 		"idleTimeoutSecs": sensorState.IdleTimeoutSecs,
+	})
+}
+
+// handleTabletAdbPort handles dynamic ADB port updates from the companion app
+func handleTabletAdbPort(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Port int `json:"port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Port < 1 || req.Port > 65535 {
+		http.Error(w, "Invalid port number", http.StatusBadRequest)
+		return
+	}
+
+	if tabletClient == nil {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Get current address and extract IP
+	currentAddr := tabletClient.GetAddress()
+	ip := currentAddr
+	if idx := strings.LastIndex(currentAddr, ":"); idx != -1 {
+		ip = currentAddr[:idx]
+	}
+
+	// Build new address with reported port
+	newAddr := fmt.Sprintf("%s:%d", ip, req.Port)
+
+	log.Printf("Tablet reported ADB port %d, updating connection to %s", req.Port, newAddr)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if err := tabletClient.SetAddress(ctx, newAddr); err != nil {
+		log.Printf("Failed to update ADB address: %v", err)
+		http.Error(w, "Failed to connect to new port: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully connected to tablet at %s", newAddr)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"address": newAddr,
 	})
 }
