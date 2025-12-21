@@ -101,15 +101,11 @@ class KioskActivity : AppCompatActivity() {
                 "com.android.settings"
             ))
 
-            // Configure lock task features
+            // Configure lock task features - minimal for true fullscreen kiosk
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                // SYSTEM_INFO shows status bar, NOTIFICATIONS allows pull-down
-                // GLOBAL_ACTIONS allows power menu access (includes settings shortcut)
-                // Note: NOTIFICATIONS requires HOME which shows nav bar
+                // NONE = true fullscreen, no status bar, no nav bar
+                // GLOBAL_ACTIONS allows power menu for emergency exit
                 devicePolicyManager.setLockTaskFeatures(adminComponent,
-                    DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_HOME or
                     DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
                 )
             }
@@ -157,16 +153,18 @@ class KioskActivity : AppCompatActivity() {
     private fun enableImmersiveMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.insetsController?.let {
-                // Only hide navigation bar, keep status bar for notification tray access
-                it.hide(WindowInsets.Type.navigationBars())
+                // Hide both status bar and navigation bar for true fullscreen
+                it.hide(WindowInsets.Type.systemBars())
                 it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
-            // Only hide navigation bar, keep status bar visible for notifications
+            // True fullscreen immersive mode - hide everything
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         }

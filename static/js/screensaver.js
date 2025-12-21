@@ -256,6 +256,7 @@ const Screensaver = (function() {
     // Listen for proximity wake events from WebSocket module
     function setupProximityWakeListener() {
         window.addEventListener('ws:proximity_wake', function() {
+            console.log('Received proximity_wake event, screensaver active:', isActive);
             if (isActive) {
                 console.log('Screensaver dismissed by proximity wake');
                 hide();

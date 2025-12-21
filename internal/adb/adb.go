@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +71,122 @@ func (c *Client) GetAddress() string {
 	return c.deviceAddr
 }
 
+// GetIP extracts just the IP from the device address
+func (c *Client) GetIP() string {
+	c.mu.Lock()
+	addr := c.deviceAddr
+	c.mu.Unlock()
+
+	if idx := strings.LastIndex(addr, ":"); idx > 0 {
+		return addr[:idx]
+	}
+	return addr
+}
+
+// ScanForPort scans the device IP for an open ADB port in the wireless debugging range
+// Uses nmap for fast scanning, falls back to socket connections if nmap unavailable
+func ScanForPort(ctx context.Context, ip string) (int, error) {
+	fmt.Printf("ADB: Scanning %s for wireless debugging port...\n", ip)
+
+	// Method 1: Use nmap (fast, scans 35000-50000 in ~2-3 seconds)
+	// Add -Pn to skip host detection and -sT for TCP connect scan
+	cmd := exec.CommandContext(ctx, "nmap", "-Pn", "-sT", "-p", "35000-50000", "--open", "-T5", ip)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err == nil {
+		// Parse nmap output for open ports
+		// Format: "43313/tcp open  unknown"
+		portRegex := regexp.MustCompile(`(\d{5})/tcp\s+open`)
+		matches := portRegex.FindAllStringSubmatch(stdout.String(), -1)
+		for _, match := range matches {
+			if len(match) >= 2 {
+				port, err := strconv.Atoi(match[1])
+				if err == nil && port >= 35000 && port <= 50000 {
+					fmt.Printf("ADB: Found port %d via nmap\n", port)
+					return port, nil
+				}
+			}
+		}
+		fmt.Printf("ADB: nmap completed but found no open ports\n")
+	} else {
+		fmt.Printf("ADB: nmap failed (%v), falling back to socket scan\n", err)
+	}
+
+	// Method 2: Parallel socket scan (fallback if nmap unavailable)
+	found := make(chan int, 1)
+	done := make(chan struct{})
+
+	// Use more goroutines for faster scanning
+	numWorkers := 50
+	ports := make(chan int, numWorkers*2)
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for port := range ports {
+				select {
+				case <-done:
+					return
+				default:
+				}
+
+				addr := fmt.Sprintf("%s:%d", ip, port)
+				conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+				if err == nil {
+					conn.Close()
+					select {
+					case found <- port:
+						close(done)
+					default:
+					}
+					return
+				}
+			}
+		}()
+	}
+
+	// Feed ports to workers
+	go func() {
+		for port := 35000; port <= 50000; port++ {
+			select {
+			case <-done:
+				break
+			case ports <- port:
+			}
+		}
+		close(ports)
+	}()
+
+	// Wait for result or timeout
+	go func() {
+		wg.Wait()
+		select {
+		case found <- 0: // Signal no port found
+		default:
+		}
+	}()
+
+	select {
+	case port := <-found:
+		if port > 0 {
+			fmt.Printf("ADB: Found port %d via socket scan\n", port)
+			return port, nil
+		}
+		return 0, fmt.Errorf("no open ports found")
+	case <-ctx.Done():
+		close(done)
+		return 0, ctx.Err()
+	case <-time.After(60 * time.Second):
+		close(done)
+		return 0, fmt.Errorf("port scan timed out")
+	}
+}
+
 // OnReconnect sets a callback that fires when connection is restored
 func (c *Client) OnReconnect(fn func()) {
 	c.onReconnect = fn
@@ -80,6 +198,9 @@ func (c *Client) StartConnectionMonitor(ctx context.Context, checkInterval time.
 	go func() {
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
+
+		failedAttempts := 0
+		lastScanTime := time.Time{}
 
 		// Initial connection attempt
 		c.tryConnect(ctx)
@@ -100,10 +221,12 @@ func (c *Client) StartConnectionMonitor(ctx context.Context, checkInterval time.
 				c.connMu.Unlock()
 
 				if !isConnected {
-					// Try to reconnect
+					failedAttempts++
+
+					// Try to reconnect with current address first
 					if c.tryConnect(ctx) {
+						failedAttempts = 0
 						if wasConnected {
-							// Was connected before, now reconnected
 							fmt.Printf("ADB: Reconnected to %s\n", c.deviceAddr)
 						} else {
 							fmt.Printf("ADB: Connected to %s\n", c.deviceAddr)
@@ -111,7 +234,36 @@ func (c *Client) StartConnectionMonitor(ctx context.Context, checkInterval time.
 						if c.onReconnect != nil {
 							c.onReconnect()
 						}
+						continue
 					}
+
+					// After 3 failed attempts, scan for a new port (but not more than once per minute)
+					if failedAttempts >= 3 && time.Since(lastScanTime) > time.Minute {
+						fmt.Printf("ADB: Connection failed %d times, scanning for new port...\n", failedAttempts)
+						lastScanTime = time.Now()
+
+						ip := c.GetIP()
+						scanCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						port, err := ScanForPort(scanCtx, ip)
+						cancel()
+
+						if err == nil && port > 0 {
+							newAddr := fmt.Sprintf("%s:%d", ip, port)
+							fmt.Printf("ADB: Found new port %d, trying to connect to %s\n", port, newAddr)
+
+							if err := c.SetAddress(ctx, newAddr); err == nil {
+								failedAttempts = 0
+								fmt.Printf("ADB: Successfully connected to new address %s\n", newAddr)
+								if c.onReconnect != nil {
+									c.onReconnect()
+								}
+							}
+						} else {
+							fmt.Printf("ADB: Port scan failed: %v\n", err)
+						}
+					}
+				} else {
+					failedAttempts = 0
 				}
 			}
 		}

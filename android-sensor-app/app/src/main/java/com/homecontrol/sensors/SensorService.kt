@@ -368,11 +368,11 @@ class SensorService : Service(), SensorEventListener {
     private fun startAdbCheck() {
         adbCheckJob?.cancel()
         adbCheckJob = scope.launch {
-            delay(300000) // Wait 5 minutes before first check
+            delay(60000) // Wait 1 minute before first check
             while (isActive) {
                 Log.d(TAG, "Periodic ADB check running...")
                 checkAndEnableAdb()
-                delay(300000) // Check every 5 minutes (less aggressive)
+                delay(60000) // Check every 1 minute to keep wireless debugging alive
             }
         }
     }
@@ -427,8 +427,19 @@ class SensorService : Service(), SensorEventListener {
 
     private suspend fun checkAndEnableAdb() {
         try {
-            // Just find and report the ADB port if available
-            // Don't try to enable/modify ADB settings as this can interfere with connections
+            // Re-enable wireless debugging settings periodically (they can get disabled)
+            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                try {
+                    devicePolicyManager.setGlobalSetting(adminComponent, "development_settings_enabled", "1")
+                    devicePolicyManager.setGlobalSetting(adminComponent, "adb_enabled", "1")
+                    devicePolicyManager.setGlobalSetting(adminComponent, "adb_wifi_enabled", "1")
+                    Log.d(TAG, "Re-enabled ADB settings via DevicePolicyManager")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to re-enable ADB settings: ${e.message}")
+                }
+            }
+
+            // Find and report the ADB port if available
             val port = findAdbPort()
             if (port != null && port != lastReportedAdbPort) {
                 Log.d(TAG, "Found ADB on port $port")
@@ -686,7 +697,6 @@ class SensorService : Service(), SensorEventListener {
 
     private fun findAdbPort(): Int? {
         // Method 1: Check fixed port 5555 first (classic ADB TCP)
-        // Only do a quick check, don't hold the connection
         try {
             Socket().use { socket ->
                 socket.connect(java.net.InetSocketAddress("127.0.0.1", 5555), 200)
@@ -697,39 +707,67 @@ class SensorService : Service(), SensorEventListener {
             // Port 5555 not available
         }
 
-        // Method 2: Read /proc/net/tcp6 to find wireless debugging port (no socket connections)
+        // Method 2: Use netstat command to find wireless debugging port
         try {
-            val tcp6File = File("/proc/net/tcp6")
-            if (tcp6File.exists()) {
-                val content = tcp6File.readText()
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "netstat -tlnp 2>/dev/null | grep -E ':(3[5-9][0-9]{3}|4[0-9]{4})' | head -5"))
+            val output = process.inputStream.bufferedReader().readText()
+            process.waitFor(3, TimeUnit.SECONDS)
 
-                // Parse hex port from /proc/net/tcp6 format
-                // Format: sl local_address rem_address st ...
-                // local_address is IP:PORT in hex
-                val portRegex = Regex(""":\s*[0-9A-Fa-f]+:([0-9A-Fa-f]{4})\s""")
-                val foundPorts = mutableSetOf<Int>()
-
-                for (line in content.lines()) {
-                    val match = portRegex.find(line)
-                    if (match != null) {
-                        val hexPort = match.groupValues[1]
-                        val port = hexPort.toIntOrNull(16) ?: continue
-                        // Wireless debugging uses ports in 30000-50000 range
-                        if (port in 30000..50000) {
-                            foundPorts.add(port)
-                        }
+            // Parse port from netstat output (e.g., "tcp 0 0 :::43313 :::* LISTEN")
+            val portRegex = Regex(""":(\d{5})\s""")
+            for (line in output.lines()) {
+                val match = portRegex.find(line)
+                if (match != null) {
+                    val port = match.groupValues[1].toIntOrNull()
+                    if (port != null && port in 35000..50000) {
+                        Log.d(TAG, "Found potential ADB port from netstat: $port")
+                        return port
                     }
-                }
-
-                if (foundPorts.isNotEmpty()) {
-                    Log.d(TAG, "Found potential ADB ports from /proc/net/tcp6: $foundPorts")
-                    // Return the first port found without connecting to it
-                    // This avoids interfering with ADB connections
-                    return foundPorts.first()
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Reading /proc/net/tcp6 failed: ${e.message}")
+            Log.w(TAG, "netstat failed: ${e.message}")
+        }
+
+        // Method 3: Try scanning common wireless debugging ports using WiFi IP (fast parallel scan)
+        val wifiIp = getWifiIpAddress() ?: "127.0.0.1"
+        Log.d(TAG, "Scanning for ADB port on $wifiIp...")
+        try {
+            val potentialPorts = mutableListOf<Int>()
+            val threads = mutableListOf<Thread>()
+
+            // Scan in 5 ranges of 3000 ports each using parallel threads
+            for (rangeStart in listOf(35000, 38000, 41000, 44000, 47000)) {
+                val thread = Thread {
+                    for (port in rangeStart until rangeStart + 3000) {
+                        if (port > 50000) break
+                        try {
+                            Socket().use { socket ->
+                                socket.connect(java.net.InetSocketAddress(wifiIp, port), 30)
+                                synchronized(potentialPorts) {
+                                    potentialPorts.add(port)
+                                }
+                                return@Thread // Found one, stop scanning this range
+                            }
+                        } catch (e: Exception) {
+                            // Port not open, continue
+                        }
+                    }
+                }
+                thread.start()
+                threads.add(thread)
+            }
+
+            // Wait for threads with timeout
+            threads.forEach { it.join(10000) }
+
+            if (potentialPorts.isNotEmpty()) {
+                val port = potentialPorts.first()
+                Log.d(TAG, "Found ADB port from scan: $port")
+                return port
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Port scan failed: ${e.message}")
         }
 
         Log.d(TAG, "Could not find ADB port (this is normal if wireless debugging is off)")

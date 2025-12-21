@@ -19,6 +19,8 @@ const WS = (function() {
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
             }
+            // Dispatch connected event for modules that need to know
+            window.dispatchEvent(new CustomEvent('ws:connected'));
         };
 
         ws.onmessage = (event) => {

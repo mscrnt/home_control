@@ -3941,10 +3941,12 @@ func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 		}
 		// Broadcast to dismiss screensaver on all connected clients
 		if wsHub != nil {
+			log.Println("Broadcasting proximity_wake to WebSocket clients")
 			wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
 			// Re-broadcast after a delay to catch clients that reconnect after screen wake
 			go func() {
 				time.Sleep(2 * time.Second)
+				log.Println("Re-broadcasting proximity_wake to WebSocket clients")
 				wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
 			}()
 		}
