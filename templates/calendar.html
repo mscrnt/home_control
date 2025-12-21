@@ -1714,6 +1714,18 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => {
         addCurrentTimeLine();
     }, 60000);
+
+    // Center today in week view
+    const weekScroll = document.querySelector('.week-days-scroll');
+    const todayEl = weekScroll?.querySelector('.week-day.today');
+    if (weekScroll && todayEl) {
+        // Calculate scroll position to center today
+        const scrollContainer = weekScroll;
+        const todayRect = todayEl.getBoundingClientRect();
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const scrollOffset = todayEl.offsetLeft - (containerRect.width / 2) + (todayRect.width / 2);
+        scrollContainer.scrollLeft = Math.max(0, scrollOffset);
+    }
 });
 
 // ===== Weather Functions =====
@@ -2190,9 +2202,10 @@ setTimeout(checkForEventUpdates, 5000);
 <script>
 // Screensaver and Background Image System
 (function() {
-    let screensaverConfig = { timeout: 300, hasScreensaverFolder: false, hasBackgroundFolder: false };
+    let screensaverConfig = { timeout: 300, hasPhotosFolder: false };
     let inactivityTimer = null;
     let screensaverPhotoTimer = null;
+    let backgroundTimer = null;
     let screensaverActive = false;
     let screensaverPhotos = [];
     let currentPhotoIndex = 0;
@@ -2211,11 +2224,11 @@ setTimeout(checkForEventUpdates, 5000);
                 screensaverConfig = await resp.json();
                 console.log('Screensaver config loaded:', screensaverConfig);
 
-                if (screensaverConfig.hasScreensaverFolder) {
+                if (screensaverConfig.hasPhotosFolder) {
                     loadScreensaverPhotos();
-                }
-                if (screensaverConfig.hasBackgroundFolder) {
                     loadBackgroundPhoto();
+                    // Rotate background every 60 seconds
+                    backgroundTimer = setInterval(loadBackgroundPhoto, 60000);
                 }
 
                 // Start inactivity tracking if timeout is configured (photos are optional)
@@ -2232,22 +2245,22 @@ setTimeout(checkForEventUpdates, 5000);
     // Load all screensaver photos
     async function loadScreensaverPhotos() {
         try {
-            const resp = await fetch('/api/drive/screensaver/photos');
+            const resp = await fetch('/api/drive/photos');
             if (resp.ok) {
                 screensaverPhotos = await resp.json();
-                console.log(`Loaded ${screensaverPhotos.length} screensaver photos`);
+                console.log(`Loaded ${screensaverPhotos.length} photos`);
                 // Shuffle the photos
                 screensaverPhotos.sort(() => Math.random() - 0.5);
             }
         } catch (err) {
-            console.error('Failed to load screensaver photos:', err);
+            console.error('Failed to load photos:', err);
         }
     }
 
     // Load a random background photo
     async function loadBackgroundPhoto() {
         try {
-            const resp = await fetch('/api/drive/background/random');
+            const resp = await fetch('/api/drive/photos/random');
             if (resp.ok) {
                 const photo = await resp.json();
                 const bg = document.getElementById('pageBackground');
@@ -2311,8 +2324,8 @@ setTimeout(checkForEventUpdates, 5000);
         // Show first photo
         if (screensaverPhotos.length > 0) {
             showNextPhoto();
-            // Cycle photos every 10 seconds
-            screensaverPhotoTimer = setInterval(showNextPhoto, 10000);
+            // Cycle photos every 60 seconds
+            screensaverPhotoTimer = setInterval(showNextPhoto, 60000);
         }
     }
 
@@ -2705,7 +2718,13 @@ setTimeout(checkForEventUpdates, 5000);
             if (timeLine) timelineContainer.appendChild(timeLine);
         }
 
-        events.forEach(event => {
+        // Filter events to only those on the current date
+        const todayEvents = events.filter(event => {
+            const eventDate = event.start.split('T')[0];
+            return eventDate === currentDate;
+        });
+
+        todayEvents.forEach(event => {
             const eventData = JSON.stringify({
                 id: event.id,
                 calendarId: event.calendarId,

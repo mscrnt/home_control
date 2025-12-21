@@ -124,8 +124,7 @@ type Config struct {
 	// Sync Box settings (format: "name:ip:token,name2:ip2:token2")
 	SyncBoxes []SyncBoxConfig
 	// Google Drive settings (for screensaver and background photos)
-	DriveScreensaverFolder string
-	DriveBackgroundFolder  string
+	DrivePhotosFolder string
 	ScreensaverTimeout     int // Seconds of inactivity before screensaver (default: 300)
 	// Spotify settings
 	SpotifyClientID     string
@@ -195,7 +194,7 @@ var sensorState struct {
 	IdleTimeoutSecs  int       // seconds before screen turns off (from app config)
 }
 
-var tabletIdleTimeout = 60 * time.Second // default 60 seconds
+var tabletIdleTimeout = 180 * time.Second // default 180 seconds (3 minutes)
 
 // Calendar cache for faster page loads
 var calendarCache struct {
@@ -287,8 +286,7 @@ func main() {
 		HueUsername:            getEnv("HUE_USERNAME", ""),
 		HueClientKey:           getEnv("HUE_CLIENT_KEY", ""),
 		SyncBoxes:              parseSyncBoxes(getEnv("SYNC_BOXES", "")),
-		DriveScreensaverFolder: getEnv("DRIVE_SCREENSAVER_FOLDER", ""),
-		DriveBackgroundFolder:  getEnv("DRIVE_BACKGROUND_FOLDER", ""),
+		DrivePhotosFolder: getEnv("DRIVE_PHOTOS_FOLDER", getEnv("DRIVE_BACKGROUND_FOLDER", "")),
 		ScreensaverTimeout:     parseIntEnv("SCREENSAVER_TIMEOUT", 300),
 		SpotifyClientID:           getEnv("SPOTIFY_CLIENT_ID", ""),
 		SpotifyClientSecret:       getEnv("SPOTIFY_CLIENT_SECRET", ""),
@@ -380,18 +378,22 @@ func main() {
 	}
 
 	// Initialize Google Drive client (shares OAuth token with Calendar)
-	if calClient != nil && calClient.IsAuthorized() {
-		if cfg.DriveScreensaverFolder != "" || cfg.DriveBackgroundFolder != "" {
-			httpClient, err := calClient.GetHTTPClient(context.Background())
+	if calClient == nil {
+		log.Println("Drive: Skipping - Calendar client not configured")
+	} else if !calClient.IsAuthorized() {
+		log.Println("Drive: Skipping - Calendar not authorized (complete OAuth first)")
+	} else if cfg.DrivePhotosFolder == "" {
+		log.Println("Drive: Skipping - DRIVE_PHOTOS_FOLDER not set")
+	} else {
+		httpClient, err := calClient.GetHTTPClient(context.Background())
+		if err != nil {
+			log.Printf("Warning: Failed to get HTTP client for Drive: %v", err)
+		} else {
+			driveClient, err = drive.NewClient(httpClient, cfg.DrivePhotosFolder)
 			if err != nil {
-				log.Printf("Warning: Failed to get HTTP client for Drive: %v", err)
+				log.Printf("Warning: Failed to initialize Drive client: %v", err)
 			} else {
-				driveClient, err = drive.NewClient(httpClient, cfg.DriveScreensaverFolder, cfg.DriveBackgroundFolder)
-				if err != nil {
-					log.Printf("Warning: Failed to initialize Drive client: %v", err)
-				} else {
-					log.Println("Google Drive client initialized for screensaver/background photos")
-				}
+				log.Printf("Google Drive client initialized (folder: %s)", cfg.DrivePhotosFolder)
 			}
 		}
 	}
@@ -668,11 +670,9 @@ func main() {
 	r.Post("/api/syncbox/{index}/brightness", handleSetSyncBoxBrightness)
 	r.Post("/api/syncbox/{index}/input", handleSetSyncBoxInput)
 
-	// Google Drive routes (screensaver/background photos)
-	r.Get("/api/drive/screensaver/photos", handleGetScreensaverPhotos)
-	r.Get("/api/drive/screensaver/random", handleGetRandomScreensaverPhoto)
-	r.Get("/api/drive/background/photos", handleGetBackgroundPhotos)
-	r.Get("/api/drive/background/random", handleGetRandomBackgroundPhoto)
+	// Google Drive routes (photos for screensaver/background)
+	r.Get("/api/drive/photos", handleGetDrivePhotos)
+	r.Get("/api/drive/photos/random", handleGetRandomDrivePhoto)
 	r.Get("/api/drive/photo/{id}", handleGetDrivePhoto)
 	r.Get("/api/screensaver/config", handleGetScreensaverConfig)
 
@@ -2669,17 +2669,17 @@ func handleSetSyncBoxInput(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"hdmiSource": req.HDMISource})
 }
 
-// Google Drive handlers for screensaver/background photos
+// Google Drive handlers for photos (screensaver and background use same folder)
 
-func handleGetScreensaverPhotos(w http.ResponseWriter, r *http.Request) {
+func handleGetDrivePhotos(w http.ResponseWriter, r *http.Request) {
 	if driveClient == nil {
 		http.Error(w, "Drive client not initialized", http.StatusServiceUnavailable)
 		return
 	}
 
-	photos, err := driveClient.GetScreensaverPhotos(r.Context())
+	photos, err := driveClient.GetPhotos(r.Context())
 	if err != nil {
-		log.Printf("Error fetching screensaver photos: %v", err)
+		log.Printf("Error fetching photos: %v", err)
 		http.Error(w, "Failed to fetch photos: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2688,61 +2688,15 @@ func handleGetScreensaverPhotos(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(photos)
 }
 
-func handleGetRandomScreensaverPhoto(w http.ResponseWriter, r *http.Request) {
+func handleGetRandomDrivePhoto(w http.ResponseWriter, r *http.Request) {
 	if driveClient == nil {
 		http.Error(w, "Drive client not initialized", http.StatusServiceUnavailable)
 		return
 	}
 
-	photo, err := driveClient.GetRandomScreensaverPhoto(r.Context())
+	photo, err := driveClient.GetRandomPhoto(r.Context())
 	if err != nil {
-		log.Printf("Error fetching random screensaver photo: %v", err)
-		http.Error(w, "Failed to fetch photo: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if photo == nil {
-		http.Error(w, "No photos available", http.StatusNotFound)
-		return
-	}
-
-	// Return the photo with a direct URL
-	response := map[string]interface{}{
-		"id":   photo.ID,
-		"name": photo.Name,
-		"url":  driveClient.GetPhotoURL(photo.ID),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func handleGetBackgroundPhotos(w http.ResponseWriter, r *http.Request) {
-	if driveClient == nil {
-		http.Error(w, "Drive client not initialized", http.StatusServiceUnavailable)
-		return
-	}
-
-	photos, err := driveClient.GetBackgroundPhotos(r.Context())
-	if err != nil {
-		log.Printf("Error fetching background photos: %v", err)
-		http.Error(w, "Failed to fetch photos: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(photos)
-}
-
-func handleGetRandomBackgroundPhoto(w http.ResponseWriter, r *http.Request) {
-	if driveClient == nil {
-		http.Error(w, "Drive client not initialized", http.StatusServiceUnavailable)
-		return
-	}
-
-	photo, err := driveClient.GetRandomBackgroundPhoto(r.Context())
-	if err != nil {
-		log.Printf("Error fetching random background photo: %v", err)
+		log.Printf("Error fetching random photo: %v", err)
 		http.Error(w, "Failed to fetch photo: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2791,9 +2745,8 @@ func handleGetDrivePhoto(w http.ResponseWriter, r *http.Request) {
 
 func handleGetScreensaverConfig(w http.ResponseWriter, r *http.Request) {
 	config := map[string]interface{}{
-		"timeout":              appConfig.ScreensaverTimeout,
-		"hasScreensaverFolder": driveClient != nil && driveClient.HasScreensaverFolder(),
-		"hasBackgroundFolder":  driveClient != nil && driveClient.HasBackgroundFolder(),
+		"timeout":         appConfig.ScreensaverTimeout,
+		"hasPhotosFolder": driveClient != nil && driveClient.HasPhotosFolder(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -3980,6 +3933,7 @@ func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 		// Someone approached - wake the screen
 		sensorState.ScreenIdleAt = time.Time{} // clear idle timer
 		sensorState.Unlock()
+		log.Println("Tablet proximity: someone approached")
 		if tabletClient != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -3988,6 +3942,11 @@ func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 		// Broadcast to dismiss screensaver on all connected clients
 		if wsHub != nil {
 			wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
+			// Re-broadcast after a delay to catch clients that reconnect after screen wake
+			go func() {
+				time.Sleep(2 * time.Second)
+				wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
+			}()
 		}
 	} else if !req.Near && wasNear {
 		// Someone left - start idle timer

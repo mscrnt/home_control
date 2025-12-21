@@ -49,6 +49,25 @@ const WS = (function() {
 
     function init() {
         connect();
+
+        // Reconnect immediately when page becomes visible (screen wake)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                // If disconnected or connecting, force reconnect
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    console.log('Page visible, reconnecting WebSocket...');
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                        reconnectTimer = null;
+                    }
+                    if (ws) {
+                        ws.close();
+                        ws = null;
+                    }
+                    connect();
+                }
+            }
+        });
     }
 
     return {

@@ -1,22 +1,24 @@
 /* ============================================
-   Page Background Image
+   Page Background Image (blurred ambient fill)
    ============================================ */
 .page-background {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: -20px;
+    left: -20px;
+    right: -20px;
+    bottom: -20px;
     z-index: -1;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    background-color: #0a0a12;
+    filter: blur(30px) brightness(0.7);
     opacity: 0;
     transition: opacity 1s ease;
 }
 
 .page-background.active {
-    opacity: 0.25;
+    opacity: 0.3;
 }
 
 /* ============================================
@@ -47,11 +49,38 @@
     left: 0;
     right: 0;
     bottom: 0;
+    background-color: #000;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+}
+
+/* Blurred background fill layer (behind sharp image) */
+.screensaver-bg::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    left: -20px;
+    right: -20px;
+    bottom: -20px;
+    background-image: inherit;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    opacity: 0;
-    transition: opacity 1.5s ease;
+    filter: blur(30px) brightness(0.5);
+}
+
+/* Sharp image layer (on top, contained/centered) */
+.screensaver-bg::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: inherit;
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 .screensaver-bg.active {
@@ -73,6 +102,14 @@
     color: #fff;
     line-height: 1;
     letter-spacing: -2px;
+    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.6);
+    paint-order: stroke fill;
+    text-shadow:
+        -1px -1px 0 rgba(0, 0, 0, 0.5),
+         1px -1px 0 rgba(0, 0, 0, 0.5),
+        -1px  1px 0 rgba(0, 0, 0, 0.5),
+         1px  1px 0 rgba(0, 0, 0, 0.5),
+         2px  2px 8px rgba(0, 0, 0, 0.8);
 }
 
 .screensaver-date {
@@ -80,6 +117,13 @@
     font-weight: 400;
     color: rgba(255, 255, 255, 0.85);
     margin-top: 0.5rem;
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5);
+    paint-order: stroke fill;
+    text-shadow:
+        -1px -1px 0 rgba(0, 0, 0, 0.4),
+         1px -1px 0 rgba(0, 0, 0, 0.4),
+        -1px  1px 0 rgba(0, 0, 0, 0.4),
+         1px  1px 0 rgba(0, 0, 0, 0.4);
 }
 
 /* Screensaver Spotify Display */

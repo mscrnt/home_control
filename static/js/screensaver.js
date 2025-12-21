@@ -5,9 +5,10 @@
  */
 const Screensaver = (function() {
     // Private state
-    let config = { timeout: 300, hasScreensaverFolder: false, hasBackgroundFolder: false };
+    let config = { timeout: 300, hasPhotosFolder: false };
     let inactivityTimer = null;
     let photoTimer = null;
+    let backgroundTimer = null;
     let clockTimer = null;
     let isActive = false;
     let photos = [];
@@ -27,11 +28,11 @@ const Screensaver = (function() {
                 config = await resp.json();
                 console.log('Screensaver config loaded:', config);
 
-                if (config.hasScreensaverFolder) {
+                if (config.hasPhotosFolder) {
                     loadPhotos();
-                }
-                if (config.hasBackgroundFolder) {
                     loadBackgroundPhoto();
+                    // Rotate background every 60 seconds
+                    backgroundTimer = setInterval(loadBackgroundPhoto, 60000);
                 }
 
                 // Start inactivity tracking if timeout is configured
@@ -45,25 +46,25 @@ const Screensaver = (function() {
         }
     }
 
-    // Load all screensaver photos
+    // Load all photos for screensaver
     async function loadPhotos() {
         try {
-            const resp = await fetch('/api/drive/screensaver/photos');
+            const resp = await fetch('/api/drive/photos');
             if (resp.ok) {
                 photos = await resp.json();
-                console.log(`Loaded ${photos.length} screensaver photos`);
+                console.log(`Loaded ${photos.length} photos`);
                 // Shuffle the photos
                 photos.sort(() => Math.random() - 0.5);
             }
         } catch (err) {
-            console.error('Failed to load screensaver photos:', err);
+            console.error('Failed to load photos:', err);
         }
     }
 
     // Load a random background photo for the page
     async function loadBackgroundPhoto() {
         try {
-            const resp = await fetch('/api/drive/background/random');
+            const resp = await fetch('/api/drive/photos/random');
             if (resp.ok) {
                 const photo = await resp.json();
                 const bg = document.getElementById('pageBackground');
@@ -123,10 +124,10 @@ const Screensaver = (function() {
         updateClock();
         clockTimer = setInterval(updateClock, 1000);
 
-        // Show first photo and start cycling
+        // Show first photo and start cycling (60 second intervals)
         if (photos.length > 0) {
             showNextPhoto();
-            photoTimer = setInterval(showNextPhoto, 10000);
+            photoTimer = setInterval(showNextPhoto, 60000);
         }
     }
 
@@ -260,6 +261,43 @@ const Screensaver = (function() {
                 hide();
             }
         });
+
+        // When WebSocket reconnects, check if someone is already near
+        window.addEventListener('ws:connected', function() {
+            if (isActive) {
+                checkProximityState();
+            }
+        });
+
+        // When page becomes visible (e.g., screen turns on), check proximity
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && isActive) {
+                checkProximityState();
+            }
+        });
+    }
+
+    // Check current proximity state from server (with retries for slow wake-up)
+    async function checkProximityState() {
+        // Retry up to 5 times with 500ms delays (2.5 seconds total)
+        for (let attempt = 0; attempt < 5 && isActive; attempt++) {
+            try {
+                const resp = await fetch('/api/tablet/sensor/state');
+                if (resp.ok) {
+                    const state = await resp.json();
+                    if (state.proximityNear && isActive) {
+                        console.log('Screensaver dismissed: proximity detected (attempt ' + (attempt + 1) + ')');
+                        hide();
+                        return;
+                    }
+                }
+            } catch (err) {
+                // Network might not be ready yet, retry
+            }
+            if (attempt < 4 && isActive) {
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
     }
 
     // Initialize the screensaver module

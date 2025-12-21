@@ -15,38 +15,34 @@ import (
 
 // Photo represents a photo from Google Drive
 type Photo struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	MimeType     string `json:"mimeType"`
-	ThumbnailURL string `json:"thumbnailUrl,omitempty"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	MimeType      string `json:"mimeType"`
+	ThumbnailURL  string `json:"thumbnailUrl,omitempty"`
 	WebContentURL string `json:"webContentUrl,omitempty"`
 }
 
 // Client handles Google Drive photo operations
 type Client struct {
-	service              *drive.Service
-	screensaverFolderID  string
-	backgroundFolderID   string
-	screensaverPhotos    []Photo
-	backgroundPhotos     []Photo
-	mu                   sync.RWMutex
-	lastScreensaverFetch time.Time
-	lastBackgroundFetch  time.Time
-	cacheDuration        time.Duration
+	service       *drive.Service
+	photosFolderID string
+	photos        []Photo
+	mu            sync.RWMutex
+	lastFetch     time.Time
+	cacheDuration time.Duration
 }
 
 // NewClient creates a new Drive client
-func NewClient(httpClient *http.Client, screensaverFolderID, backgroundFolderID string) (*Client, error) {
+func NewClient(httpClient *http.Client, photosFolderID string) (*Client, error) {
 	service, err := drive.NewService(context.Background(), option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create drive service: %w", err)
 	}
 
 	return &Client{
-		service:             service,
-		screensaverFolderID: screensaverFolderID,
-		backgroundFolderID:  backgroundFolderID,
-		cacheDuration:       5 * time.Minute,
+		service:        service,
+		photosFolderID: photosFolderID,
+		cacheDuration:  5 * time.Minute,
 	}, nil
 }
 
@@ -95,11 +91,11 @@ func (c *Client) fetchPhotosFromFolder(ctx context.Context, folderID string) ([]
 	return photos, nil
 }
 
-// GetScreensaverPhotos returns cached screensaver photos, refreshing if needed
-func (c *Client) GetScreensaverPhotos(ctx context.Context) ([]Photo, error) {
+// GetPhotos returns cached photos, refreshing if needed
+func (c *Client) GetPhotos(ctx context.Context) ([]Photo, error) {
 	c.mu.RLock()
-	if time.Since(c.lastScreensaverFetch) < c.cacheDuration && len(c.screensaverPhotos) > 0 {
-		photos := c.screensaverPhotos
+	if time.Since(c.lastFetch) < c.cacheDuration && len(c.photos) > 0 {
+		photos := c.photos
 		c.mu.RUnlock()
 		return photos, nil
 	}
@@ -109,63 +105,23 @@ func (c *Client) GetScreensaverPhotos(ctx context.Context) ([]Photo, error) {
 	defer c.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if time.Since(c.lastScreensaverFetch) < c.cacheDuration && len(c.screensaverPhotos) > 0 {
-		return c.screensaverPhotos, nil
+	if time.Since(c.lastFetch) < c.cacheDuration && len(c.photos) > 0 {
+		return c.photos, nil
 	}
 
-	photos, err := c.fetchPhotosFromFolder(ctx, c.screensaverFolderID)
+	photos, err := c.fetchPhotosFromFolder(ctx, c.photosFolderID)
 	if err != nil {
 		return nil, err
 	}
 
-	c.screensaverPhotos = photos
-	c.lastScreensaverFetch = time.Now()
+	c.photos = photos
+	c.lastFetch = time.Now()
 	return photos, nil
 }
 
-// GetBackgroundPhotos returns cached background photos, refreshing if needed
-func (c *Client) GetBackgroundPhotos(ctx context.Context) ([]Photo, error) {
-	c.mu.RLock()
-	if time.Since(c.lastBackgroundFetch) < c.cacheDuration && len(c.backgroundPhotos) > 0 {
-		photos := c.backgroundPhotos
-		c.mu.RUnlock()
-		return photos, nil
-	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if time.Since(c.lastBackgroundFetch) < c.cacheDuration && len(c.backgroundPhotos) > 0 {
-		return c.backgroundPhotos, nil
-	}
-
-	photos, err := c.fetchPhotosFromFolder(ctx, c.backgroundFolderID)
-	if err != nil {
-		return nil, err
-	}
-
-	c.backgroundPhotos = photos
-	c.lastBackgroundFetch = time.Now()
-	return photos, nil
-}
-
-// GetRandomScreensaverPhoto returns a random screensaver photo
-func (c *Client) GetRandomScreensaverPhoto(ctx context.Context) (*Photo, error) {
-	photos, err := c.GetScreensaverPhotos(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(photos) == 0 {
-		return nil, nil
-	}
-	return &photos[rand.Intn(len(photos))], nil
-}
-
-// GetRandomBackgroundPhoto returns a random background photo
-func (c *Client) GetRandomBackgroundPhoto(ctx context.Context) (*Photo, error) {
-	photos, err := c.GetBackgroundPhotos(ctx)
+// GetRandomPhoto returns a random photo
+func (c *Client) GetRandomPhoto(ctx context.Context) (*Photo, error) {
+	photos, err := c.GetPhotos(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +157,7 @@ func (c *Client) GetFileContent(ctx context.Context, fileID string) ([]byte, str
 	return data, contentType, nil
 }
 
-// HasScreensaverFolder returns true if screensaver folder is configured
-func (c *Client) HasScreensaverFolder() bool {
-	return c.screensaverFolderID != ""
-}
-
-// HasBackgroundFolder returns true if background folder is configured
-func (c *Client) HasBackgroundFolder() bool {
-	return c.backgroundFolderID != ""
+// HasPhotosFolder returns true if photos folder is configured
+func (c *Client) HasPhotosFolder() bool {
+	return c.photosFolderID != ""
 }

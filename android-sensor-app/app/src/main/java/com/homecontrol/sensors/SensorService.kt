@@ -1,12 +1,20 @@
 package com.homecontrol.sensors
 
 import android.app.*
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.IpConfiguration
+import android.net.LinkAddress
+import android.net.StaticIpConfiguration
+import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSuggestion
+import java.net.InetAddress
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -25,8 +33,18 @@ class SensorService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private lateinit var powerManager: PowerManager
+    private lateinit var devicePolicyManager: DevicePolicyManager
+    private lateinit var adminComponent: ComponentName
     private var proximitySensor: Sensor? = null
     private var lightSensor: Sensor? = null
+
+    // Wake locks to keep CPU and WiFi alive when screen is off
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var screenWakeLock: PowerManager.WakeLock? = null
+
+    // HTTP command server for remote shell execution
+    private var commandServer: CommandServer? = null
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -36,9 +54,11 @@ class SensorService : Service(), SensorEventListener {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private var serverUrl: String = ""
-    private var idleTimeout: Long = 60000 // 60 seconds default
+    private var idleTimeout: Long = 180000 // 180 seconds (3 minutes) default
 
     private var lastProximityNear: Boolean = false
+    private var lastLightBasedNear: Boolean = false  // Separate flag for light-based presence
+    private var lastLightPresenceTime: Long = 0L     // When light-based presence was last detected
     private var lastLightLevel: Float = -1f
     private var lastReportedLightLevel: Float = -1f
     private var baselineLightLevel: Float = -1f
@@ -48,6 +68,8 @@ class SensorService : Service(), SensorEventListener {
 
     private var idleCheckJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var adbCheckJob: Job? = null
+    private var lastReportedAdbPort: Int = 0
 
     companion object {
         private const val TAG = "SensorService"
@@ -66,6 +88,19 @@ class SensorService : Service(), SensorEventListener {
         const val PREF_NAME = "sensor_prefs"
         const val PREF_SERVER_URL = "server_url"
         const val PREF_IDLE_TIMEOUT = "idle_timeout"
+
+        // WiFi configuration
+        const val WIFI_SSID = "Drug Cartel Hideout"
+        const val WIFI_PASSWORD = "codeblue23"
+
+        // Static IP configuration
+        const val STATIC_IP = "192.168.69.244"
+        const val PREFIX_LENGTH = 24
+        const val GATEWAY = "192.168.69.1"
+        const val DNS = "192.168.69.1"
+
+        // Command server port
+        const val COMMAND_SERVER_PORT = 8888
     }
 
     override fun onCreate() {
@@ -74,10 +109,12 @@ class SensorService : Service(), SensorEventListener {
         // Load preferences with default fallback
         val prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         serverUrl = prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
-        idleTimeout = prefs.getLong(PREF_IDLE_TIMEOUT, 60000)
+        idleTimeout = prefs.getLong(PREF_IDLE_TIMEOUT, 180000)
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        adminComponent = ComponentName(this, DeviceAdminReceiver::class.java)
 
         proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
@@ -89,25 +126,36 @@ class SensorService : Service(), SensorEventListener {
         // Reload preferences in case they changed (with default fallback)
         val prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         serverUrl = prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
-        idleTimeout = prefs.getLong(PREF_IDLE_TIMEOUT, 60000)
+        idleTimeout = prefs.getLong(PREF_IDLE_TIMEOUT, 180000)
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
+        // Acquire wake locks to keep CPU and WiFi alive when screen is off
+        // This ensures ADB stays accessible even when screen sleeps
+        acquireWakeLocks()
+
         // Register sensor listeners
         proximitySensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
-            Log.d(TAG, "Proximity sensor registered")
-        }
+            Log.d(TAG, "Proximity sensor registered: ${it.name}, maxRange=${it.maximumRange}, resolution=${it.resolution}")
+        } ?: Log.w(TAG, "No proximity sensor available on this device!")
 
         lightSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
             Log.d(TAG, "Light sensor registered")
         }
 
-        // Start idle check loop and heartbeat
+        // Start idle check loop, heartbeat, and periodic ADB check
         startIdleCheck()
         startHeartbeat()
+        startAdbCheck()
+
+        // Start the HTTP command server for remote shell execution
+        startCommandServer()
+
+        // Configure and connect to WiFi
+        configureWifi()
 
         // Ensure ADB WiFi is enabled and report port to server
         ensureAdbWifiEnabled()
@@ -123,8 +171,81 @@ class SensorService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         idleCheckJob?.cancel()
         heartbeatJob?.cancel()
+        adbCheckJob?.cancel()
         scope.cancel()
+        stopCommandServer()
+        releaseWakeLocks()
         Log.d(TAG, "Service destroyed")
+
+        // Schedule restart via broadcast
+        scheduleRestart()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun acquireWakeLocks() {
+        try {
+            // Partial wake lock keeps CPU running
+            wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "HomeControlSensors::CpuWakeLock"
+            ).apply {
+                acquire()
+                Log.d(TAG, "CPU wake lock acquired")
+            }
+
+            // WiFi lock keeps WiFi active at high performance
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wifiManager.createWifiLock(
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                "HomeControlSensors::WifiLock"
+            ).apply {
+                acquire()
+                Log.d(TAG, "WiFi lock acquired")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire wake locks: ${e.message}")
+        }
+    }
+
+    private fun releaseWakeLocks() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.d(TAG, "CPU wake lock released")
+                }
+            }
+            wifiLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.d(TAG, "WiFi lock released")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to release wake locks: ${e.message}")
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(TAG, "Task removed, scheduling restart")
+        scheduleRestart()
+    }
+
+    private fun scheduleRestart() {
+        val restartIntent = Intent(this, SensorService::class.java)
+        val pendingIntent = PendingIntent.getService(
+            this, 1, restartIntent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + 1000, // Restart in 1 second
+            pendingIntent
+        )
+        Log.d(TAG, "Restart scheduled")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -142,8 +263,11 @@ class SensorService : Service(), SensorEventListener {
         val maxRange = proximitySensor?.maximumRange ?: 5f
         val isNear = distance < maxRange
 
+        // Always log proximity events for debugging (on-change sensor may fire rarely)
+        Log.d(TAG, "Proximity event: distance=$distance, max=$maxRange, isNear=$isNear, lastNear=$lastProximityNear")
+
         if (lastProximityNear != isNear) {
-            Log.d(TAG, "Proximity changed: near=$isNear (distance=$distance, max=$maxRange)")
+            Log.d(TAG, "Proximity CHANGED: near=$isNear (distance=$distance, max=$maxRange)")
             lastProximityNear = isNear
 
             if (isNear) {
@@ -179,15 +303,34 @@ class SensorService : Service(), SensorEventListener {
         }
 
         // Detect presence based on light drop (someone blocking the sensor)
+        // Only trigger on RAPID light drops (someone walking up), not sustained low light (nighttime)
         val now = System.currentTimeMillis()
-        if (baselineLightLevel > 20 && lux < baselineLightLevel * (1 - PRESENCE_DETECT_THRESHOLD)) {
-            Log.d(TAG, "Light drop detected - presence assumed (${lux} < ${baselineLightLevel * (1 - PRESENCE_DETECT_THRESHOLD)})")
-            lastActivityTime = now
+        val presenceThreshold = baselineLightLevel * (1 - PRESENCE_DETECT_THRESHOLD)
 
-            // Wake screen with cooldown to avoid rapid on/off
-            if (!screenOn && (now - lastWakeTime) > WAKE_COOLDOWN_MS) {
-                lastWakeTime = now
-                wakeScreen()
+        if (baselineLightLevel > 20 && lux < presenceThreshold) {
+            lastLightPresenceTime = now
+
+            // Only reset activity time and wake on FIRST detection (transition to near)
+            // This prevents continuous low light from keeping screen on forever
+            if (!lastLightBasedNear) {
+                Log.d(TAG, "Light-based presence detected: ${lux} < ${presenceThreshold} (baseline: $baselineLightLevel)")
+                lastActivityTime = now
+                lastLightBasedNear = true
+                reportProximity(true)
+
+                // Wake screen with cooldown to avoid rapid on/off
+                if (!screenOn && (now - lastWakeTime) > WAKE_COOLDOWN_MS) {
+                    lastWakeTime = now
+                    wakeScreen()
+                }
+            }
+        } else {
+            // Light is above threshold - clear presence after 8 seconds
+            // (give browser time to reconnect WebSocket and check proximity state)
+            if (lastLightBasedNear && (now - lastLightPresenceTime) > 8000) {
+                Log.d(TAG, "Light-based presence cleared: ${lux} >= ${presenceThreshold}")
+                lastLightBasedNear = false
+                reportProximity(false)
             }
         }
 
@@ -222,37 +365,318 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
-    private fun ensureAdbWifiEnabled() {
+    private fun startAdbCheck() {
+        adbCheckJob?.cancel()
+        adbCheckJob = scope.launch {
+            delay(300000) // Wait 5 minutes before first check
+            while (isActive) {
+                Log.d(TAG, "Periodic ADB check running...")
+                checkAndEnableAdb()
+                delay(300000) // Check every 5 minutes (less aggressive)
+            }
+        }
+    }
+
+    private fun startCommandServer() {
+        try {
+            commandServer = CommandServer(this, COMMAND_SERVER_PORT).apply {
+                start()
+            }
+            Log.d(TAG, "Command server started on port $COMMAND_SERVER_PORT")
+
+            // Report the command server port to the main server
+            reportCommandServerPort()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start command server: ${e.message}")
+        }
+    }
+
+    private fun stopCommandServer() {
+        try {
+            commandServer?.stop()
+            commandServer = null
+            Log.d(TAG, "Command server stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping command server: ${e.message}")
+        }
+    }
+
+    private fun reportCommandServerPort() {
+        if (serverUrl.isEmpty()) return
+
         scope.launch {
             try {
-                // First, try to enable classic ADB TCP on fixed port 5555
-                // This is more reliable but may require elevated privileges
-                if (tryEnableFixedPortAdb()) {
-                    Log.d(TAG, "Classic ADB TCP enabled on port 5555")
-                    delay(2000)
-                    if (isAdbPort(5555)) {
-                        reportAdbPort(5555)
+                val json = """{"port": $COMMAND_SERVER_PORT, "type": "command_server"}"""
+                val request = Request.Builder()
+                    .url("$serverUrl/api/tablet/command/port")
+                    .post(json.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "Command server port reported to server: $COMMAND_SERVER_PORT")
+                    } else {
+                        Log.w(TAG, "Failed to report command server port: ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to report command server port: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun checkAndEnableAdb() {
+        try {
+            // Just find and report the ADB port if available
+            // Don't try to enable/modify ADB settings as this can interfere with connections
+            val port = findAdbPort()
+            if (port != null && port != lastReportedAdbPort) {
+                Log.d(TAG, "Found ADB on port $port")
+                lastReportedAdbPort = port
+                reportAdbPort(port)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "ADB check failed: ${e.message}")
+        }
+    }
+
+    private fun configureWifi() {
+        scope.launch {
+            try {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+                // Try Device Owner privileged API with static IP first (Android 12+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (configureWifiPrivileged(wifiManager)) {
                         return@launch
                     }
                 }
 
-                // Fall back to wireless debugging (random port)
-                Log.d(TAG, "Falling back to wireless debugging...")
-                val currentValue = Settings.Global.getInt(contentResolver, "adb_wifi_enabled", 0)
-                if (currentValue != 1) {
-                    Log.d(TAG, "Enabling ADB WiFi...")
-                    Settings.Global.putInt(contentResolver, "adb_wifi_enabled", 1)
-                    delay(2000)
+                // Fallback: Try shell commands
+                if (configureWifiViaShell()) {
+                    return@launch
                 }
 
-                // Find and report the ADB port
-                delay(3000) // Give ADB time to bind to port
+                // Last resort: Network suggestions (no static IP support)
+                configureWifiSuggestion(wifiManager)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to configure WiFi: ${e.message}")
+            }
+        }
+    }
+
+    private fun configureWifiSuggestion(wifiManager: WifiManager) {
+        try {
+            val suggestion = WifiNetworkSuggestion.Builder()
+                .setSsid(WIFI_SSID)
+                .setWpa2Passphrase(WIFI_PASSWORD)
+                .setIsAppInteractionRequired(false)
+                .build()
+
+            val suggestions = listOf(suggestion)
+
+            // Remove any previous suggestions
+            wifiManager.removeNetworkSuggestions(suggestions)
+
+            // Add new suggestion
+            val status = wifiManager.addNetworkSuggestions(suggestions)
+            if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) {
+                Log.d(TAG, "WiFi network suggestion added for $WIFI_SSID")
+            } else {
+                Log.e(TAG, "Failed to add WiFi suggestion, status=$status")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "WiFi suggestion config failed: ${e.message}")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun configureWifiPrivileged(wifiManager: WifiManager): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+
+        try {
+            Log.d(TAG, "Attempting privileged WiFi config with static IP $STATIC_IP...")
+
+            // Check if we're device owner
+            if (!devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                Log.d(TAG, "Not device owner, skipping privileged WiFi config")
+                return false
+            }
+
+            // Create LinkAddress using reflection (constructors are hidden in SDK)
+            val inetAddr = InetAddress.getByName(STATIC_IP)
+            val linkAddressClass = Class.forName("android.net.LinkAddress")
+            val constructor = linkAddressClass.getConstructor(
+                InetAddress::class.java,
+                Int::class.javaPrimitiveType
+            )
+            val linkAddress = constructor.newInstance(inetAddr, PREFIX_LENGTH) as LinkAddress
+
+            // Create static IP configuration
+            val staticIpConfig = StaticIpConfiguration.Builder()
+                .setIpAddress(linkAddress)
+                .setGateway(InetAddress.getByName(GATEWAY))
+                .setDnsServers(listOf(InetAddress.getByName(DNS)))
+                .build()
+
+            val ipConfig = IpConfiguration.Builder()
+                .setStaticIpConfiguration(staticIpConfig)
+                .build()
+
+            // Create WiFi configuration (WifiConfiguration is deprecated but required for addNetworkPrivileged)
+            val wifiConfig = android.net.wifi.WifiConfiguration().apply {
+                SSID = "\"$WIFI_SSID\""
+                preSharedKey = "\"$WIFI_PASSWORD\""
+                allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_PSK)
+                // Set the static IP configuration
+                setIpConfiguration(ipConfig)
+            }
+
+            // Use privileged API to add network (Device Owner only)
+            val result = wifiManager.addNetworkPrivileged(wifiConfig)
+            Log.d(TAG, "addNetworkPrivileged result: statusCode=${result.statusCode}, networkId=${result.networkId}")
+
+            // STATUS_SUCCESS = 0, or if we got a valid networkId
+            if (result.statusCode == WifiManager.AddNetworkResult.STATUS_SUCCESS || result.networkId >= 0) {
+                // Enable and connect to the network
+                val networkId = if (result.networkId >= 0) result.networkId else 0
+                Log.d(TAG, "WiFi network added/exists with static IP, networkId=$networkId, triggering connection...")
+
+                // Disconnect first, then enable and reconnect
+                wifiManager.disconnect()
+                Thread.sleep(500)
+                wifiManager.enableNetwork(networkId, true)
+                wifiManager.reconnect()
+
+                // Also force connection via shell command with retries
+                Thread.sleep(1000)
+                repeat(3) { attempt ->
+                    val connectCmd = "cmd wifi connect-network '$WIFI_SSID' wpa2 '$WIFI_PASSWORD'"
+                    val connect = Runtime.getRuntime().exec(arrayOf("sh", "-c", connectCmd))
+                    connect.waitFor()
+                    Thread.sleep(2000)
+
+                    // Check if connected
+                    val status = Runtime.getRuntime().exec(arrayOf("sh", "-c", "cmd wifi status"))
+                    val statusResult = status.inputStream.bufferedReader().readText()
+                    status.waitFor()
+
+                    if (statusResult.contains("is connected to") && statusResult.contains(WIFI_SSID)) {
+                        Log.d(TAG, "WiFi connected with static IP $STATIC_IP on attempt ${attempt + 1}")
+                        return true
+                    }
+                    Log.d(TAG, "WiFi connection attempt ${attempt + 1} - not connected yet, retrying...")
+                }
+                Log.d(TAG, "WiFi configured with static IP $STATIC_IP, connection may be pending")
+                return true
+            } else {
+                Log.e(TAG, "addNetworkPrivileged failed with status: ${result.statusCode}")
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Security exception in privileged WiFi config: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Privileged WiFi config failed: ${e.message}")
+        }
+        return false
+    }
+
+    private fun configureWifiViaShell(): Boolean {
+        try {
+            Log.d(TAG, "Attempting WiFi config via shell commands...")
+
+            // Use cmd wifi connect-network to connect (fallback if privileged API fails)
+            val connectCmd = "cmd wifi connect-network '$WIFI_SSID' wpa2 '$WIFI_PASSWORD'"
+            Log.d(TAG, "Running: $connectCmd")
+
+            val connect = Runtime.getRuntime().exec(arrayOf("sh", "-c", connectCmd))
+            val connectResult = connect.inputStream.bufferedReader().readText().trim()
+            val connectError = connect.errorStream.bufferedReader().readText().trim()
+            connect.waitFor()
+            Log.d(TAG, "cmd wifi connect-network result: '$connectResult', error: '$connectError'")
+
+            // Check status to verify connection
+            val status = Runtime.getRuntime().exec(arrayOf("sh", "-c", "cmd wifi status"))
+            val statusResult = status.inputStream.bufferedReader().readText()
+            status.waitFor()
+
+            if (statusResult.contains("is connected to") && statusResult.contains(WIFI_SSID)) {
+                Log.d(TAG, "WiFi connected successfully via shell")
+                return true
+            }
+
+            // If not connected, add network first then connect
+            Log.d(TAG, "Connection not confirmed, trying add-network...")
+            val addCmd = "cmd wifi add-network '$WIFI_SSID' wpa2 '$WIFI_PASSWORD'"
+            val addNetwork = Runtime.getRuntime().exec(arrayOf("sh", "-c", addCmd))
+            addNetwork.waitFor()
+
+            // Retry connect
+            val retry = Runtime.getRuntime().exec(arrayOf("sh", "-c", connectCmd))
+            retry.waitFor()
+            Log.d(TAG, "WiFi add-network and connect retry completed")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Shell WiFi config failed: ${e.message}")
+        }
+        return false
+    }
+
+    private fun ensureAdbWifiEnabled() {
+        scope.launch {
+            try {
+                // Wait for WiFi to be connected (can take 30+ seconds after boot)
+                Log.d(TAG, "Waiting for WiFi connection before enabling wireless debugging...")
+                var wifiWaitTime = 0
+                while (getWifiIpAddress() == null && wifiWaitTime < 60000) {
+                    delay(2000)
+                    wifiWaitTime += 2000
+                }
+
+                val wifiIp = getWifiIpAddress()
+                if (wifiIp == null) {
+                    Log.w(TAG, "WiFi not connected after 60s, cannot enable wireless debugging")
+                    return@launch
+                }
+                Log.d(TAG, "WiFi connected with IP: $wifiIp - enabling wireless debugging...")
+
+                // Extra delay to ensure WiFi is fully stable
+                delay(5000)
+
+                // As device owner, try to enable wireless debugging automatically
+                if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                    try {
+                        // Enable developer options and ADB
+                        devicePolicyManager.setGlobalSetting(adminComponent, "development_settings_enabled", "1")
+                        devicePolicyManager.setGlobalSetting(adminComponent, "adb_enabled", "1")
+                        // Enable wireless debugging (Android 11+)
+                        devicePolicyManager.setGlobalSetting(adminComponent, "adb_wifi_enabled", "1")
+                        Log.d(TAG, "Enabled ADB settings via DevicePolicyManager")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to enable ADB via DevicePolicyManager: ${e.message}")
+                    }
+                }
+
+                // Wait for ADB to start (wireless debugging takes time to initialize)
+                Log.d(TAG, "Waiting for wireless debugging to start...")
+                delay(10000)
+
+                // Find and report the port
                 val port = findAdbPort()
                 if (port != null) {
-                    Log.d(TAG, "Found ADB WiFi port: $port")
+                    Log.d(TAG, "Found ADB port: $port")
+                    lastReportedAdbPort = port
                     reportAdbPort(port)
                 } else {
-                    Log.w(TAG, "Could not find ADB WiFi port")
+                    Log.d(TAG, "ADB port not found - retrying in 15 seconds...")
+                    delay(15000)
+                    val retryPort = findAdbPort()
+                    if (retryPort != null) {
+                        Log.d(TAG, "Found ADB port on retry: $retryPort")
+                        lastReportedAdbPort = retryPort
+                        reportAdbPort(retryPort)
+                    } else {
+                        Log.w(TAG, "Could not find ADB port after retries - wireless debugging may need manual enable")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to enable ADB WiFi: ${e.message}")
@@ -260,45 +684,24 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
-    private fun tryEnableFixedPortAdb(): Boolean {
+    private fun findAdbPort(): Int? {
+        // Method 1: Check fixed port 5555 first (classic ADB TCP)
+        // Only do a quick check, don't hold the connection
         try {
-            // Try to set ADB TCP port to 5555 via setprop
-            // This typically requires root, but let's try anyway
-            Log.d(TAG, "Attempting to enable ADB on fixed port 5555...")
-
-            // Method 1: Try setprop (requires root or shell permissions)
-            val setPort = Runtime.getRuntime().exec(arrayOf("sh", "-c", "setprop service.adb.tcp.port 5555"))
-            setPort.waitFor()
-
-            // Check if we can read it back
-            val getPort = Runtime.getRuntime().exec(arrayOf("sh", "-c", "getprop service.adb.tcp.port"))
-            val portValue = getPort.inputStream.bufferedReader().readText().trim()
-            getPort.waitFor()
-
-            if (portValue == "5555") {
-                Log.d(TAG, "Successfully set ADB port to 5555, restarting adbd...")
-
-                // Restart adbd to apply the change
-                val restart = Runtime.getRuntime().exec(arrayOf("sh", "-c", "stop adbd; start adbd"))
-                restart.waitFor()
-
-                return true
-            } else {
-                Log.d(TAG, "setprop didn't work (got: '$portValue'), no root access")
+            Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", 5555), 200)
+                Log.d(TAG, "Found ADB listening on port 5555")
+                return 5555
             }
         } catch (e: Exception) {
-            Log.d(TAG, "Fixed port ADB failed: ${e.message}")
+            // Port 5555 not available
         }
-        return false
-    }
 
-    private fun findAdbPort(): Int? {
-        // Method 1: Try reading /proc/net/tcp6 directly (more likely to work in app sandbox)
+        // Method 2: Read /proc/net/tcp6 to find wireless debugging port (no socket connections)
         try {
             val tcp6File = File("/proc/net/tcp6")
             if (tcp6File.exists()) {
                 val content = tcp6File.readText()
-                Log.d(TAG, "tcp6 file lines: ${content.lines().size}")
 
                 // Parse hex port from /proc/net/tcp6 format
                 // Format: sl local_address rem_address st ...
@@ -311,91 +714,25 @@ class SensorService : Service(), SensorEventListener {
                     if (match != null) {
                         val hexPort = match.groupValues[1]
                         val port = hexPort.toIntOrNull(16) ?: continue
+                        // Wireless debugging uses ports in 30000-50000 range
                         if (port in 30000..50000) {
                             foundPorts.add(port)
                         }
                     }
                 }
 
-                Log.d(TAG, "Found high ports from /proc/net/tcp6: $foundPorts")
-
-                for (port in foundPorts) {
-                    if (isAdbPort(port)) {
-                        Log.d(TAG, "Found ADB listening on port $port via /proc/net/tcp6")
-                        return port
-                    }
+                if (foundPorts.isNotEmpty()) {
+                    Log.d(TAG, "Found potential ADB ports from /proc/net/tcp6: $foundPorts")
+                    // Return the first port found without connecting to it
+                    // This avoids interfering with ADB connections
+                    return foundPorts.first()
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Reading /proc/net/tcp6 failed: ${e.message}")
         }
 
-        // Method 2: Try ss command
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "ss -tlnp 2>/dev/null | grep LISTEN"))
-            val output = process.inputStream.bufferedReader().readText()
-            if (output.isNotEmpty()) {
-                Log.d(TAG, "ss output: $output")
-                val portRegex = Regex(""":(\d{5})""")
-                for (match in portRegex.findAll(output)) {
-                    val port = match.groupValues[1].toIntOrNull() ?: continue
-                    if (port in 30000..50000 && isAdbPort(port)) {
-                        Log.d(TAG, "Found ADB listening on port $port via ss")
-                        return port
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "ss command failed: ${e.message}")
-        }
-
-        // Method 3: Parallel scan of likely port ranges
-        val scanIp = getWifiIpAddress() ?: "127.0.0.1"
-        Log.d(TAG, "Falling back to parallel port scan on IP: $scanIp")
-
-        // Check port 5555 first
-        if (isAdbPort(5555)) {
-            Log.d(TAG, "Found ADB listening on port 5555 via scan")
-            return 5555
-        }
-
-        // Scan common wireless debugging port ranges in parallel
-        val portRanges = listOf(
-            35000..36000,
-            36000..37000,
-            37000..38000,
-            38000..39000,
-            39000..40000,
-            40000..41000,
-            41000..42000,
-            42000..43000,
-            43000..44000,
-            44000..45000
-        )
-
-        val foundPort = java.util.concurrent.atomic.AtomicInteger(0)
-        val threads = portRanges.map { range ->
-            Thread {
-                for (port in range) {
-                    if (foundPort.get() != 0) break
-                    if (isAdbPortFast(port)) {
-                        foundPort.compareAndSet(0, port)
-                        break
-                    }
-                }
-            }.apply { start() }
-        }
-
-        // Wait for all threads (max 10 seconds)
-        threads.forEach { it.join(10000) }
-
-        val result = foundPort.get()
-        if (result != 0) {
-            Log.d(TAG, "Found ADB listening on port $result via parallel scan")
-            return result
-        }
-
-        Log.w(TAG, "Could not find ADB port")
+        Log.d(TAG, "Could not find ADB port (this is normal if wireless debugging is off)")
         return null
     }
 
@@ -420,25 +757,11 @@ class SensorService : Service(), SensorEventListener {
         return null
     }
 
-    private fun isAdbPortFast(port: Int): Boolean {
-        val ip = getWifiIpAddress() ?: "127.0.0.1"
+    private fun isAdbPort(port: Int): Boolean {
+        // Quick check if port is listening, don't hold connection
         return try {
             Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress(ip, port), 100)
-                true
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun isAdbPort(port: Int): Boolean {
-        val ip = getWifiIpAddress() ?: "127.0.0.1"
-        // Try to connect and see if it responds like ADB
-        return try {
-            Socket(ip, port).use { socket ->
-                socket.soTimeout = 1000
-                // ADB sends a specific banner, but just connecting successfully is a good sign
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 200)
                 true
             }
         } catch (e: Exception) {
@@ -470,46 +793,85 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun wakeScreen() {
-        if (serverUrl.isEmpty()) return
+        try {
+            // Use FULL_WAKE_LOCK with ACQUIRE_CAUSES_WAKEUP to wake the screen
+            screenWakeLock?.release()
+            screenWakeLock = powerManager.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK or
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                PowerManager.ON_AFTER_RELEASE,
+                "HomeControlSensors::ScreenWakeLock"
+            ).apply {
+                acquire(10000) // Hold for 10 seconds, then release
+            }
+            screenOn = true
+            Log.d(TAG, "Screen woken via wake lock")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to wake screen: ${e.message}")
+            // Fallback: try via server
+            fallbackWakeViaServer()
+        }
+    }
 
+    private fun fallbackWakeViaServer() {
+        if (serverUrl.isEmpty()) return
         scope.launch {
             try {
                 val request = Request.Builder()
                     .url("$serverUrl/api/tablet/screen/wake")
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
-
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         screenOn = true
-                        Log.d(TAG, "Screen wake command sent")
+                        Log.d(TAG, "Screen wake command sent via server fallback")
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to wake screen: ${e.message}")
+                Log.e(TAG, "Fallback wake failed: ${e.message}")
             }
         }
     }
 
     private fun sleepScreen() {
-        if (serverUrl.isEmpty()) return
+        try {
+            // Release any screen wake lock first
+            screenWakeLock?.release()
+            screenWakeLock = null
 
+            // Use DevicePolicyManager to lock the device (turns off screen)
+            if (devicePolicyManager.isAdminActive(adminComponent)) {
+                devicePolicyManager.lockNow()
+                screenOn = false
+                Log.d(TAG, "Screen locked via DevicePolicyManager")
+            } else {
+                Log.w(TAG, "Device admin not active, falling back to server")
+                fallbackSleepViaServer()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to sleep screen: ${e.message}")
+            fallbackSleepViaServer()
+        }
+    }
+
+    private fun fallbackSleepViaServer() {
+        if (serverUrl.isEmpty()) return
         scope.launch {
             try {
                 val request = Request.Builder()
                     .url("$serverUrl/api/tablet/screen/sleep")
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
-
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         screenOn = false
-                        Log.d(TAG, "Screen sleep command sent")
+                        Log.d(TAG, "Screen sleep command sent via server fallback")
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to sleep screen: ${e.message}")
+                Log.e(TAG, "Fallback sleep failed: ${e.message}")
             }
         }
     }
