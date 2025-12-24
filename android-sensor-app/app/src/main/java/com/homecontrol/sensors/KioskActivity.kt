@@ -29,6 +29,46 @@ class KioskActivity : AppCompatActivity() {
     private val EXIT_TAP_COUNT = 7
     private val EXIT_TAP_TIMEOUT = 3000L // 3 seconds
 
+    companion object {
+        const val ACTION_RELOAD = "com.homecontrol.sensors.RELOAD_WEBVIEW"
+        const val ACTION_PROXIMITY = "com.homecontrol.sensors.PROXIMITY_CHANGED"
+        const val ACTION_EXIT_KIOSK = "com.homecontrol.sensors.EXIT_KIOSK"
+        const val EXTRA_NEAR = "near"
+    }
+
+    private val kioskReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ACTION_RELOAD -> {
+                    android.util.Log.d("KioskActivity", "Reload broadcast received - clearing cache")
+                    runOnUiThread {
+                        webView.clearCache(true)
+                        webView.reload()
+                    }
+                }
+                ACTION_PROXIMITY -> {
+                    val isNear = intent.getBooleanExtra(EXTRA_NEAR, false)
+                    android.util.Log.d("KioskActivity", "Proximity broadcast received: near=$isNear")
+                    if (isNear) {
+                        runOnUiThread {
+                            // Directly dismiss screensaver via JavaScript
+                            webView.evaluateJavascript(
+                                "window.dismissScreensaver && window.dismissScreensaver()",
+                                null
+                            )
+                        }
+                    }
+                }
+                ACTION_EXIT_KIOSK -> {
+                    android.util.Log.d("KioskActivity", "Exit kiosk broadcast received")
+                    runOnUiThread {
+                        exitKioskMode()
+                    }
+                }
+            }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +128,18 @@ class KioskActivity : AppCompatActivity() {
 
         // Start the sensor service
         startSensorService()
+
+        // Register broadcast receiver for reload, proximity, and kiosk exit events
+        val filter = android.content.IntentFilter().apply {
+            addAction(ACTION_RELOAD)
+            addAction(ACTION_PROXIMITY)
+            addAction(ACTION_EXIT_KIOSK)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(kioskReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(kioskReceiver, filter)
+        }
 
         // Load the URL
         loadUrl()
@@ -224,6 +276,12 @@ class KioskActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Unregister broadcast receiver
+        try {
+            unregisterReceiver(kioskReceiver)
+        } catch (e: Exception) {
+            // Ignore
+        }
         // Stop lock task when activity is destroyed
         try {
             stopLockTask()

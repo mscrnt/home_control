@@ -1,6 +1,7 @@
 package com.homecontrol.sensors
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONObject
@@ -29,6 +30,8 @@ class CommandServer(
                 uri == "/logcat" && method == Method.GET -> handleLogcat(session)
                 uri == "/screenshot" && method == Method.GET -> handleScreenshot()
                 uri == "/reboot" && method == Method.POST -> handleReboot()
+                uri == "/reload" && method == Method.POST -> handleReload()
+                uri == "/kiosk/exit" && method == Method.POST -> handleExitKiosk()
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
                     "application/json",
@@ -162,6 +165,36 @@ class CommandServer(
             Response.Status.OK,
             "application/json",
             """{"status": "rebooting"}"""
+        )
+    }
+
+    private fun handleReload(): Response {
+        Log.d(TAG, "WebView reload requested")
+
+        // Send broadcast to KioskActivity to reload WebView
+        val intent = Intent(KioskActivity.ACTION_RELOAD)
+        intent.setPackage(context.packageName)
+        context.sendBroadcast(intent)
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            """{"status": "reload_triggered"}"""
+        )
+    }
+
+    private fun handleExitKiosk(): Response {
+        Log.d(TAG, "Exit kiosk mode requested")
+
+        // Send broadcast to KioskActivity to exit kiosk mode
+        val intent = Intent(KioskActivity.ACTION_EXIT_KIOSK)
+        intent.setPackage(context.packageName)
+        context.sendBroadcast(intent)
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            """{"status": "exit_kiosk_triggered"}"""
         )
     }
 

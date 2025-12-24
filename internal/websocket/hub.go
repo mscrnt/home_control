@@ -5,8 +5,18 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+const (
+	// Time allowed to write a message to the peer
+	writeWait = 10 * time.Second
+	// Time allowed to read the next pong message from the peer
+	pongWait = 60 * time.Second
+	// Send pings to peer with this period (must be less than pongWait)
+	pingPeriod = 30 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -25,9 +35,10 @@ type Event struct {
 
 // Client represents a WebSocket client
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	hub        *Hub
+	conn       *websocket.Conn
+	send       chan []byte
+	remoteAddr string
 }
 
 // Hub manages WebSocket connections
@@ -56,8 +67,9 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			count := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("WebSocket client connected. Total clients: %d", len(h.clients))
+			log.Printf("WebSocket: Client connected from %s (total: %d)", client.remoteAddr, count)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -65,8 +77,9 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 			}
+			count := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("WebSocket client disconnected. Total clients: %d", len(h.clients))
+			log.Printf("WebSocket: Client disconnected from %s (total: %d)", client.remoteAddr, count)
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
@@ -87,9 +100,13 @@ func (h *Hub) Run() {
 func (h *Hub) Broadcast(event Event) {
 	data, err := json.Marshal(event)
 	if err != nil {
-		log.Printf("Failed to marshal event: %v", err)
+		log.Printf("WebSocket: Failed to marshal event: %v", err)
 		return
 	}
+	h.mu.RLock()
+	count := len(h.clients)
+	h.mu.RUnlock()
+	log.Printf("WebSocket: Broadcasting '%s' to %d client(s)", event.Type, count)
 	h.broadcast <- data
 }
 
@@ -113,16 +130,20 @@ func (h *Hub) ClientCount() int {
 
 // ServeWS handles WebSocket requests
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+	remoteAddr := r.RemoteAddr
+	log.Printf("WebSocket: Upgrade request from %s (User-Agent: %s)", remoteAddr, r.UserAgent())
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		log.Printf("WebSocket: Upgrade failed from %s: %v", remoteAddr, err)
 		return
 	}
 
 	client := &Client{
-		hub:  h,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:        h,
+		conn:       conn,
+		send:       make(chan []byte, 256),
+		remoteAddr: remoteAddr,
 	}
 	h.register <- client
 
@@ -138,18 +159,26 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 // writePump sends messages to the WebSocket connection
 func (c *Client) writePump() {
+	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		ticker.Stop()
 		c.conn.Close()
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				return
+			}
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
@@ -163,6 +192,13 @@ func (c *Client) readPump() {
 		c.conn.Close()
 	}()
 
+	c.conn.SetReadLimit(512)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
 	for {
 		_, _, err := c.conn.ReadMessage()
 		if err != nil {
@@ -171,6 +207,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		// We don't process incoming messages, just keep the connection alive
+		// Reset read deadline on any message (keepalive from client)
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	}
 }

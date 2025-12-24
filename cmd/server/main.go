@@ -649,6 +649,8 @@ func main() {
 	r.Post("/api/tablet/sensor/light", handleTabletLight)
 	r.Get("/api/tablet/sensor/state", handleGetSensorState)
 	r.Post("/api/tablet/adb/port", handleTabletAdbPort)
+	r.Post("/api/tablet/kiosk/exit", handleExitKiosk)
+	r.Post("/api/tablet/reload", handleTabletReload)
 
 	// Hue API routes
 	r.Get("/api/hue/rooms", handleGetHueRooms)
@@ -4103,4 +4105,73 @@ func handleTabletAdbPort(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"address": newAddr,
 	})
+}
+
+// getTabletCommandServerURL returns the tablet's command server URL (port 8888)
+func getTabletCommandServerURL() string {
+	if tabletClient == nil {
+		return ""
+	}
+	currentAddr := tabletClient.GetAddress()
+	ip := currentAddr
+	if idx := strings.LastIndex(currentAddr, ":"); idx != -1 {
+		ip = currentAddr[:idx]
+	}
+	return fmt.Sprintf("http://%s:8888", ip)
+}
+
+// handleExitKiosk sends a request to the tablet to exit kiosk mode
+func handleExitKiosk(w http.ResponseWriter, r *http.Request) {
+	baseURL := getTabletCommandServerURL()
+	if baseURL == "" {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/kiosk/exit", nil)
+	if err != nil {
+		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to contact tablet: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": resp.StatusCode == 200})
+}
+
+// handleTabletReload sends a request to the tablet to reload the WebView
+func handleTabletReload(w http.ResponseWriter, r *http.Request) {
+	baseURL := getTabletCommandServerURL()
+	if baseURL == "" {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/reload", nil)
+	if err != nil {
+		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to contact tablet: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": resp.StatusCode == 200})
 }

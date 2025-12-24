@@ -20,7 +20,95 @@
         {{template "content" .}}
     </main>
 
+    <!-- Shared Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content modal-settings">
+            <h3 class="modal-header">Settings</h3>
+
+            <div class="settings-section">
+                <h4 class="settings-section-title">Appearance</h4>
+                <div class="form-group">
+                    <label>Theme</label>
+                    <div class="theme-options">
+                        <button type="button" class="theme-option" data-theme="light" onclick="setTheme('light')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="5"/>
+                                <line x1="12" y1="1" x2="12" y2="3"/>
+                                <line x1="12" y1="21" x2="12" y2="23"/>
+                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                                <line x1="1" y1="12" x2="3" y2="12"/>
+                                <line x1="21" y1="12" x2="23" y2="12"/>
+                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                            </svg>
+                            <span>Light</span>
+                        </button>
+                        <button type="button" class="theme-option active" data-theme="dark" onclick="setTheme('dark')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                            </svg>
+                            <span>Dark</span>
+                        </button>
+                        <button type="button" class="theme-option" data-theme="auto" onclick="setTheme('auto')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 2a10 10 0 0 1 0 20"/>
+                            </svg>
+                            <span>Auto</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Time Format</label>
+                    <div class="time-format-toggle">
+                        <button type="button" class="format-btn" data-format="12" onclick="setTimeFormat('12')">
+                            12-Hour
+                        </button>
+                        <button type="button" class="format-btn active" data-format="24" onclick="setTimeFormat('24')">
+                            24-Hour
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h4 class="settings-section-title">Tablet</h4>
+                <div class="settings-actions">
+                    <button type="button" class="settings-action-btn" onclick="reloadTablet()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <path d="M23 4v6h-6"/>
+                            <path d="M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        Reload Page
+                    </button>
+                    <button type="button" class="settings-action-btn danger" onclick="exitKiosk()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                        Exit Kiosk Mode
+                    </button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h4 class="settings-section-title">About</h4>
+                <p class="settings-hint">Home Control Kiosk v1.0</p>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="modal-btn primary" onclick="closeSettings()">Done</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/utils.js"></script>
+    <script src="/static/js/settings.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/screensaver.js"></script>
 </body>
 </html>
 {{end}}

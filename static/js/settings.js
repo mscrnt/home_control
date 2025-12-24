@@ -48,10 +48,15 @@ const Settings = (function() {
 
     // Set time format and update UI
     function setTimeFormat(format) {
+        const oldFormat = localStorage.getItem('timeFormat');
         localStorage.setItem('timeFormat', format);
         document.querySelectorAll('.format-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.format === format);
         });
+        // Reload page if format actually changed to apply new formatting
+        if (oldFormat !== format) {
+            location.reload();
+        }
     }
 
     // Load time format setting into UI (for modal)
@@ -114,3 +119,33 @@ function closeSettings() { Settings.close(); }
 function setTheme(theme) { Settings.setTheme(theme); }
 function setTimeFormat(format) { Settings.setTimeFormat(format); }
 function getTimeFormat() { return Settings.getTimeFormat(); }
+
+// Tablet control functions
+async function reloadTablet() {
+    try {
+        const resp = await fetch('/api/tablet/reload', { method: 'POST' });
+        if (resp.ok) {
+            console.log('Tablet reload triggered');
+        } else {
+            console.error('Failed to reload tablet');
+        }
+    } catch (err) {
+        console.error('Error reloading tablet:', err);
+    }
+}
+
+async function exitKiosk() {
+    if (!confirm('Exit kiosk mode? This will unlock the tablet.')) {
+        return;
+    }
+    try {
+        const resp = await fetch('/api/tablet/kiosk/exit', { method: 'POST' });
+        if (resp.ok) {
+            console.log('Kiosk exit triggered');
+        } else {
+            console.error('Failed to exit kiosk mode');
+        }
+    } catch (err) {
+        console.error('Error exiting kiosk:', err);
+    }
+}

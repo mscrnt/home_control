@@ -10,6 +10,7 @@ const Screensaver = (function() {
     let photoTimer = null;
     let backgroundTimer = null;
     let clockTimer = null;
+    let proximityPollTimer = null;
     let isActive = false;
     let photos = [];
     let currentPhotoIndex = 0;
@@ -129,6 +130,9 @@ const Screensaver = (function() {
             showNextPhoto();
             photoTimer = setInterval(showNextPhoto, 60000);
         }
+
+        // Start polling proximity as fallback (in case WebSocket is disconnected)
+        startProximityPolling();
     }
 
     // Hide the screensaver
@@ -151,6 +155,37 @@ const Screensaver = (function() {
         if (clockTimer) {
             clearInterval(clockTimer);
             clockTimer = null;
+        }
+
+        // Stop proximity polling
+        stopProximityPolling();
+    }
+
+    // Poll proximity state as fallback when WebSocket is disconnected
+    function startProximityPolling() {
+        stopProximityPolling();
+        // Poll every 2 seconds while screensaver is active
+        proximityPollTimer = setInterval(async () => {
+            if (!isActive) return;
+            try {
+                const resp = await fetch('/api/tablet/sensor/state');
+                if (resp.ok) {
+                    const state = await resp.json();
+                    if (state.proximityNear) {
+                        console.log('Screensaver dismissed by proximity poll');
+                        hide();
+                    }
+                }
+            } catch (e) {
+                // Network error, keep trying
+            }
+        }, 2000);
+    }
+
+    function stopProximityPolling() {
+        if (proximityPollTimer) {
+            clearInterval(proximityPollTimer);
+            proximityPollTimer = null;
         }
     }
 

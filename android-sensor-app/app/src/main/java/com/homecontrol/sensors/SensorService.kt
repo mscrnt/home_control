@@ -61,7 +61,9 @@ class SensorService : Service(), SensorEventListener {
     private var lastLightPresenceTime: Long = 0L     // When light-based presence was last detected
     private var lastLightLevel: Float = -1f
     private var lastReportedLightLevel: Float = -1f
-    private var baselineLightLevel: Float = -1f
+    // Sliding window for light level averaging (detect rapid drops)
+    private val lightHistory = ArrayDeque<Float>(LIGHT_HISTORY_SIZE)
+    private var lightHistorySum: Float = 0f
     private var lastActivityTime: Long = System.currentTimeMillis()
     private var lastWakeTime: Long = 0L
     private var screenOn: Boolean = true
@@ -78,8 +80,9 @@ class SensorService : Service(), SensorEventListener {
 
         // Tuning constants
         private const val LIGHT_REPORT_THRESHOLD = 0.25f  // Report when light changes by 25%
-        private const val PRESENCE_DETECT_THRESHOLD = 0.35f  // Detect presence at 35% light drop
+        private const val PRESENCE_DETECT_THRESHOLD = 0.40f  // Detect presence at 40% drop from recent avg
         private const val WAKE_COOLDOWN_MS = 3000L  // Don't try to wake again for 3 seconds
+        private const val LIGHT_HISTORY_SIZE = 20   // ~4 seconds of history at 5Hz sampling
 
         // Default server URL
         const val DEFAULT_SERVER_URL = "http://192.168.69.229:8080"
@@ -284,59 +287,69 @@ class SensorService : Service(), SensorEventListener {
     }
 
     private fun handleLight(lux: Float) {
-        // Set baseline on first reading
-        if (baselineLightLevel < 0) {
-            baselineLightLevel = lux
-            lastReportedLightLevel = lux
-        }
-
-        // Track current level for presence detection
+        // Track current level
         lastLightLevel = lux
 
         // Only report to server for brightness adjustment when change is significant (25%)
-        // This reduces unnecessary brightness flickering
-        if (lastReportedLightLevel < 0 ||
-            kotlin.math.abs(lux - lastReportedLightLevel) / (lastReportedLightLevel + 1) > LIGHT_REPORT_THRESHOLD) {
+        if (lastReportedLightLevel < 0) {
             lastReportedLightLevel = lux
-            Log.d(TAG, "Light reported: $lux lux (baseline: $baselineLightLevel)")
+        } else if (kotlin.math.abs(lux - lastReportedLightLevel) / (lastReportedLightLevel + 1) > LIGHT_REPORT_THRESHOLD) {
+            lastReportedLightLevel = lux
             reportLight(lux)
         }
 
-        // Detect presence based on light drop (someone blocking the sensor)
-        // Only trigger on RAPID light drops (someone walking up), not sustained low light (nighttime)
-        val now = System.currentTimeMillis()
-        val presenceThreshold = baselineLightLevel * (1 - PRESENCE_DETECT_THRESHOLD)
+        // Maintain sliding window of recent light readings
+        // Add to history and update sum
+        lightHistory.addLast(lux)
+        lightHistorySum += lux
 
-        if (baselineLightLevel > 20 && lux < presenceThreshold) {
+        // Remove old readings if window is full
+        if (lightHistory.size > LIGHT_HISTORY_SIZE) {
+            val removed = lightHistory.removeFirst()
+            lightHistorySum -= removed
+        }
+
+        // Need at least half the window to make detection decisions
+        if (lightHistory.size < LIGHT_HISTORY_SIZE / 2) {
+            return
+        }
+
+        // Calculate recent average (excluding current reading for comparison)
+        val recentAvg = if (lightHistory.size > 1) {
+            (lightHistorySum - lux) / (lightHistory.size - 1)
+        } else {
+            lux
+        }
+
+        val now = System.currentTimeMillis()
+
+        // Detect presence: current reading dropped significantly below recent average
+        // This works regardless of ambient light level (day or night)
+        val dropThreshold = recentAvg * (1 - PRESENCE_DETECT_THRESHOLD)
+
+        if (recentAvg > 5f && lux < dropThreshold) {
+            // Significant light drop detected (someone blocking sensor)
             lastLightPresenceTime = now
 
-            // Only reset activity time and wake on FIRST detection (transition to near)
-            // This prevents continuous low light from keeping screen on forever
             if (!lastLightBasedNear) {
-                Log.d(TAG, "Light-based presence detected: ${lux} < ${presenceThreshold} (baseline: $baselineLightLevel)")
+                Log.d(TAG, "Light presence detected: $lux < $dropThreshold (avg: $recentAvg)")
                 lastActivityTime = now
                 lastLightBasedNear = true
                 reportProximity(true)
 
-                // Wake screen with cooldown to avoid rapid on/off
+                // Wake screen with cooldown
                 if (!screenOn && (now - lastWakeTime) > WAKE_COOLDOWN_MS) {
                     lastWakeTime = now
                     wakeScreen()
                 }
             }
         } else {
-            // Light is above threshold - clear presence after 8 seconds
-            // (give browser time to reconnect WebSocket and check proximity state)
-            if (lastLightBasedNear && (now - lastLightPresenceTime) > 8000) {
-                Log.d(TAG, "Light-based presence cleared: ${lux} >= ${presenceThreshold}")
+            // Light is back to normal - clear presence after brief delay
+            if (lastLightBasedNear && (now - lastLightPresenceTime) > 3000) {
+                Log.d(TAG, "Light presence cleared: $lux (avg: $recentAvg)")
                 lastLightBasedNear = false
                 reportProximity(false)
             }
-        }
-
-        // Update baseline slowly when light is stable and high
-        if (lux > baselineLightLevel * 0.8) {
-            baselineLightLevel = baselineLightLevel * 0.95f + lux * 0.05f
         }
     }
 
@@ -440,10 +453,14 @@ class SensorService : Service(), SensorEventListener {
             }
 
             // Find and report the ADB port if available
+            // Always report on first check (lastReportedAdbPort == 0) or when port changes
             val port = findAdbPort()
-            if (port != null && port != lastReportedAdbPort) {
-                Log.d(TAG, "Found ADB on port $port")
-                lastReportedAdbPort = port
+            if (port != null) {
+                if (port != lastReportedAdbPort || lastReportedAdbPort == 0) {
+                    Log.d(TAG, "Found ADB on port $port (was: $lastReportedAdbPort)")
+                    lastReportedAdbPort = port
+                }
+                // Always report to keep server informed (server might have restarted)
                 reportAdbPort(port)
             }
         } catch (e: Exception) {
@@ -915,6 +932,14 @@ class SensorService : Service(), SensorEventListener {
     }
 
     private fun reportProximity(near: Boolean) {
+        // Broadcast locally to KioskActivity for immediate screensaver dismissal
+        val intent = android.content.Intent(KioskActivity.ACTION_PROXIMITY).apply {
+            putExtra(KioskActivity.EXTRA_NEAR, near)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+        Log.d(TAG, "Sent proximity broadcast: near=$near")
+
         if (serverUrl.isEmpty()) return
 
         scope.launch {
