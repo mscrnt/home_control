@@ -136,7 +136,7 @@ func ScanForPort(ctx context.Context, ip string) (int, error) {
 				}
 
 				addr := fmt.Sprintf("%s:%d", ip, port)
-				conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+				conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 				if err == nil {
 					conn.Close()
 					select {
@@ -243,7 +243,7 @@ func (c *Client) StartConnectionMonitor(ctx context.Context, checkInterval time.
 						lastScanTime = time.Now()
 
 						ip := c.GetIP()
-						scanCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						scanCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 						port, err := ScanForPort(scanCtx, ip)
 						cancel()
 
