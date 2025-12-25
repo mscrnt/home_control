@@ -1928,6 +1928,11 @@ setTimeout(checkForEventUpdates, 5000);
                 initDayTimeline();
                 updateWeatherWidget();
 
+                // Render holidays
+                if (typeof renderHolidays === 'function') {
+                    renderHolidays();
+                }
+
                 // Re-apply calendar visibility
                 const hidden = JSON.parse(localStorage.getItem('hiddenCalendars') || '[]');
                 hidden.forEach(id => {

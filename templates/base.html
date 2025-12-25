@@ -80,6 +80,19 @@
                 </div>
 
                 <div class="settings-section">
+                    <h4 class="settings-section-title">Calendar</h4>
+                    <div class="form-group">
+                        <label class="toggle-label">
+                            <span>Show US Holidays</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="holidaysToggle" onchange="setHolidaysEnabled(this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
                     <h4 class="settings-section-title">Tablet</h4>
                     <div class="settings-actions">
                         <button type="button" class="settings-action-btn" onclick="reloadTablet()">
@@ -112,6 +125,7 @@
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/settings.js"></script>
     <script src="/static/js/weather.js"></script>
+    <script src="/static/js/holidays.js"></script>
     <script src="/static/js/websocket.js"></script>
     <script src="/static/js/screensaver.js"></script>
 </body>
