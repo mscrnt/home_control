@@ -35,35 +35,47 @@
    Settings Modal
    ============================================ */
 .modal-settings {
-    max-width: 450px;
+    width: 90%;
+    max-width: 520px;
+    padding: 0;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+
+.settings-body {
+    padding: 1.5rem;
 }
 
 .settings-section {
-    margin-bottom: 1.5rem;
-    padding-bottom: 1.5rem;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1.75rem;
     border-bottom: 1px solid var(--border-light);
 }
 
+.settings-section-last,
 .settings-section:last-of-type {
-    margin-bottom: 1rem;
+    margin-bottom: 0;
     padding-bottom: 0;
     border-bottom: none;
+    text-align: center;
 }
 
 .settings-section-title {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0 0 1rem 0;
+    letter-spacing: 1px;
+    margin: 0 0 1.25rem 0;
 }
 
 .settings-hint {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin: 0.5rem 0 0 0;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0;
     line-height: 1.4;
+    text-align: center;
 }
 
 .settings-info {
@@ -147,6 +159,57 @@
     background: var(--bg-secondary);
     border-color: var(--accent);
     color: var(--text-primary);
+}
+
+/* ============================================
+   Settings Action Buttons (Tablet controls)
+   ============================================ */
+.settings-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.settings-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px 24px;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-light);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.settings-action-btn:hover {
+    background: var(--bg-input);
+    border-color: var(--accent);
+}
+
+.settings-action-btn:active {
+    background: var(--bg-secondary);
+    transform: scale(0.98);
+}
+
+.settings-action-btn svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.settings-action-btn.danger {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.settings-action-btn.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
 }
 
 /* ============================================
