@@ -1,10 +1,15 @@
 package com.homecontrol.sensors
 
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -34,6 +39,13 @@ class CommandServer(
                 uri == "/reload" && method == Method.POST -> handleReload()
                 uri == "/kiosk/exit" && method == Method.POST -> handleExitKiosk()
                 uri == "/theme" && method == Method.GET -> handleTheme()
+                uri == "/apps" && method == Method.GET -> handleListApps(session)
+                uri == "/apps/hide" && method == Method.POST -> handleHideApp(session)
+                uri == "/apps/unhide" && method == Method.POST -> handleUnhideApp(session)
+                uri == "/bloatware" && method == Method.GET -> handleGetBlocklist()
+                uri == "/bloatware/remove" && method == Method.POST -> handleRemoveBloatware()
+                uri == "/managed-apps" && method == Method.GET -> handleGetManagedApps()
+                uri == "/managed-apps/update" && method == Method.POST -> handleUpdateManagedApps()
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
                     "application/json",
@@ -214,6 +226,274 @@ class CommandServer(
             Response.Status.OK,
             "application/json",
             json.toString()
+        )
+    }
+
+    private fun handleListApps(session: IHTTPSession): Response {
+        val params = session.parms
+        val showSystem = params["system"]?.toBoolean() ?: true
+        val showHidden = params["hidden"]?.toBoolean() ?: false
+
+        val pm = context.packageManager
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
+
+        // Check if we're device owner - only then can we query/set hidden status
+        val isDeviceOwner = try {
+            dpm.isDeviceOwnerApp(context.packageName)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check device owner status: ${e.message}")
+            false
+        }
+
+        val apps = JSONArray()
+        val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+
+        for (appInfo in packages) {
+            val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
+            // Skip system apps if not requested
+            if (isSystem && !showSystem) continue
+
+            // Skip our own app
+            if (appInfo.packageName == context.packageName) continue
+
+            // Only check hidden status if we're device owner
+            val isHidden = if (isDeviceOwner) {
+                try {
+                    dpm.isApplicationHidden(adminComponent, appInfo.packageName)
+                } catch (e: Exception) {
+                    false
+                }
+            } else {
+                false
+            }
+
+            // Skip hidden apps if not requested
+            if (isHidden && !showHidden) continue
+
+            val appJson = JSONObject().apply {
+                put("package", appInfo.packageName)
+                put("name", pm.getApplicationLabel(appInfo).toString())
+                put("system", isSystem)
+                put("hidden", isHidden)
+            }
+            apps.put(appJson)
+        }
+
+        val response = JSONObject().apply {
+            put("apps", apps)
+            put("count", apps.length())
+            put("isDeviceOwner", isDeviceOwner)
+        }
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            response.toString()
+        )
+    }
+
+    private fun handleHideApp(session: IHTTPSession): Response {
+        val contentLength = session.headers["content-length"]?.toIntOrNull() ?: 0
+        val buffer = ByteArray(contentLength)
+        session.inputStream.read(buffer, 0, contentLength)
+        val body = String(buffer)
+
+        val json = JSONObject(body)
+        val packageName = json.optString("package", "")
+
+        if (packageName.isEmpty()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"error": "Missing 'package' parameter"}"""
+            )
+        }
+
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
+
+        // Check if we're device owner
+        val isDeviceOwner = try {
+            dpm.isDeviceOwnerApp(context.packageName)
+        } catch (e: Exception) {
+            false
+        }
+
+        if (!isDeviceOwner) {
+            return newFixedLengthResponse(
+                Response.Status.FORBIDDEN,
+                "application/json",
+                """{"error": "Not device owner - cannot hide apps"}"""
+            )
+        }
+
+        // Don't allow hiding our own app or critical system components
+        val protectedPackages = listOf(
+            context.packageName,
+            "com.android.settings",
+            "com.android.systemui"
+        )
+        if (packageName in protectedPackages) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"error": "Cannot hide protected package: $packageName"}"""
+            )
+        }
+
+        return try {
+            val success = dpm.setApplicationHidden(adminComponent, packageName, true)
+            Log.d(TAG, "Hide app $packageName: $success")
+
+            val response = JSONObject().apply {
+                put("package", packageName)
+                put("hidden", success)
+            }
+            newFixedLengthResponse(
+                Response.Status.OK,
+                "application/json",
+                response.toString()
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to hide app $packageName: ${e.message}")
+            newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                "application/json",
+                """{"error": "${e.message?.replace("\"", "'")}"}"""
+            )
+        }
+    }
+
+    private fun handleUnhideApp(session: IHTTPSession): Response {
+        val contentLength = session.headers["content-length"]?.toIntOrNull() ?: 0
+        val buffer = ByteArray(contentLength)
+        session.inputStream.read(buffer, 0, contentLength)
+        val body = String(buffer)
+
+        val json = JSONObject(body)
+        val packageName = json.optString("package", "")
+
+        if (packageName.isEmpty()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"error": "Missing 'package' parameter"}"""
+            )
+        }
+
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
+
+        // Check if we're device owner
+        val isDeviceOwner = try {
+            dpm.isDeviceOwnerApp(context.packageName)
+        } catch (e: Exception) {
+            false
+        }
+
+        if (!isDeviceOwner) {
+            return newFixedLengthResponse(
+                Response.Status.FORBIDDEN,
+                "application/json",
+                """{"error": "Not device owner - cannot unhide apps"}"""
+            )
+        }
+
+        return try {
+            val success = dpm.setApplicationHidden(adminComponent, packageName, false)
+            Log.d(TAG, "Unhide app $packageName: $success")
+
+            val response = JSONObject().apply {
+                put("package", packageName)
+                put("hidden", !success) // If unhide succeeded, hidden is now false
+            }
+            newFixedLengthResponse(
+                Response.Status.OK,
+                "application/json",
+                response.toString()
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to unhide app $packageName: ${e.message}")
+            newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                "application/json",
+                """{"error": "${e.message?.replace("\"", "'")}"}"""
+            )
+        }
+    }
+
+    private fun handleGetBlocklist(): Response {
+        val blocklist = BloatwareManager.getBlocklist()
+        val json = JSONObject().apply {
+            put("blocklist", JSONArray(blocklist))
+            put("count", blocklist.size)
+        }
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            json.toString()
+        )
+    }
+
+    private fun handleRemoveBloatware(): Response {
+        Log.d(TAG, "Manual bloatware removal triggered")
+
+        // Run in background and return immediately
+        Thread {
+            BloatwareManager.removeAllBloatware(context)
+        }.start()
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            """{"status": "removal_started"}"""
+        )
+    }
+
+    private fun handleGetManagedApps(): Response {
+        val managedApps = ManagedAppsManager.getManagedApps()
+        val pm = context.packageManager
+
+        val apps = JSONArray()
+        for ((packageName, url) in managedApps) {
+            val installedVersion = try {
+                pm.getPackageInfo(packageName, 0).versionName
+            } catch (e: Exception) {
+                null
+            }
+
+            val appJson = JSONObject().apply {
+                put("package", packageName)
+                put("url", url)
+                put("installed", installedVersion != null)
+                put("version", installedVersion ?: "not installed")
+            }
+            apps.put(appJson)
+        }
+
+        val response = JSONObject().apply {
+            put("apps", apps)
+            put("count", apps.length())
+        }
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            response.toString()
+        )
+    }
+
+    private fun handleUpdateManagedApps(): Response {
+        Log.d(TAG, "Manual managed apps update triggered")
+
+        ManagedAppsManager.forceUpdate(context)
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            """{"status": "update_started"}"""
         )
     }
 

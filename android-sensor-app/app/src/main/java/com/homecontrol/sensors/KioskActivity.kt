@@ -129,6 +129,14 @@ class KioskActivity : AppCompatActivity() {
         // Start lock task mode if we're device owner
         startLockTaskIfOwner()
 
+        // Remove bloatware apps (runs in background)
+        Thread {
+            BloatwareManager.removeAllBloatware(this)
+        }.start()
+
+        // Start managed apps manager (installs/updates required apps)
+        ManagedAppsManager.start(this)
+
         // Start the sensor service
         startSensorService()
 
