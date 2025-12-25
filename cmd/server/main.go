@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -651,6 +652,7 @@ func main() {
 	r.Post("/api/tablet/adb/port", handleTabletAdbPort)
 	r.Post("/api/tablet/kiosk/exit", handleExitKiosk)
 	r.Post("/api/tablet/reload", handleTabletReload)
+	r.Get("/api/tablet/theme", handleGetTabletTheme)
 
 	// Hue API routes
 	r.Get("/api/hue/rooms", handleGetHueRooms)
@@ -4174,4 +4176,31 @@ func handleTabletReload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": resp.StatusCode == 200})
+}
+
+func handleGetTabletTheme(w http.ResponseWriter, r *http.Request) {
+	baseURL := getTabletCommandServerURL()
+	if baseURL == "" {
+		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/theme", nil)
+	if err != nil {
+		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to contact tablet: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	io.Copy(w, resp.Body)
 }

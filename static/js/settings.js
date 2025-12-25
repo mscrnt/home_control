@@ -7,13 +7,47 @@ const Settings = (function() {
     const DEFAULT_THEME = 'dark';
     const DEFAULT_TIME_FORMAT = '12';
 
+    // System dark mode state (set by Android app or CSS media query)
+    let systemDarkMode = null;
+
     // Apply theme to document
     function applyTheme(theme) {
         if (theme === 'auto') {
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Use Android-reported system theme if available, otherwise fall back to CSS media query
+            const prefersDark = systemDarkMode !== null
+                ? systemDarkMode
+                : window.matchMedia('(prefers-color-scheme: dark)').matches;
             document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
         } else {
             document.documentElement.setAttribute('data-theme', theme);
+        }
+    }
+
+    // Called by Android app when system theme changes
+    function onSystemThemeChange(isDark) {
+        console.log('System theme changed:', isDark ? 'dark' : 'light');
+        systemDarkMode = isDark;
+        // Re-apply theme if set to auto
+        if (getTheme() === 'auto') {
+            applyTheme('auto');
+        }
+    }
+
+    // Fetch current system theme from tablet API
+    async function fetchSystemTheme() {
+        try {
+            const resp = await fetch('/api/tablet/theme');
+            if (resp.ok) {
+                const data = await resp.json();
+                console.log('Fetched system theme:', data.theme);
+                systemDarkMode = data.dark;
+                // Re-apply theme if set to auto
+                if (getTheme() === 'auto') {
+                    applyTheme('auto');
+                }
+            }
+        } catch (err) {
+            console.log('Could not fetch system theme:', err.message);
         }
     }
 
@@ -25,12 +59,18 @@ const Settings = (function() {
     // Set theme and update UI
     function setTheme(theme) {
         localStorage.setItem('theme', theme);
-        applyTheme(theme);
 
         // Update button states
         document.querySelectorAll('.theme-option').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === theme);
         });
+
+        // When switching to auto, fetch the current system theme first
+        if (theme === 'auto') {
+            fetchSystemTheme();
+        } else {
+            applyTheme(theme);
+        }
     }
 
     // Load theme setting into UI (for modal)
@@ -87,10 +127,18 @@ const Settings = (function() {
 
     // Initialize - apply theme on load and listen for system changes
     function init() {
-        // Apply saved theme immediately
-        applyTheme(getTheme());
+        const savedTheme = getTheme();
 
-        // Listen for system theme changes when in auto mode
+        // If theme is auto, fetch from tablet and apply; otherwise apply directly
+        if (savedTheme === 'auto') {
+            // Apply immediately with CSS media query fallback, then fetch actual value
+            applyTheme('auto');
+            fetchSystemTheme();
+        } else {
+            applyTheme(savedTheme);
+        }
+
+        // Listen for system theme changes when in auto mode (fallback for non-tablet browsers)
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
             if (getTheme() === 'auto') {
                 applyTheme('auto');
@@ -106,12 +154,16 @@ const Settings = (function() {
         getTheme: getTheme,
         setTheme: setTheme,
         getTimeFormat: getTimeFormat,
-        setTimeFormat: setTimeFormat
+        setTimeFormat: setTimeFormat,
+        onSystemThemeChange: onSystemThemeChange
     };
 })();
 
 // Initialize immediately (theme should apply before DOM ready for no flash)
 Settings.init();
+
+// Expose callback for Android app to call when system theme changes
+window.onSystemThemeChange = Settings.onSystemThemeChange;
 
 // Global function aliases for onclick handlers in HTML
 function openSettings() { Settings.open(); }

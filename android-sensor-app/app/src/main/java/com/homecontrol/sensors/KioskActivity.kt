@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -102,6 +103,8 @@ class KioskActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 progressBar.visibility = View.GONE
+                // Notify web app of current system dark mode setting
+                notifySystemTheme()
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -227,6 +230,27 @@ class KioskActivity : AppCompatActivity() {
         if (hasFocus) {
             enableImmersiveMode()
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Notify web app when system dark mode changes
+        notifySystemTheme()
+    }
+
+    private fun isSystemDarkMode(): Boolean {
+        val nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        return nightMode == Configuration.UI_MODE_NIGHT_YES
+    }
+
+    private fun notifySystemTheme() {
+        val isDark = isSystemDarkMode()
+        android.util.Log.d("KioskActivity", "System theme: ${if (isDark) "dark" else "light"}")
+        // Call JavaScript function to update theme if in auto mode
+        webView.evaluateJavascript(
+            "window.onSystemThemeChange && window.onSystemThemeChange($isDark)",
+            null
+        )
     }
 
     override fun onBackPressed() {

@@ -2,6 +2,7 @@ package com.homecontrol.sensors
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONObject
@@ -32,6 +33,7 @@ class CommandServer(
                 uri == "/reboot" && method == Method.POST -> handleReboot()
                 uri == "/reload" && method == Method.POST -> handleReload()
                 uri == "/kiosk/exit" && method == Method.POST -> handleExitKiosk()
+                uri == "/theme" && method == Method.GET -> handleTheme()
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
                     "application/json",
@@ -195,6 +197,23 @@ class CommandServer(
             Response.Status.OK,
             "application/json",
             """{"status": "exit_kiosk_triggered"}"""
+        )
+    }
+
+    private fun handleTheme(): Response {
+        val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val isDark = nightMode == Configuration.UI_MODE_NIGHT_YES
+        Log.d(TAG, "Theme query: ${if (isDark) "dark" else "light"}")
+
+        val json = JSONObject().apply {
+            put("dark", isDark)
+            put("theme", if (isDark) "dark" else "light")
+        }
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            json.toString()
         )
     }
 
