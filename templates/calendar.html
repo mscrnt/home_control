@@ -375,6 +375,17 @@
                 <input type="text" id="eventTitle" class="form-input" placeholder="Event title">
             </div>
 
+            <div class="form-group" id="calendarSelectGroup">
+                <label for="eventCalendar">Calendar</label>
+                <select id="eventCalendar" class="form-input">
+                    {{range .Calendars}}
+                    {{if .Visible}}
+                    <option value="{{.ID}}" data-color="{{.Color}}">{{.Name}}</option>
+                    {{end}}
+                    {{end}}
+                </select>
+            </div>
+
             <div class="form-group">
                 <label for="eventDate">Date</label>
                 <input type="date" id="eventDate" class="form-input">
@@ -631,6 +642,11 @@ function openCreateModal(date) {
     document.getElementById('eventDescription').value = '';
     document.getElementById('eventRepeat').value = '';
     document.getElementById('eventColor').value = '';
+
+    // Reset calendar selector to first option
+    const calendarSelect = document.getElementById('eventCalendar');
+    if (calendarSelect) calendarSelect.selectedIndex = 0;
+
     setEventType('event');
     toggleTimeInputs();
     setSelectedColor('');
@@ -676,6 +692,12 @@ function openEditModal() {
     setSelectedColor(currentEvent.colorId || '');
     toggleTimeInputs();
 
+    // Set the calendar selector to the event's calendar
+    const calendarSelect = document.getElementById('eventCalendar');
+    if (calendarSelect && currentEvent.calendarId) {
+        calendarSelect.value = currentEvent.calendarId;
+    }
+
     document.getElementById('modalTitle').textContent = 'Edit Event';
     document.getElementById('createBtn').textContent = 'Save Changes';
 
@@ -693,11 +715,15 @@ function setEventType(type) {
         document.getElementById('createBtn').textContent = type === 'event' ? 'Create Event' : 'Create Task';
     }
 
-    // Tasks typically don't have end times
+    // Tasks typically don't have end times and don't need calendar selection
     const timeInputs = document.querySelector('.time-inputs');
+    const calendarSelectGroup = document.getElementById('calendarSelectGroup');
     if (type === 'task') {
         document.getElementById('allDayCheck').checked = true;
         timeInputs.style.display = 'none';
+        if (calendarSelectGroup) calendarSelectGroup.style.display = 'none';
+    } else {
+        if (calendarSelectGroup) calendarSelectGroup.style.display = '';
     }
 }
 
@@ -812,6 +838,7 @@ async function saveEvent() {
     const description = document.getElementById('eventDescription').value.trim();
     const repeat = document.getElementById('eventRepeat').value;
     const colorId = document.getElementById('eventColor').value;
+    const calendarId = document.getElementById('eventCalendar').value;
 
     if (!title || !date) {
         alert('Please enter a title and date');
@@ -827,7 +854,8 @@ async function saveEvent() {
         location: eventLocation,
         description: description,
         repeat: repeat,
-        colorId: colorId
+        colorId: colorId,
+        calendarId: calendarId
     };
 
     try {
@@ -854,13 +882,99 @@ async function saveEvent() {
             const result = await resp.json();
             console.log(editMode ? 'Event updated:' : 'Event created:', result);
             closeModal('createEventModal');
-            window.location.reload();
+
+            // For edits or complex cases, reload the page
+            // For new events, try to add dynamically without reload
+            if (editMode) {
+                setTimeout(() => {
+                    window.location.href = window.location.pathname + window.location.search;
+                }, 100);
+            } else {
+                // Add event to view dynamically
+                addEventToCurrentView(result, data);
+            }
         } else {
             const err = await resp.text();
             alert(`Failed to ${editMode ? 'update' : 'create'} event: ` + err);
         }
     } catch (err) {
         alert(`Error ${editMode ? 'updating' : 'creating'} event: ` + err.message);
+    }
+}
+
+// Add event to current view without page reload
+function addEventToCurrentView(eventResult, formData) {
+    const eventDate = formData.date; // YYYY-MM-DD format
+    const currentView = new URLSearchParams(window.location.search).get('view') || 'month';
+
+    // Get calendar color from the select dropdown
+    const calendarSelect = document.getElementById('eventCalendar');
+    const selectedOption = calendarSelect?.options[calendarSelect.selectedIndex];
+    const eventColor = selectedOption?.dataset.color || '#4285f4';
+
+    if (currentView === 'month') {
+        // Find the day cell for this date
+        const dayCell = document.querySelector(`.month-day[data-date="${eventDate}"]`);
+        if (dayCell) {
+            // Count existing visible events
+            const existingEvents = dayCell.querySelectorAll('.month-event');
+            const moreDiv = dayCell.querySelector('.month-event-more');
+
+            if (existingEvents.length < 3) {
+                // Add the event element
+                const div = document.createElement('div');
+                div.className = 'month-event';
+                div.style.backgroundColor = eventColor;
+                div.dataset.event = JSON.stringify({
+                    id: eventResult.id,
+                    calendarId: eventResult.calendarId,
+                    title: eventResult.title,
+                    start: eventResult.start,
+                    end: eventResult.end,
+                    allDay: eventResult.allDay,
+                    location: eventResult.location || '',
+                    description: eventResult.description || '',
+                    colorId: formData.colorId || '',
+                    recurring: false
+                });
+                div.dataset.calendarId = eventResult.calendarId;
+                div.textContent = eventResult.title;
+                div.onclick = function(e) {
+                    e.stopPropagation();
+                    openEventDetails(this.dataset.event);
+                };
+
+                // Insert before "+more" div if present, otherwise append
+                if (moreDiv) {
+                    dayCell.insertBefore(div, moreDiv);
+                } else {
+                    dayCell.appendChild(div);
+                }
+            } else {
+                // Already have 3+ events, update or add the "+more" counter
+                if (moreDiv) {
+                    const currentCount = parseInt(moreDiv.textContent.match(/\d+/)[0]) || 0;
+                    moreDiv.textContent = `+${currentCount + 1} more`;
+                } else {
+                    const newMoreDiv = document.createElement('div');
+                    newMoreDiv.className = 'month-event-more';
+                    newMoreDiv.textContent = '+1 more';
+                    newMoreDiv.onclick = function(e) {
+                        e.stopPropagation();
+                        showDayEventsModal(eventDate, dayCell);
+                    };
+                    dayCell.appendChild(newMoreDiv);
+                }
+            }
+        } else {
+            // Event is on a date not currently visible, just reload
+            window.location.href = window.location.pathname + window.location.search;
+        }
+    } else {
+        // For week/day views, reload to show the event in the correct time slot
+        setTimeout(() => {
+            window.location.href = window.location.pathname + window.location.search;
+        }, 100);
     }
 }
 

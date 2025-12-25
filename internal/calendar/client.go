@@ -314,6 +314,7 @@ func (c *Client) InvalidateCache() {
 
 // CreateEventOptions holds optional fields for event creation
 type CreateEventOptions struct {
+	CalendarID  string   // Calendar to create event on (empty = first configured or primary)
 	Location    string
 	Description string
 	Recurrence  []string // RRULE strings
@@ -433,7 +434,9 @@ func (c *Client) CreateEvent(ctx context.Context, title string, start, end time.
 
 	// Determine which calendar to create the event on
 	calendarID := "primary"
-	if len(c.calendarIDs) > 0 {
+	if opts != nil && opts.CalendarID != "" {
+		calendarID = opts.CalendarID
+	} else if len(c.calendarIDs) > 0 {
 		calendarID = c.calendarIDs[0]
 	}
 

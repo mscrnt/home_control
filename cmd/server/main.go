@@ -1436,6 +1436,8 @@ type CreateEventRequest struct {
 	Location    string `json:"location"`    // optional
 	Description string `json:"description"` // optional
 	Repeat      string `json:"repeat"`      // optional: daily, weekly, monthly, yearly, weekdays
+	CalendarID  string `json:"calendarId"`  // optional: calendar to create event on
+	ColorID     string `json:"colorId"`     // optional: event color (1-11)
 }
 
 func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
@@ -1503,8 +1505,10 @@ func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 
 	// Build event options
 	opts := &calendar.CreateEventOptions{
+		CalendarID:  req.CalendarID,
 		Location:    req.Location,
 		Description: req.Description,
+		ColorID:     req.ColorID,
 	}
 
 	// Convert repeat string to RRULE
@@ -1515,13 +1519,16 @@ func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("Creating event: title=%q, date=%s, start=%v, end=%v, allDay=%v", req.Title, req.Date, start, end, allDay)
+	log.Printf("Creating event: title=%q, date=%s, start=%v, end=%v, allDay=%v, calendarId=%q", req.Title, req.Date, start, end, allDay, req.CalendarID)
 	event, err := calClient.CreateEvent(r.Context(), req.Title, start, end, allDay, opts)
 	if err != nil {
 		log.Printf("Error creating event: %v", err)
 		http.Error(w, "Failed to create event: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Invalidate server-side cache so next page load shows the new event
+	invalidateCalendarCache()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(event)
