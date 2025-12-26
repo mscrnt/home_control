@@ -196,7 +196,23 @@ const Screensaver = (function() {
         const dateEl = document.getElementById('screensaverDate');
 
         if (timeEl) {
-            timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            // Respect the time format setting from Settings module
+            const format = typeof getTimeFormat === 'function' ? getTimeFormat() : '24';
+            const is12Hour = format === '12';
+
+            if (is12Hour) {
+                // 12-hour format without leading zero (e.g., "9:07 PM")
+                const hours = now.getHours();
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                const period = hours >= 12 ? 'PM' : 'AM';
+                const displayHour = hours % 12 || 12; // Convert 0 to 12 for midnight
+                timeEl.textContent = `${displayHour}:${minutes} ${period}`;
+            } else {
+                // 24-hour format (e.g., "21:07")
+                const hours = now.getHours().toString().padStart(2, '0');
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                timeEl.textContent = `${hours}:${minutes}`;
+            }
         }
         if (dateEl) {
             dateEl.textContent = now.toLocaleDateString([], {

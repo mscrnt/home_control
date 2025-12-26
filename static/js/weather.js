@@ -1,6 +1,27 @@
 // ===== Weather Module =====
 let weatherData = null;
 
+// Format time according to user's time format setting
+function formatWeatherTime(date, includeMinutes = true) {
+    const format = typeof getTimeFormat === 'function' ? getTimeFormat() : '24';
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+
+    if (format === '12') {
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHour = hours % 12 || 12;
+        if (includeMinutes) {
+            return `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`;
+        }
+        return `${displayHour} ${period}`;
+    } else {
+        if (includeMinutes) {
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+        return `${hours.toString().padStart(2, '0')}:00`;
+    }
+}
+
 async function loadWeather() {
     try {
         const resp = await fetch('/api/weather');
@@ -95,9 +116,9 @@ function renderWeatherContent() {
     const daily = weatherData.daily || [];
     const moonPhase = getMoonPhase();
 
-    // Format sunrise/sunset times
-    const sunrise = new Date(current.sunrise * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const sunset = new Date(current.sunset * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    // Format sunrise/sunset times using user's time format preference
+    const sunrise = formatWeatherTime(new Date(current.sunrise * 1000), true);
+    const sunset = formatWeatherTime(new Date(current.sunset * 1000), true);
 
     let html = `
         <div class="weather-current">
@@ -152,7 +173,7 @@ function renderWeatherContent() {
         html += '<div class="weather-hourly">';
         todayHourly.forEach((hour) => {
             const time = new Date(hour.time * 1000);
-            const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric' });
+            const timeStr = formatWeatherTime(time, false);
             html += `
                 <div class="weather-hourly-item">
                     <div class="hourly-time">${timeStr}</div>

@@ -61,15 +61,16 @@
 .screensaver-bg::before {
     content: '';
     position: absolute;
-    top: -20px;
-    left: -20px;
-    right: -20px;
-    bottom: -20px;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background-image: inherit;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    filter: blur(30px) brightness(0.5);
+    filter: blur(40px) brightness(0.5);
+    transform: scale(1.15);
 }
 
 /* Sharp image layer (on top, contained/centered) */
