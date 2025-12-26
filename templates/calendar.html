@@ -469,34 +469,41 @@
 </div>
 
 <!-- Date Picker Modal -->
-<div id="datePickerModal" class="modal">
+<div id="datePickerModal" class="modal" onclick="if(event.target===this)closeDatePicker()">
     <div class="modal-content modal-small">
-        <h3 class="modal-header">Go to Date</h3>
-        <button type="button" class="today-btn" onclick="goToToday()">Today</button>
-        <div class="date-picker-grid">
-            <div class="form-group">
-                <label>Month</label>
-                <select id="datePickerMonth" class="form-input">
-                    <option value="1">January</option>
-                    <option value="2">February</option>
-                    <option value="3">March</option>
-                    <option value="4">April</option>
-                    <option value="5">May</option>
-                    <option value="6">June</option>
-                    <option value="7">July</option>
-                    <option value="8">August</option>
-                    <option value="9">September</option>
-                    <option value="10">October</option>
-                    <option value="11">November</option>
-                    <option value="12">December</option>
-                </select>
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <h3>Go to Date</h3>
             </div>
-            <div class="form-group">
-                <label>Year</label>
-                <select id="datePickerYear" class="form-input"></select>
+            <button type="button" class="modal-close-btn" onclick="closeDatePicker()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="date-picker-grid">
+                <div class="form-group">
+                    <label>Month</label>
+                    <select id="datePickerMonth" class="form-input">
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Year</label>
+                    <select id="datePickerYear" class="form-input"></select>
+                </div>
             </div>
         </div>
-        <div class="modal-actions">
+        <div class="modal-footer">
+            <button type="button" class="modal-btn secondary" onclick="goToToday()">Today</button>
             <button type="button" class="modal-btn secondary" onclick="closeDatePicker()">Cancel</button>
             <button type="button" class="modal-btn primary" onclick="goToDate()">Go</button>
         </div>
@@ -1087,8 +1094,13 @@ document.addEventListener('click', (e) => {
 });
 
 // Date Picker Functions
-const currentView = '{{.View}}';
 const currentDate = '{{.CurrentDate}}';
+
+// Get current view from URL, with fallback to template value
+function getCurrentView() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') || '{{.View}}' || 'day';
+}
 
 function openDatePicker() {
     const modal = document.getElementById('datePickerModal');
@@ -1123,12 +1135,14 @@ function goToDate() {
     const month = document.getElementById('datePickerMonth').value.padStart(2, '0');
     const year = document.getElementById('datePickerYear').value;
     const date = `${year}-${month}-01`;
-    window.location.href = `?view=${currentView}&date=${date}`;
+    const view = getCurrentView();
+    window.location.href = `?view=${view}&date=${date}`;
 }
 
 function goToToday() {
     const today = new Date().toISOString().split('T')[0];
-    window.location.href = `?view=${currentView}&date=${today}`;
+    const view = getCurrentView();
+    window.location.href = `?view=${view}&date=${today}`;
 }
 
 function showDayEventsModal(dateStr, dayElement) {

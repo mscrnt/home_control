@@ -131,7 +131,7 @@
 /* Calendar Header & View Toggle */
 .calendar-header {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 1rem;
     margin-bottom: 0.5rem;
@@ -140,6 +140,10 @@
 
 .calendar-header .calendar-dropdown {
     justify-self: center;
+}
+
+.calendar-header .header-actions {
+    justify-self: end;
 }
 
 .view-toggle {
@@ -567,6 +571,13 @@
 .nav-today-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+}
+
+/* Date Picker Modal */
+.date-picker-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
 }
 
 /* Calendar Dropdown */
