@@ -225,3 +225,67 @@
     gap: 1rem;
     background: var(--bg-secondary);
 }
+
+/* ===== Push-to-Talk Button ===== */
+.talk-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-light);
+    border-radius: 25px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+.talk-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.talk-btn:active,
+.talk-btn.talking {
+    background: #ef4444;
+    border-color: #dc2626;
+    color: white;
+    transform: scale(1.05);
+}
+
+.talk-btn.talking svg {
+    animation: pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.talk-btn svg {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.talk-btn.sending {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    pointer-events: none;
+}
+
+.talk-btn.error {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #dc2626;
+}
+
+[data-theme="dark"] .talk-btn.error {
+    background: rgba(239, 68, 68, 0.2);
+}

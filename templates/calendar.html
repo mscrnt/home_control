@@ -1846,29 +1846,6 @@ setInterval(checkForEventUpdates, 60000);
 setTimeout(checkForEventUpdates, 5000);
 </script>
 
-<!-- Camera/Doorbell WebSocket Module -->
-<script src="/static/js/camera.js"></script>
-
-<!-- Camera Modal -->
-<div id="cameraModal" class="modal camera-modal">
-    <div class="modal-content modal-camera">
-        <div class="modal-header-row">
-            <div class="modal-header-title">
-                <span class="camera-modal-icon">🔔</span>
-                <h3 id="cameraModalTitle">Doorbell</h3>
-            </div>
-            <button class="modal-close-btn" onclick="closeCameraModal()">&times;</button>
-        </div>
-        <div class="camera-stream-container">
-            <img id="cameraStream" class="camera-stream" alt="Camera stream">
-            <div class="camera-loading">Loading camera...</div>
-        </div>
-        <div class="camera-modal-actions">
-            <button class="modal-btn secondary" onclick="closeCameraModal()">Dismiss</button>
-        </div>
-    </div>
-</div>
-
 <!-- Screensaver Overlay -->
 <div id="screensaver" class="screensaver">
     <div class="screensaver-bg"></div>

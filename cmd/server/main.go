@@ -468,8 +468,9 @@ func main() {
 			DoorbellTopics: cfg.MQTTDoorbellTopics,
 		})
 
-		// Set doorbell handler to broadcast via WebSocket
+		// Set doorbell handler to broadcast via WebSocket and wake tablet
 		mqttClient.SetDoorbellHandler(func() {
+			go wakeTablet() // Wake tablet screen first
 			wsHub.BroadcastDoorbell(cfg.DoorbellCamera)
 		})
 
@@ -629,6 +630,7 @@ func main() {
 	// Camera API
 	r.Get("/api/camera/{name}/snapshot", handleCameraSnapshot)
 	r.Get("/api/camera/{name}/stream", handleCameraStream)
+	r.Post("/api/camera/{name}/talk", handleCameraTalk)
 	r.Get("/api/cameras", handleGetCameras)
 
 	// Entity states API (for AJAX refresh)
@@ -2234,6 +2236,34 @@ func handleCameraStream(w http.ResponseWriter, r *http.Request) {
 	cameraManager.ProxyMJPEG(w, r, name)
 }
 
+func handleCameraTalk(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	// Read the PCM audio data from the request body
+	// Expected format: 16-bit PCM, mono, 8kHz sample rate
+	pcmData, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read audio data", http.StatusBadRequest)
+		return
+	}
+
+	if len(pcmData) == 0 {
+		http.Error(w, "No audio data received", http.StatusBadRequest)
+		return
+	}
+
+	// Send audio to camera
+	err = cameraManager.PostAudio(name, pcmData)
+	if err != nil {
+		log.Printf("Failed to post audio to camera %s: %v", name, err)
+		http.Error(w, fmt.Sprintf("Failed to send audio: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Audio sent successfully"))
+}
+
 func handleGetCameras(w http.ResponseWriter, r *http.Request) {
 	cameras := cameraManager.GetCameras()
 	cameraList := make([]map[string]string, 0)
@@ -2247,6 +2277,7 @@ func handleGetCameras(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTestDoorbell(w http.ResponseWriter, r *http.Request) {
+	go wakeTablet() // Wake tablet screen first
 	wsHub.BroadcastDoorbell(appConfig.DoorbellCamera)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Doorbell event broadcast"))
@@ -2273,6 +2304,7 @@ func handleDoorbellWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println("Doorbell webhook triggered from Home Assistant")
+	go wakeTablet() // Wake tablet screen first
 	wsHub.BroadcastDoorbell(appConfig.DoorbellCamera)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
@@ -4191,6 +4223,38 @@ func handleTabletReload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": resp.StatusCode == 200})
+}
+
+// wakeTablet sends a wake request to the tablet to turn on screen and dismiss screensaver
+// This is called asynchronously when doorbell events occur
+func wakeTablet() {
+	baseURL := getTabletCommandServerURL()
+	if baseURL == "" {
+		log.Println("Cannot wake tablet: not configured")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/wake", nil)
+	if err != nil {
+		log.Printf("Failed to create wake request: %v", err)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("Failed to wake tablet: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		log.Println("Tablet wake request sent successfully")
+	} else {
+		log.Printf("Tablet wake request failed with status: %d", resp.StatusCode)
+	}
 }
 
 func handleGetTabletTheme(w http.ResponseWriter, r *http.Request) {

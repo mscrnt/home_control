@@ -46,6 +46,7 @@ class CommandServer(
                 uri == "/bloatware/remove" && method == Method.POST -> handleRemoveBloatware()
                 uri == "/managed-apps" && method == Method.GET -> handleGetManagedApps()
                 uri == "/managed-apps/update" && method == Method.POST -> handleUpdateManagedApps()
+                uri == "/wake" && method == Method.POST -> handleWake()
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
                     "application/json",
@@ -495,6 +496,37 @@ class CommandServer(
             "application/json",
             """{"status": "update_started"}"""
         )
+    }
+
+    private fun handleWake(): Response {
+        Log.d(TAG, "Wake/doorbell request received")
+
+        try {
+            // Wake the screen using input keyevent
+            executeCommand("input keyevent KEYCODE_WAKEUP", 2000)
+
+            // Also send proximity broadcast to dismiss screensaver in WebView
+            val intent = Intent(KioskActivity.ACTION_PROXIMITY).apply {
+                putExtra(KioskActivity.EXTRA_NEAR, true)
+                setPackage(context.packageName)
+            }
+            context.sendBroadcast(intent)
+
+            Log.d(TAG, "Wake command executed and proximity broadcast sent")
+
+            return newFixedLengthResponse(
+                Response.Status.OK,
+                "application/json",
+                """{"status": "wake_triggered"}"""
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Wake failed: ${e.message}")
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                "application/json",
+                """{"error": "${e.message?.replace("\"", "'")}"}"""
+            )
+        }
     }
 
     private data class CommandResult(

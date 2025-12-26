@@ -122,11 +122,46 @@
         </div>
     </div>
 
+    <!-- Camera Modal (doorbell) -->
+    <div id="cameraModal" class="modal camera-modal">
+        <div class="modal-content modal-camera">
+            <div class="modal-header-row">
+                <div class="modal-header-title">
+                    <span class="camera-modal-icon">🔔</span>
+                    <h3 id="cameraModalTitle">Doorbell</h3>
+                </div>
+                <button class="modal-close-btn" onclick="closeCameraModal()">&times;</button>
+            </div>
+            <div class="camera-stream-container">
+                <img id="cameraStream" class="camera-stream" alt="Camera stream">
+                <div class="camera-loading">Loading camera...</div>
+            </div>
+            <div class="camera-modal-actions">
+                <button id="talkBtn" class="modal-btn talk-btn"
+                        onmousedown="startTalking()"
+                        onmouseup="stopTalking()"
+                        onmouseleave="stopTalking()"
+                        ontouchstart="startTalking()"
+                        ontouchend="stopTalking()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="23"/>
+                        <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    <span id="talkBtnText">Hold to Talk</span>
+                </button>
+                <button class="modal-btn secondary" onclick="closeCameraModal()">Dismiss</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/settings.js"></script>
     <script src="/static/js/weather.js"></script>
     <script src="/static/js/holidays.js"></script>
     <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/camera.js"></script>
     <script src="/static/js/screensaver.js"></script>
 </body>
 </html>

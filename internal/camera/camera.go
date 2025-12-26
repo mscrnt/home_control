@@ -1,6 +1,7 @@
 package camera
 
 import (
+	"bytes"
 	"crypto/md5"
 	"fmt"
 	"io"
@@ -400,4 +401,169 @@ func (m *Manager) streamResponse(w http.ResponseWriter, r *http.Request, resp *h
 			}
 		}
 	}
+}
+
+// GetAudioURL returns the audio POST URL for a camera
+func (c *Camera) GetAudioURL() string {
+	return fmt.Sprintf("http://%s/cgi-bin/audio.cgi?action=postAudio&httptype=singlepart&channel=1", c.Host)
+}
+
+// doDigestPostRequest performs an HTTP POST request with digest authentication
+func (m *Manager) doDigestPostRequest(cam *Camera, url string, body []byte, contentType string) (*http.Response, error) {
+	// First request to get the WWW-Authenticate challenge
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// If not 401, return the response (no auth needed or different error)
+	if resp.StatusCode != http.StatusUnauthorized {
+		return resp, nil
+	}
+	resp.Body.Close()
+
+	// Parse the WWW-Authenticate header
+	authHeader := resp.Header.Get("WWW-Authenticate")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Digest ") {
+		return nil, fmt.Errorf("no digest auth challenge received")
+	}
+
+	// Extract digest parameters
+	realm := extractParam(authHeader, "realm")
+	nonce := extractParam(authHeader, "nonce")
+	qop := extractParam(authHeader, "qop")
+
+	// Calculate digest response
+	ha1 := md5sum(fmt.Sprintf("%s:%s:%s", cam.Username, realm, cam.Password))
+	ha2 := md5sum(fmt.Sprintf("POST:%s", req.URL.RequestURI()))
+
+	var response string
+	nc := "00000001"
+	cnonce := fmt.Sprintf("%08x", time.Now().UnixNano())
+
+	if qop != "" {
+		response = md5sum(fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, nc, cnonce, qop, ha2))
+	} else {
+		response = md5sum(fmt.Sprintf("%s:%s:%s", ha1, nonce, ha2))
+	}
+
+	// Build Authorization header
+	authValue := fmt.Sprintf(`Digest username="%s", realm="%s", nonce="%s", uri="%s", response="%s"`,
+		cam.Username, realm, nonce, req.URL.RequestURI(), response)
+	if qop != "" {
+		authValue += fmt.Sprintf(`, qop=%s, nc=%s, cnonce="%s"`, qop, nc, cnonce)
+	}
+
+	// Make the authenticated request
+	req2, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req2.Header.Set("Content-Type", contentType)
+	req2.Header.Set("Authorization", authValue)
+
+	return m.httpClient.Do(req2)
+}
+
+// G.711 A-law encoding lookup table
+var alawEncodeTable = []byte{
+	1, 1, 2, 2, 3, 3, 3, 3,
+	4, 4, 4, 4, 4, 4, 4, 4,
+	5, 5, 5, 5, 5, 5, 5, 5,
+	5, 5, 5, 5, 5, 5, 5, 5,
+	6, 6, 6, 6, 6, 6, 6, 6,
+	6, 6, 6, 6, 6, 6, 6, 6,
+	6, 6, 6, 6, 6, 6, 6, 6,
+	6, 6, 6, 6, 6, 6, 6, 6,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+	7, 7, 7, 7, 7, 7, 7, 7,
+}
+
+// encodeAlaw encodes a 16-bit linear PCM sample to 8-bit A-law
+func encodeAlaw(sample int16) byte {
+	var mask byte
+	if sample >= 0 {
+		mask = 0xD5 // Sign bit = 0
+	} else {
+		mask = 0x55 // Sign bit = 1
+		sample = -sample - 1
+	}
+
+	// Clamp to valid range
+	if sample > 32635 {
+		sample = 32635
+	}
+
+	var aval byte
+	if sample < 256 {
+		aval = byte(sample >> 4)
+	} else {
+		exp := alawEncodeTable[(sample>>8)&0x7F]
+		mant := byte((sample >> (exp + 3)) & 0x0F)
+		aval = (exp << 4) | mant
+	}
+
+	return aval ^ mask
+}
+
+// PCMToAlaw converts 16-bit PCM audio (little-endian) to G.711 A-law
+func PCMToAlaw(pcm []byte) []byte {
+	// Each 16-bit sample becomes one 8-bit A-law sample
+	alaw := make([]byte, len(pcm)/2)
+	for i := 0; i < len(pcm)-1; i += 2 {
+		// Little-endian 16-bit sample
+		sample := int16(pcm[i]) | (int16(pcm[i+1]) << 8)
+		alaw[i/2] = encodeAlaw(sample)
+	}
+	return alaw
+}
+
+// PostAudio sends audio data to a camera's speaker
+// The audio should be 16-bit PCM, mono, 8kHz sample rate
+func (m *Manager) PostAudio(cameraName string, pcmData []byte) error {
+	cam := m.cameras[cameraName]
+	if cam == nil {
+		return fmt.Errorf("camera not found: %s", cameraName)
+	}
+
+	if cam.Host == "" {
+		return fmt.Errorf("camera %s has no direct connection (Frigate-only)", cameraName)
+	}
+
+	// Convert PCM to G.711 A-law
+	alawData := PCMToAlaw(pcmData)
+	log.Printf("Sending %d bytes of A-law audio to camera %s (from %d bytes PCM)", len(alawData), cameraName, len(pcmData))
+
+	// Use a longer timeout for audio streaming
+	audioClient := &http.Client{Timeout: 30 * time.Second}
+	audioManager := &Manager{
+		cameras:    m.cameras,
+		httpClient: audioClient,
+	}
+
+	resp, err := audioManager.doDigestPostRequest(cam, cam.GetAudioURL(), alawData, "Audio/G.711A")
+	if err != nil {
+		return fmt.Errorf("failed to post audio: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("camera returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("Audio sent successfully to camera %s", cameraName)
+	return nil
 }
