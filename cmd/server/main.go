@@ -16,18 +16,21 @@ import (
 	"sync"
 	"time"
 
+	"home_control/internal/adb"
 	"home_control/internal/calendar"
 	"home_control/internal/camera"
 	"home_control/internal/drive"
+	"home_control/internal/entertainment"
 	"home_control/internal/homeassistant"
 	"home_control/internal/hue"
 	"home_control/internal/icons"
 	"home_control/internal/mqtt"
 	"home_control/internal/spotify"
+
+	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 	"home_control/internal/syncbox"
 	"home_control/internal/tasks"
 	"home_control/internal/weather"
-	"home_control/internal/adb"
 	"home_control/internal/websocket"
 
 	"github.com/go-chi/chi/v5"
@@ -137,6 +140,47 @@ type Config struct {
 	TabletAutoBrightness   bool
 	TabletMinBrightness    int
 	TabletMaxBrightness    int
+	// Entertainment device settings
+	// Sony devices (soundbar + TV) format: "name:host:port:psk:type" (type = soundbar|tv)
+	SonyDevices []SonyDeviceConfig
+	// Nvidia Shield format: "name:host:port"
+	ShieldDevices []ShieldDeviceConfig
+	// Xbox format: "name:host:liveid"
+	XboxDevices       []XboxDeviceConfig
+	XboxRESTServerURL string // Optional: xbox-smartglass-rest server URL
+	// PS5 format: "name:deviceid:psnaccount"
+	PS5Devices    []PS5DeviceConfig
+	PS5MQTTTopic  string // Base MQTT topic for PS5-MQTT (default: homeassistant)
+}
+
+// SonyDeviceConfig holds configuration for a Sony device
+type SonyDeviceConfig struct {
+	Name       string
+	Host       string
+	Port       int
+	PSK        string
+	DeviceType string // "soundbar" or "tv"
+}
+
+// ShieldDeviceConfig holds configuration for an Nvidia Shield
+type ShieldDeviceConfig struct {
+	Name string
+	Host string
+	Port int
+}
+
+// XboxDeviceConfig holds configuration for an Xbox
+type XboxDeviceConfig struct {
+	Name   string
+	Host   string
+	LiveID string
+}
+
+// PS5DeviceConfig holds configuration for a PS5
+type PS5DeviceConfig struct {
+	Name       string
+	DeviceID   string
+	PSNAccount string
 }
 
 // SyncBoxConfig holds configuration for a single Hue Sync Box
@@ -183,6 +227,12 @@ var calendarPrefsFile string
 var tabletClient *adb.Client
 var proximityMonitor *adb.ProximityMonitor
 var brightnessController *adb.BrightnessController
+
+// Entertainment device managers
+var sonyManager *entertainment.SonyManager
+var shieldManager *entertainment.ShieldManager
+var xboxManager *entertainment.XboxManager
+var ps5Manager *entertainment.PS5Manager
 
 // Sensor state from Android app (HCC)
 var sensorState struct {
@@ -297,6 +347,13 @@ func main() {
 		TabletAutoBrightness:      getEnv("TABLET_AUTO_BRIGHTNESS", "false") == "true",
 		TabletMinBrightness:       parseIntEnv("TABLET_MIN_BRIGHTNESS", 20),
 		TabletMaxBrightness:       parseIntEnv("TABLET_MAX_BRIGHTNESS", 255),
+		// Entertainment devices
+		SonyDevices:       parseSonyDevices(getEnv("SONY_DEVICES", "")),
+		ShieldDevices:     parseShieldDevices(getEnv("SHIELD_DEVICES", "")),
+		XboxDevices:       parseXboxDevices(getEnv("XBOX_DEVICES", "")),
+		XboxRESTServerURL: getEnv("XBOX_REST_SERVER", ""),
+		PS5Devices:        parsePS5Devices(getEnv("PS5_DEVICES", "")),
+		PS5MQTTTopic:      getEnv("PS5_MQTT_TOPIC", "homeassistant"),
 	}
 	appConfig = cfg
 	log.Printf("Using timezone: %s", loc.String())
@@ -481,6 +538,9 @@ func main() {
 		}()
 		log.Printf("MQTT client connecting to %s:%d", cfg.MQTTHost, cfg.MQTTPort)
 	}
+
+	// Initialize entertainment device managers
+	initEntertainmentManagers(cfg)
 
 	// Initialize Tablet ADB client
 	if cfg.TabletADBAddr != "" {
@@ -717,6 +777,33 @@ func main() {
 	r.Get("/api/spotify/library/artists", handleSpotifyLibraryArtists)
 	r.Get("/api/spotify/library/tracks", handleSpotifyLibraryTracks)
 	r.Get("/api/spotify/library/shows", handleSpotifyLibraryShows)
+
+	// Entertainment device routes
+	r.Get("/api/entertainment/devices", handleGetEntertainmentDevices)
+	// Sony (soundbar + TV)
+	r.Get("/api/entertainment/sony", handleGetSonyDevices)
+	r.Get("/api/entertainment/sony/{name}/state", handleGetSonyState)
+	r.Post("/api/entertainment/sony/{name}/power", handleSonyPower)
+	r.Post("/api/entertainment/sony/{name}/volume", handleSonyVolume)
+	r.Post("/api/entertainment/sony/{name}/mute", handleSonyMute)
+	r.Post("/api/entertainment/sony/{name}/input", handleSonyInput)
+	// Shield
+	r.Get("/api/entertainment/shield", handleGetShieldDevices)
+	r.Get("/api/entertainment/shield/{name}/state", handleGetShieldState)
+	r.Post("/api/entertainment/shield/{name}/power", handleShieldPower)
+	r.Post("/api/entertainment/shield/{name}/navigate", handleShieldNavigate)
+	r.Post("/api/entertainment/shield/{name}/media", handleShieldMedia)
+	r.Post("/api/entertainment/shield/{name}/app", handleShieldApp)
+	// Xbox
+	r.Get("/api/entertainment/xbox", handleGetXboxDevices)
+	r.Get("/api/entertainment/xbox/{name}/state", handleGetXboxState)
+	r.Post("/api/entertainment/xbox/{name}/power", handleXboxPower)
+	r.Post("/api/entertainment/xbox/{name}/input", handleXboxInput)
+	r.Post("/api/entertainment/xbox/{name}/media", handleXboxMedia)
+	// PS5
+	r.Get("/api/entertainment/ps5", handleGetPS5Devices)
+	r.Get("/api/entertainment/ps5/{name}/state", handleGetPS5State)
+	r.Post("/api/entertainment/ps5/{name}/power", handlePS5Power)
 
 	// Icon serving
 	r.Get("/icon/{name}", icons.Handler())
@@ -2008,6 +2095,49 @@ func parseIntEnv(key string, fallback int) int {
 	return fallback
 }
 
+// initEntertainmentManagers initializes all entertainment device managers
+func initEntertainmentManagers(cfg Config) {
+	// Initialize Sony manager
+	if len(cfg.SonyDevices) > 0 {
+		sonyManager = entertainment.NewSonyManager()
+		for _, dev := range cfg.SonyDevices {
+			sonyManager.AddDevice(dev.Name, dev.Host, dev.Port, dev.PSK, dev.DeviceType)
+		}
+		log.Printf("Sony Entertainment manager initialized with %d device(s)", len(cfg.SonyDevices))
+	}
+
+	// Initialize Shield manager
+	if len(cfg.ShieldDevices) > 0 {
+		shieldManager = entertainment.NewShieldManager()
+		for _, dev := range cfg.ShieldDevices {
+			shieldManager.AddDevice(dev.Name, dev.Host, dev.Port)
+		}
+		log.Printf("Nvidia Shield manager initialized with %d device(s)", len(cfg.ShieldDevices))
+	}
+
+	// Initialize Xbox manager
+	if len(cfg.XboxDevices) > 0 {
+		xboxManager = entertainment.NewXboxManager(cfg.XboxRESTServerURL)
+		for _, dev := range cfg.XboxDevices {
+			xboxManager.AddDevice(dev.Name, dev.Host, dev.LiveID)
+		}
+		log.Printf("Xbox manager initialized with %d device(s)", len(cfg.XboxDevices))
+	}
+
+	// Initialize PS5 manager (requires MQTT)
+	if len(cfg.PS5Devices) > 0 {
+		var pahoClient pahomqtt.Client
+		if mqttClient != nil {
+			pahoClient = mqttClient.GetPahoClient()
+		}
+		ps5Manager = entertainment.NewPS5Manager(pahoClient, cfg.PS5MQTTTopic)
+		for _, dev := range cfg.PS5Devices {
+			ps5Manager.AddDevice(dev.Name, dev.DeviceID, dev.PSNAccount)
+		}
+		log.Printf("PS5 manager initialized with %d device(s)", len(cfg.PS5Devices))
+	}
+}
+
 func parseEntities(s string) []string {
 	if s == "" {
 		return nil
@@ -2037,6 +2167,751 @@ func parseSyncBoxes(s string) []SyncBoxConfig {
 		}
 	}
 	return boxes
+}
+
+// parseSonyDevices parses format: "name:host:port:psk:type,..."
+func parseSonyDevices(s string) []SonyDeviceConfig {
+	if s == "" {
+		return nil
+	}
+	var devices []SonyDeviceConfig
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		parts := strings.SplitN(entry, ":", 5)
+		if len(parts) >= 4 {
+			port := 10000 // default Sony port
+			if len(parts) >= 3 {
+				if p, err := strconv.Atoi(strings.TrimSpace(parts[2])); err == nil {
+					port = p
+				}
+			}
+			deviceType := "soundbar"
+			if len(parts) >= 5 {
+				deviceType = strings.TrimSpace(parts[4])
+			}
+			devices = append(devices, SonyDeviceConfig{
+				Name:       strings.TrimSpace(parts[0]),
+				Host:       strings.TrimSpace(parts[1]),
+				Port:       port,
+				PSK:        strings.TrimSpace(parts[3]),
+				DeviceType: deviceType,
+			})
+		}
+	}
+	return devices
+}
+
+// parseShieldDevices parses format: "name:host:port,..."
+func parseShieldDevices(s string) []ShieldDeviceConfig {
+	if s == "" {
+		return nil
+	}
+	var devices []ShieldDeviceConfig
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		parts := strings.SplitN(entry, ":", 3)
+		if len(parts) >= 2 {
+			port := 5555 // default ADB port
+			if len(parts) >= 3 {
+				if p, err := strconv.Atoi(strings.TrimSpace(parts[2])); err == nil {
+					port = p
+				}
+			}
+			devices = append(devices, ShieldDeviceConfig{
+				Name: strings.TrimSpace(parts[0]),
+				Host: strings.TrimSpace(parts[1]),
+				Port: port,
+			})
+		}
+	}
+	return devices
+}
+
+// parseXboxDevices parses format: "name:host:liveid,..."
+func parseXboxDevices(s string) []XboxDeviceConfig {
+	if s == "" {
+		return nil
+	}
+	var devices []XboxDeviceConfig
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		parts := strings.SplitN(entry, ":", 3)
+		if len(parts) >= 3 {
+			devices = append(devices, XboxDeviceConfig{
+				Name:   strings.TrimSpace(parts[0]),
+				Host:   strings.TrimSpace(parts[1]),
+				LiveID: strings.TrimSpace(parts[2]),
+			})
+		}
+	}
+	return devices
+}
+
+// parsePS5Devices parses format: "name:deviceid:psnaccount,..."
+func parsePS5Devices(s string) []PS5DeviceConfig {
+	if s == "" {
+		return nil
+	}
+	var devices []PS5DeviceConfig
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		parts := strings.SplitN(entry, ":", 3)
+		if len(parts) >= 2 {
+			psnAccount := ""
+			if len(parts) >= 3 {
+				psnAccount = strings.TrimSpace(parts[2])
+			}
+			devices = append(devices, PS5DeviceConfig{
+				Name:       strings.TrimSpace(parts[0]),
+				DeviceID:   strings.TrimSpace(parts[1]),
+				PSNAccount: psnAccount,
+			})
+		}
+	}
+	return devices
+}
+
+// ========== Entertainment Device Handlers ==========
+
+// handleGetEntertainmentDevices returns all configured entertainment devices
+func handleGetEntertainmentDevices(w http.ResponseWriter, r *http.Request) {
+	devices := map[string]interface{}{
+		"sony":   []interface{}{},
+		"shield": []interface{}{},
+		"xbox":   []interface{}{},
+		"ps5":    []interface{}{},
+	}
+
+	if sonyManager != nil {
+		devices["sony"] = sonyManager.GetAllStates()
+	}
+	if shieldManager != nil {
+		devices["shield"] = shieldManager.GetAllStates()
+	}
+	if xboxManager != nil {
+		devices["xbox"] = xboxManager.GetAllStates()
+	}
+	if ps5Manager != nil {
+		devices["ps5"] = ps5Manager.GetAllStates()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(devices)
+}
+
+// ========== Sony Handlers ==========
+
+func handleGetSonyDevices(w http.ResponseWriter, r *http.Request) {
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(sonyManager.GetAllStates())
+}
+
+func handleGetSonyState(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(device.GetState())
+}
+
+func handleSonyPower(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "on", "off", "toggle"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "on":
+		err = device.PowerOn()
+	case "off":
+		err = device.PowerOff()
+	case "toggle":
+		status, _ := device.GetPowerStatus()
+		if status != nil && status.Status == "active" {
+			err = device.PowerOff()
+		} else {
+			err = device.PowerOn()
+		}
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleSonyVolume(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "set", "up", "down"
+		Value  int    `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "set":
+		err = device.SetVolume(req.Value)
+	case "up":
+		step := req.Value
+		if step <= 0 {
+			step = 1
+		}
+		err = device.VolumeUp(step)
+	case "down":
+		step := req.Value
+		if step <= 0 {
+			step = 1
+		}
+		err = device.VolumeDown(step)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleSonyMute(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "on", "off", "toggle"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "on":
+		err = device.SetMute(true)
+	case "off":
+		err = device.SetMute(false)
+	case "toggle":
+		err = device.ToggleMute()
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleSonyInput(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Input string `json:"input"` // HDMI port number or URI
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	// Handle named inputs, HDMI port numbers, or raw URIs
+	switch strings.ToLower(req.Input) {
+	case "tv":
+		err = device.SetTV()
+	case "bluetooth", "bt":
+		err = device.SetBluetooth()
+	case "analog", "line":
+		err = device.SetAnalog()
+	default:
+		// Check if it's a simple HDMI port number
+		if port, parseErr := strconv.Atoi(req.Input); parseErr == nil {
+			err = device.SetHDMI(port)
+		} else {
+			// Assume it's a raw URI
+			err = device.SetInput(req.Input)
+		}
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// ========== Shield Handlers ==========
+
+func handleGetShieldDevices(w http.ResponseWriter, r *http.Request) {
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(shieldManager.GetAllStates())
+}
+
+func handleGetShieldState(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(device.GetState())
+}
+
+func handleShieldPower(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "wake", "sleep"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "wake":
+		err = device.WakeUp()
+	case "sleep":
+		err = device.Sleep()
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleShieldNavigate(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "up", "down", "left", "right", "select", "back", "home", "menu"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "up":
+		err = device.Up()
+	case "down":
+		err = device.Down()
+	case "left":
+		err = device.Left()
+	case "right":
+		err = device.Right()
+	case "select", "enter":
+		err = device.Select()
+	case "back":
+		err = device.Back()
+	case "home":
+		err = device.Home()
+	case "menu":
+		err = device.Menu()
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleShieldMedia(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "play", "pause", "playpause", "stop", "next", "previous", "rewind", "forward"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "play":
+		err = device.Play()
+	case "pause":
+		err = device.Pause()
+	case "playpause":
+		err = device.PlayPause()
+	case "stop":
+		err = device.Stop()
+	case "next":
+		err = device.Next()
+	case "previous":
+		err = device.Previous()
+	case "rewind":
+		err = device.Rewind()
+	case "forward":
+		err = device.FastForward()
+	case "volumeup":
+		err = device.VolumeUp()
+	case "volumedown":
+		err = device.VolumeDown()
+	case "mute":
+		err = device.Mute()
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleShieldApp(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action  string `json:"action"`  // "launch", "stop"
+		Package string `json:"package"` // App name or package
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "launch":
+		err = device.LaunchApp(req.Package)
+	case "stop":
+		err = device.ForceStopApp(req.Package)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// ========== Xbox Handlers ==========
+
+func handleGetXboxDevices(w http.ResponseWriter, r *http.Request) {
+	if xboxManager == nil {
+		http.Error(w, "Xbox devices not configured", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(xboxManager.GetAllStates())
+}
+
+func handleGetXboxState(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if xboxManager == nil {
+		http.Error(w, "Xbox devices not configured", http.StatusNotFound)
+		return
+	}
+	device := xboxManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(device.GetState())
+}
+
+func handleXboxPower(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if xboxManager == nil {
+		http.Error(w, "Xbox devices not configured", http.StatusNotFound)
+		return
+	}
+	device := xboxManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "on", "off"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "on":
+		err = device.PowerOn()
+	case "off":
+		err = xboxManager.PowerOffViaREST(name)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleXboxInput(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if xboxManager == nil {
+		http.Error(w, "Xbox devices not configured", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Button string `json:"button"` // Button name
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := xboxManager.SendButton(name, req.Button); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleXboxMedia(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if xboxManager == nil {
+		http.Error(w, "Xbox devices not configured", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "play", "pause", "playpause", "stop", "next", "previous"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "play":
+		err = xboxManager.Play(name)
+	case "pause":
+		err = xboxManager.Pause(name)
+	case "playpause":
+		err = xboxManager.PlayPause(name)
+	case "stop":
+		err = xboxManager.Stop(name)
+	case "next":
+		err = xboxManager.Next(name)
+	case "previous":
+		err = xboxManager.Previous(name)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// ========== PS5 Handlers ==========
+
+func handleGetPS5Devices(w http.ResponseWriter, r *http.Request) {
+	if ps5Manager == nil {
+		http.Error(w, "PS5 devices not configured", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ps5Manager.GetAllStates())
+}
+
+func handleGetPS5State(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if ps5Manager == nil {
+		http.Error(w, "PS5 devices not configured", http.StatusNotFound)
+		return
+	}
+	state := ps5Manager.GetState(name)
+	if state == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(state)
+}
+
+func handlePS5Power(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if ps5Manager == nil {
+		http.Error(w, "PS5 devices not configured", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "on", "off", "toggle"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "on":
+		err = ps5Manager.PowerOn(name)
+	case "off":
+		err = ps5Manager.PowerOff(name)
+	case "toggle":
+		err = ps5Manager.TogglePower(name)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // Template functions

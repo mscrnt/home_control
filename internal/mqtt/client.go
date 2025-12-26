@@ -78,6 +78,11 @@ func (c *Client) Connect() error {
 	return nil
 }
 
+// GetPahoClient returns the underlying paho MQTT client for use by other modules
+func (c *Client) GetPahoClient() paho.Client {
+	return c.client
+}
+
 // SetDoorbellHandler sets the callback for doorbell events
 func (c *Client) SetDoorbellHandler(handler DoorbellHandler) {
 	c.mu.Lock()
