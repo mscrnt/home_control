@@ -72,6 +72,13 @@
                     <a href="?view=month&date={{.NextDate}}" class="nav-arrow"><img src="/icon/circle-arrow-right" alt="Next"></a>
                 </div>
                 <div class="view-title-right">
+                    <button class="add-event-btn" onclick="openCreateModal('{{.Today}}')" title="Add Event">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <span>Add Event</span>
+                    </button>
                     <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 11l3 3L22 4"/>
@@ -157,6 +164,13 @@
                     <a href="?view=week&date={{.NextDate}}" class="nav-arrow"><img src="/icon/circle-arrow-right" alt="Next"></a>
                 </div>
                 <div class="view-title-right">
+                    <button class="add-event-btn" onclick="openCreateModal('{{.Today}}')" title="Add Event">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <span>Add Event</span>
+                    </button>
                     <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 11l3 3L22 4"/>
@@ -244,6 +258,13 @@
                     <a href="?view=day&date={{.NextDate}}" class="nav-arrow"><img src="/icon/circle-arrow-right" alt="Next"></a>
                 </div>
                 <div class="view-title-right">
+                    <button class="add-event-btn" onclick="openCreateModal('{{.Today}}')" title="Add Event">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <span>Add Event</span>
+                    </button>
                     <button class="tasks-btn" onclick="toggleTasksPanel()" title="TODOs">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 11l3 3L22 4"/>
@@ -308,9 +329,11 @@
 <!-- Event Details Modal -->
 <div id="eventDetailsModal" class="modal" onclick="if(event.target===this)closeModal('eventDetailsModal')">
     <div class="modal-content">
-        <div class="modal-header">
-            <h2 id="detailsTitle">Event Details</h2>
-            <button type="button" class="modal-close" onclick="closeModal('eventDetailsModal')">&times;</button>
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <h3 id="detailsTitle">Event Details</h3>
+            </div>
+            <button type="button" class="modal-close-btn" onclick="closeModal('eventDetailsModal')">&times;</button>
         </div>
         <div class="modal-body">
             <div class="detail-row">
@@ -341,9 +364,11 @@
 <!-- Delete Confirmation Modal -->
 <div id="deleteConfirmModal" class="modal" onclick="if(event.target===this)closeModal('deleteConfirmModal')">
     <div class="modal-content modal-small">
-        <div class="modal-header">
-            <h2>Delete Event</h2>
-            <button type="button" class="modal-close" onclick="closeModal('deleteConfirmModal')">&times;</button>
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <h3>Delete Event</h3>
+            </div>
+            <button type="button" class="modal-close-btn" onclick="closeModal('deleteConfirmModal')">&times;</button>
         </div>
         <div class="modal-body">
             <p>Are you sure you want to delete "<span id="deleteEventTitle"></span>"?</p>
@@ -359,17 +384,13 @@
 <!-- Create Event Modal -->
 <div id="createEventModal" class="modal" onclick="if(event.target===this)closeModal('createEventModal')">
     <div class="modal-content modal-large">
-        <div class="modal-header">
-            <h2 id="modalTitle">New Event</h2>
-            <button type="button" class="modal-close" onclick="closeModal('createEventModal')">&times;</button>
+        <div class="modal-header-row">
+            <div class="modal-header-title">
+                <h3 id="modalTitle">New Event</h3>
+            </div>
+            <button type="button" class="modal-close-btn" onclick="closeModal('createEventModal')">&times;</button>
         </div>
         <div class="modal-body">
-            <!-- Event Type Toggle -->
-            <div class="type-toggle">
-                <button type="button" class="type-btn active" data-type="event" onclick="setEventType('event')">Event</button>
-                <button type="button" class="type-btn" data-type="task" onclick="setEventType('task')">Task</button>
-            </div>
-
             <div class="form-group">
                 <label for="eventTitle">Title</label>
                 <input type="text" id="eventTitle" class="form-input" placeholder="Event title">
@@ -386,11 +407,6 @@
                 </select>
             </div>
 
-            <div class="form-group">
-                <label for="eventDate">Date</label>
-                <input type="date" id="eventDate" class="form-input">
-            </div>
-
             <div class="form-row">
                 <div class="form-group">
                     <label>
@@ -399,47 +415,54 @@
                 </div>
             </div>
 
-            <div class="form-row time-inputs">
-                <div class="form-group">
-                    <label>Start Time</label>
-                    <div class="time-picker" id="startTimePicker">
-                        <div class="time-unit">
-                            <button type="button" class="time-btn up" onclick="adjustTime('start', 'hour', 1)">▲</button>
-                            <span class="time-field" id="startHour" onclick="activateTimeField(this, 'hour')">09</span>
-                            <button type="button" class="time-btn down" onclick="adjustTime('start', 'hour', -1)">▼</button>
-                        </div>
-                        <span class="time-separator">:</span>
-                        <div class="time-unit">
-                            <button type="button" class="time-btn up" onclick="adjustTime('start', 'minute', 5)">▲</button>
-                            <span class="time-field" id="startMinute" onclick="activateTimeField(this, 'minute')">00</span>
-                            <button type="button" class="time-btn down" onclick="adjustTime('start', 'minute', -5)">▼</button>
-                        </div>
-                        <div class="time-unit ampm">
-                            <button type="button" class="time-btn up" onclick="toggleAmPm('start')">▲</button>
-                            <span class="time-field ampm-field" id="startAmPm" onclick="toggleAmPm('start')">AM</span>
-                            <button type="button" class="time-btn down" onclick="toggleAmPm('start')">▼</button>
+            <!-- Start and End Date/Time -->
+            <div class="datetime-grid">
+                <div class="datetime-col">
+                    <label>Start</label>
+                    <div class="datetime-row">
+                        <input type="date" id="eventStartDate" class="form-input">
+                        <div class="time-picker time-inputs" id="startTimePicker">
+                            <div class="time-unit">
+                                <button type="button" class="time-btn up" onclick="adjustTime('start', 'hour', 1)">▲</button>
+                                <span class="time-field" id="startHour" onclick="activateTimeField(this, 'hour')">09</span>
+                                <button type="button" class="time-btn down" onclick="adjustTime('start', 'hour', -1)">▼</button>
+                            </div>
+                            <span class="time-separator">:</span>
+                            <div class="time-unit">
+                                <button type="button" class="time-btn up" onclick="adjustTime('start', 'minute', 5)">▲</button>
+                                <span class="time-field" id="startMinute" onclick="activateTimeField(this, 'minute')">00</span>
+                                <button type="button" class="time-btn down" onclick="adjustTime('start', 'minute', -5)">▼</button>
+                            </div>
+                            <div class="time-unit ampm">
+                                <button type="button" class="time-btn up" onclick="toggleAmPm('start')">▲</button>
+                                <span class="time-field ampm-field" id="startAmPm" onclick="toggleAmPm('start')">AM</span>
+                                <button type="button" class="time-btn down" onclick="toggleAmPm('start')">▼</button>
+                            </div>
                         </div>
                     </div>
                     <input type="hidden" id="eventTime" value="09:00">
                 </div>
-                <div class="form-group">
-                    <label>End Time</label>
-                    <div class="time-picker" id="endTimePicker">
-                        <div class="time-unit">
-                            <button type="button" class="time-btn up" onclick="adjustTime('end', 'hour', 1)">▲</button>
-                            <span class="time-field" id="endHour" onclick="activateTimeField(this, 'hour')">10</span>
-                            <button type="button" class="time-btn down" onclick="adjustTime('end', 'hour', -1)">▼</button>
-                        </div>
-                        <span class="time-separator">:</span>
-                        <div class="time-unit">
-                            <button type="button" class="time-btn up" onclick="adjustTime('end', 'minute', 5)">▲</button>
-                            <span class="time-field" id="endMinute" onclick="activateTimeField(this, 'minute')">00</span>
-                            <button type="button" class="time-btn down" onclick="adjustTime('end', 'minute', -5)">▼</button>
-                        </div>
-                        <div class="time-unit ampm">
-                            <button type="button" class="time-btn up" onclick="toggleAmPm('end')">▲</button>
-                            <span class="time-field ampm-field" id="endAmPm" onclick="toggleAmPm('end')">AM</span>
-                            <button type="button" class="time-btn down" onclick="toggleAmPm('end')">▼</button>
+                <div class="datetime-col">
+                    <label>End</label>
+                    <div class="datetime-row">
+                        <input type="date" id="eventEndDate" class="form-input">
+                        <div class="time-picker time-inputs" id="endTimePicker">
+                            <div class="time-unit">
+                                <button type="button" class="time-btn up" onclick="adjustTime('end', 'hour', 1)">▲</button>
+                                <span class="time-field" id="endHour" onclick="activateTimeField(this, 'hour')">10</span>
+                                <button type="button" class="time-btn down" onclick="adjustTime('end', 'hour', -1)">▼</button>
+                            </div>
+                            <span class="time-separator">:</span>
+                            <div class="time-unit">
+                                <button type="button" class="time-btn up" onclick="adjustTime('end', 'minute', 5)">▲</button>
+                                <span class="time-field" id="endMinute" onclick="activateTimeField(this, 'minute')">00</span>
+                                <button type="button" class="time-btn down" onclick="adjustTime('end', 'minute', -5)">▼</button>
+                            </div>
+                            <div class="time-unit ampm">
+                                <button type="button" class="time-btn up" onclick="toggleAmPm('end')">▲</button>
+                                <span class="time-field ampm-field" id="endAmPm" onclick="toggleAmPm('end')">AM</span>
+                                <button type="button" class="time-btn down" onclick="toggleAmPm('end')">▼</button>
+                            </div>
                         </div>
                     </div>
                     <input type="hidden" id="eventEndTime" value="10:00">
@@ -468,25 +491,6 @@
                     <option value="yearly">Yearly</option>
                     <option value="weekdays">Every weekday (Mon-Fri)</option>
                 </select>
-            </div>
-
-            <div class="form-group">
-                <label>Color</label>
-                <div class="color-picker" id="colorPicker">
-                    <button type="button" class="color-option active" data-color="" style="background: #4285f4" title="Default"></button>
-                    <button type="button" class="color-option" data-color="1" style="background: #7986cb" title="Lavender"></button>
-                    <button type="button" class="color-option" data-color="2" style="background: #33b679" title="Sage"></button>
-                    <button type="button" class="color-option" data-color="3" style="background: #8e24aa" title="Grape"></button>
-                    <button type="button" class="color-option" data-color="4" style="background: #e67c73" title="Flamingo"></button>
-                    <button type="button" class="color-option" data-color="5" style="background: #f6c026" title="Banana"></button>
-                    <button type="button" class="color-option" data-color="6" style="background: #f5511d" title="Tangerine"></button>
-                    <button type="button" class="color-option" data-color="7" style="background: #039be5" title="Peacock"></button>
-                    <button type="button" class="color-option" data-color="8" style="background: #616161" title="Graphite"></button>
-                    <button type="button" class="color-option" data-color="9" style="background: #3f51b5" title="Blueberry"></button>
-                    <button type="button" class="color-option" data-color="10" style="background: #0b8043" title="Basil"></button>
-                    <button type="button" class="color-option" data-color="11" style="background: #d60000" title="Tomato"></button>
-                </div>
-                <input type="hidden" id="eventColor" value="">
             </div>
         </div>
         <div class="modal-footer">
@@ -617,7 +621,6 @@
 </div>
 
 <script>
-let currentEventType = 'event';
 let currentEvent = null; // Currently selected event for viewing/editing
 let editMode = false; // Are we editing an existing event?
 
@@ -625,13 +628,10 @@ function openCreateModal(date) {
     editMode = false;
     currentEvent = null;
     const modal = document.getElementById('createEventModal');
-    const dateInput = document.getElementById('eventDate');
 
-    if (date) {
-        dateInput.value = date;
-    } else {
-        dateInput.value = new Date().toISOString().split('T')[0];
-    }
+    const startDate = date || new Date().toISOString().split('T')[0];
+    document.getElementById('eventStartDate').value = startDate;
+    document.getElementById('eventEndDate').value = startDate; // Same day by default
 
     // Reset all fields
     document.getElementById('eventTitle').value = '';
@@ -641,15 +641,12 @@ function openCreateModal(date) {
     document.getElementById('eventLocation').value = '';
     document.getElementById('eventDescription').value = '';
     document.getElementById('eventRepeat').value = '';
-    document.getElementById('eventColor').value = '';
 
     // Reset calendar selector to first option
     const calendarSelect = document.getElementById('eventCalendar');
     if (calendarSelect) calendarSelect.selectedIndex = 0;
 
-    setEventType('event');
     toggleTimeInputs();
-    setSelectedColor('');
 
     // Initialize time pickers with default values
     setTimePickerFromValue('start', '09:00');
@@ -673,7 +670,8 @@ function openEditModal() {
 
     // Populate form with event data
     document.getElementById('eventTitle').value = currentEvent.title || '';
-    document.getElementById('eventDate').value = start.toISOString().split('T')[0];
+    document.getElementById('eventStartDate').value = start.toISOString().split('T')[0];
+    document.getElementById('eventEndDate').value = end.toISOString().split('T')[0];
     document.getElementById('allDayCheck').checked = currentEvent.allDay;
 
     const startTime = start.toTimeString().slice(0, 5);
@@ -688,8 +686,6 @@ function openEditModal() {
     document.getElementById('eventLocation').value = currentEvent.location || '';
     document.getElementById('eventDescription').value = currentEvent.description || '';
     document.getElementById('eventRepeat').value = '';
-    document.getElementById('eventColor').value = currentEvent.colorId || '';
-    setSelectedColor(currentEvent.colorId || '');
     toggleTimeInputs();
 
     // Set the calendar selector to the event's calendar
@@ -702,29 +698,6 @@ function openEditModal() {
     document.getElementById('createBtn').textContent = 'Save Changes';
 
     modal.classList.add('active');
-}
-
-function setEventType(type) {
-    currentEventType = type;
-    document.querySelectorAll('.type-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.type === type);
-    });
-
-    if (!editMode) {
-        document.getElementById('modalTitle').textContent = type === 'event' ? 'New Event' : 'New Task';
-        document.getElementById('createBtn').textContent = type === 'event' ? 'Create Event' : 'Create Task';
-    }
-
-    // Tasks typically don't have end times and don't need calendar selection
-    const timeInputs = document.querySelector('.time-inputs');
-    const calendarSelectGroup = document.getElementById('calendarSelectGroup');
-    if (type === 'task') {
-        document.getElementById('allDayCheck').checked = true;
-        timeInputs.style.display = 'none';
-        if (calendarSelectGroup) calendarSelectGroup.style.display = 'none';
-    } else {
-        if (calendarSelectGroup) calendarSelectGroup.style.display = '';
-    }
 }
 
 function openEventDetails(eventJson) {
@@ -805,56 +778,45 @@ async function deleteEvent() {
     }
 }
 
-// Color picker handling
-document.querySelectorAll('.color-option').forEach(btn => {
-    btn.addEventListener('click', () => {
-        setSelectedColor(btn.dataset.color);
-    });
-});
-
-function setSelectedColor(colorId) {
-    document.getElementById('eventColor').value = colorId;
-    document.querySelectorAll('.color-option').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.color === colorId);
-    });
-}
-
 function closeModal(id) {
     document.getElementById(id).classList.remove('active');
 }
 
 function toggleTimeInputs() {
     const allDay = document.getElementById('allDayCheck').checked;
-    document.querySelector('.time-inputs').style.display = allDay ? 'none' : 'flex';
+    // Hide/show all time pickers
+    document.querySelectorAll('.time-inputs').forEach(el => {
+        el.style.display = allDay ? 'none' : 'flex';
+    });
 }
 
 async function saveEvent() {
     const title = document.getElementById('eventTitle').value.trim();
-    const date = document.getElementById('eventDate').value;
+    const startDate = document.getElementById('eventStartDate').value;
+    const endDate = document.getElementById('eventEndDate').value;
     const allDay = document.getElementById('allDayCheck').checked;
     const time = document.getElementById('eventTime').value;
     const endTime = document.getElementById('eventEndTime').value;
     const eventLocation = document.getElementById('eventLocation').value.trim();
     const description = document.getElementById('eventDescription').value.trim();
     const repeat = document.getElementById('eventRepeat').value;
-    const colorId = document.getElementById('eventColor').value;
     const calendarId = document.getElementById('eventCalendar').value;
 
-    if (!title || !date) {
-        alert('Please enter a title and date');
+    if (!title || !startDate) {
+        alert('Please enter a title and start date');
         return;
     }
 
     const data = {
-        type: currentEventType,
+        type: 'event',
         title: title,
-        date: date,
+        date: startDate,
+        endDate: endDate || startDate,
         time: allDay ? '' : time,
         endTime: allDay ? '' : endTime,
         location: eventLocation,
         description: description,
         repeat: repeat,
-        colorId: colorId,
         calendarId: calendarId
     };
 
@@ -934,7 +896,6 @@ function addEventToCurrentView(eventResult, formData) {
                     allDay: eventResult.allDay,
                     location: eventResult.location || '',
                     description: eventResult.description || '',
-                    colorId: formData.colorId || '',
                     recurring: false
                 });
                 div.dataset.calendarId = eventResult.calendarId;

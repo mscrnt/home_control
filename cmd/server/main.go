@@ -1430,14 +1430,14 @@ func handleSetClimateFanMode(w http.ResponseWriter, r *http.Request) {
 type CreateEventRequest struct {
 	Type        string `json:"type"`        // "event" or "task"
 	Title       string `json:"title"`
-	Date        string `json:"date"`        // YYYY-MM-DD
+	Date        string `json:"date"`        // YYYY-MM-DD (start date)
+	EndDate     string `json:"endDate"`     // YYYY-MM-DD (end date, optional - defaults to Date)
 	Time        string `json:"time"`        // HH:MM (optional, empty = all day)
 	EndTime     string `json:"endTime"`     // HH:MM (optional)
 	Location    string `json:"location"`    // optional
 	Description string `json:"description"` // optional
 	Repeat      string `json:"repeat"`      // optional: daily, weekly, monthly, yearly, weekdays
 	CalendarID  string `json:"calendarId"`  // optional: calendar to create event on
-	ColorID     string `json:"colorId"`     // optional: event color (1-11)
 }
 
 func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
@@ -1462,10 +1462,21 @@ func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse date
-	date, err := time.ParseInLocation("2006-01-02", req.Date, appConfig.Timezone)
+	// Parse start date
+	startDate, err := time.ParseInLocation("2006-01-02", req.Date, appConfig.Timezone)
 	if err != nil {
 		http.Error(w, "Invalid date format", http.StatusBadRequest)
+		return
+	}
+
+	// Parse end date (defaults to start date if not provided)
+	endDateStr := req.EndDate
+	if endDateStr == "" {
+		endDateStr = req.Date
+	}
+	endDate, err := time.ParseInLocation("2006-01-02", endDateStr, appConfig.Timezone)
+	if err != nil {
+		http.Error(w, "Invalid end date format", http.StatusBadRequest)
 		return
 	}
 
@@ -1475,8 +1486,9 @@ func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if req.Time == "" {
 		// All day event
 		allDay = true
-		start = date
-		end = date.AddDate(0, 0, 1)
+		start = startDate
+		// For all-day events, end date is exclusive (add 1 day)
+		end = endDate.AddDate(0, 0, 1)
 	} else {
 		// Timed event
 		allDay = false
@@ -1488,16 +1500,13 @@ func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		start = startTime
 
 		if req.EndTime != "" {
-			endTime, err := time.ParseInLocation("2006-01-02 15:04", req.Date+" "+req.EndTime, appConfig.Timezone)
+			// Use end date with end time
+			endTime, err := time.ParseInLocation("2006-01-02 15:04", endDateStr+" "+req.EndTime, appConfig.Timezone)
 			if err != nil {
 				http.Error(w, "Invalid end time format", http.StatusBadRequest)
 				return
 			}
 			end = endTime
-			// If end time is before or equal to start time, assume next day
-			if !end.After(start) {
-				end = end.AddDate(0, 0, 1)
-			}
 		} else {
 			end = start.Add(1 * time.Hour) // Default 1 hour duration
 		}
@@ -1508,7 +1517,6 @@ func handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		CalendarID:  req.CalendarID,
 		Location:    req.Location,
 		Description: req.Description,
-		ColorID:     req.ColorID,
 	}
 
 	// Convert repeat string to RRULE

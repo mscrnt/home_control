@@ -426,38 +426,6 @@ body {
     resize: vertical;
 }
 
-/* Event type toggle */
-.type-toggle {
-    display: flex;
-    gap: 0;
-    background: var(--bg-input);
-    border-radius: 8px;
-    padding: 4px;
-    margin-bottom: 1rem;
-}
-
-.type-btn {
-    flex: 1;
-    padding: 0.6rem 1rem;
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.type-btn:hover {
-    color: var(--text-primary);
-}
-
-.type-btn.active {
-    background: var(--accent);
-    color: white;
-}
-
 /* Select dropdown styling */
 select.form-input {
     appearance: none;
@@ -622,6 +590,41 @@ select.form-input {
 
 .time-unit.ampm {
     margin-left: 8px;
+}
+
+/* DateTime grid for Start/End side by side */
+.datetime-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 1rem;
+}
+
+.datetime-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.datetime-col label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.datetime-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.datetime-row .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.datetime-row .time-picker {
+    flex-shrink: 0;
 }
 
 /* Location autocomplete */
