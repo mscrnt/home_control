@@ -185,8 +185,8 @@ function renderWeekViewHolidays() {
     const weekDays = document.querySelectorAll('.week-day');
 
     weekDays.forEach(dayColumn => {
-        // Remove existing holiday badge
-        const existing = dayColumn.querySelector('.holiday-badge');
+        // Remove existing holiday event
+        const existing = dayColumn.querySelector('.holiday-event');
         if (existing) existing.remove();
 
         const dateStr = dayColumn.dataset.date;
@@ -196,13 +196,14 @@ function renderWeekViewHolidays() {
         const holiday = getHolidayForDate(date);
 
         if (holiday) {
-            const header = dayColumn.querySelector('.week-day-header');
-            if (header) {
-                const badge = document.createElement('span');
-                badge.className = 'holiday-badge';
-                badge.textContent = holiday.name;
-                badge.title = holiday.name;
-                header.appendChild(badge);
+            const eventsContainer = dayColumn.querySelector('.week-day-events');
+            if (eventsContainer) {
+                const holidayEvent = document.createElement('div');
+                holidayEvent.className = 'holiday-event';
+                holidayEvent.textContent = holiday.name;
+                holidayEvent.title = holiday.name;
+                // Insert at the beginning of events
+                eventsContainer.insertBefore(holidayEvent, eventsContainer.firstChild);
             }
         }
     });

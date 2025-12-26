@@ -393,9 +393,10 @@
     background: rgba(251, 191, 36, 0.15);
 }
 
-/* Week view holiday badge - in header */
-.week-day-header .holiday-badge {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.65rem;
+/* Week view holiday event - at top of events list */
+.week-day-events .holiday-event {
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    text-align: center;
 }
