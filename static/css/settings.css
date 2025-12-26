@@ -400,3 +400,22 @@
     font-size: 0.75rem;
     text-align: center;
 }
+
+/* Moon phase icon - aligned right in month view */
+.moon-icon {
+    margin-left: auto;
+    font-size: 1rem;
+    opacity: 0.8;
+    cursor: default;
+}
+
+/* Moon phase event in week/day view */
+.holiday-event.moon-phase {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text-secondary);
+    border-left-color: var(--text-muted);
+}
+
+[data-theme="dark"] .holiday-event.moon-phase {
+    background: rgba(148, 163, 184, 0.1);
+}
