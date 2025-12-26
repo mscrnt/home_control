@@ -130,13 +130,16 @@
 
 /* Calendar Header & View Toggle */
 .calendar-header {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 1rem;
     margin-bottom: 0.5rem;
     flex-shrink: 0;
-    flex-wrap: wrap;
+}
+
+.calendar-header .calendar-dropdown {
+    justify-self: center;
 }
 
 .view-toggle {
@@ -483,11 +486,6 @@
     flex-shrink: 0;
 }
 
-.view-title-nav .calendar-dropdown {
-    display: flex;
-    justify-content: center;
-    padding-bottom: 0.25rem;
-}
 
 .view-title-row {
     display: grid;

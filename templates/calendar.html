@@ -18,6 +18,33 @@
             <a href="?view=week&date={{.TodayDate}}" class="view-btn {{if eq .View "week"}}active{{end}}">Week</a>
             <a href="?view=month&date={{.TodayDate}}" class="view-btn {{if eq .View "month"}}active{{end}}">Month</a>
         </div>
+        {{if .Calendars}}
+        <div class="calendar-dropdown">
+            <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
+                <span>Calendars</span>
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div class="calendar-dropdown-menu">
+                {{range .Calendars}}
+                <div class="calendar-option" data-calendar-id="{{.ID}}">
+                    <label class="calendar-checkbox">
+                        <input type="checkbox" {{if .Visible}}checked{{end}}
+                               data-calendar-id="{{.ID}}"
+                               onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
+                        <span class="checkmark" style="--cal-color: {{.Color}}"></span>
+                    </label>
+                    <span class="calendar-name">{{.Name}}</span>
+                    <button type="button" class="calendar-color-btn"
+                            style="background: {{.Color}}"
+                            data-calendar-id="{{.ID}}"
+                            data-current-color="{{.Color}}"
+                            onclick="openColorPalette(event, '{{.ID}}')">
+                    </button>
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
         <div class="header-actions">
             <a href="/home" class="page-nav-btn"><img src="/icon/house-signal" class="nav-icon" alt="">Home</a>
             <button class="settings-btn" onclick="openSettings()" title="Settings">
@@ -32,33 +59,6 @@
     {{if eq .View "month"}}
     <div class="month-view">
         <div class="view-title-nav">
-            {{if .Calendars}}
-            <div class="calendar-dropdown">
-                <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
-                    <span>Calendars</span>
-                    <span class="dropdown-arrow">▼</span>
-                </button>
-                <div class="calendar-dropdown-menu">
-                    {{range .Calendars}}
-                    <div class="calendar-option" data-calendar-id="{{.ID}}">
-                        <label class="calendar-checkbox">
-                            <input type="checkbox" {{if .Visible}}checked{{end}}
-                                   data-calendar-id="{{.ID}}"
-                                   onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
-                            <span class="checkmark" style="--cal-color: {{.Color}}"></span>
-                        </label>
-                        <span class="calendar-name">{{.Name}}</span>
-                        <button type="button" class="calendar-color-btn"
-                                style="background: {{.Color}}"
-                                data-calendar-id="{{.ID}}"
-                                data-current-color="{{.Color}}"
-                                onclick="openColorPalette(event, '{{.ID}}')">
-                        </button>
-                    </div>
-                    {{end}}
-                </div>
-            </div>
-            {{end}}
             <div class="view-title-row">
                 <div class="view-title-left">
                     <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
@@ -124,33 +124,6 @@
     {{else if eq .View "week"}}
     <div class="week-view">
         <div class="view-title-nav">
-            {{if .Calendars}}
-            <div class="calendar-dropdown">
-                <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
-                    <span>Calendars</span>
-                    <span class="dropdown-arrow">▼</span>
-                </button>
-                <div class="calendar-dropdown-menu">
-                    {{range .Calendars}}
-                    <div class="calendar-option" data-calendar-id="{{.ID}}">
-                        <label class="calendar-checkbox">
-                            <input type="checkbox" {{if .Visible}}checked{{end}}
-                                   data-calendar-id="{{.ID}}"
-                                   onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
-                            <span class="checkmark" style="--cal-color: {{.Color}}"></span>
-                        </label>
-                        <span class="calendar-name">{{.Name}}</span>
-                        <button type="button" class="calendar-color-btn"
-                                style="background: {{.Color}}"
-                                data-calendar-id="{{.ID}}"
-                                data-current-color="{{.Color}}"
-                                onclick="openColorPalette(event, '{{.ID}}')">
-                        </button>
-                    </div>
-                    {{end}}
-                </div>
-            </div>
-            {{end}}
             <div class="view-title-row">
                 <div class="view-title-left">
                     <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
@@ -218,33 +191,6 @@
     {{/* Day view - 24-hour timeline */}}
     <div class="day-view">
         <div class="view-title-nav">
-            {{if .Calendars}}
-            <div class="calendar-dropdown">
-                <button type="button" class="calendar-dropdown-btn" onclick="toggleCalendarDropdown(event)">
-                    <span>Calendars</span>
-                    <span class="dropdown-arrow">▼</span>
-                </button>
-                <div class="calendar-dropdown-menu">
-                    {{range .Calendars}}
-                    <div class="calendar-option" data-calendar-id="{{.ID}}">
-                        <label class="calendar-checkbox">
-                            <input type="checkbox" {{if .Visible}}checked{{end}}
-                                   data-calendar-id="{{.ID}}"
-                                   onchange="toggleCalendarVisibility('{{.ID}}', this.checked)">
-                            <span class="checkmark" style="--cal-color: {{.Color}}"></span>
-                        </label>
-                        <span class="calendar-name">{{.Name}}</span>
-                        <button type="button" class="calendar-color-btn"
-                                style="background: {{.Color}}"
-                                data-calendar-id="{{.ID}}"
-                                data-current-color="{{.Color}}"
-                                onclick="openColorPalette(event, '{{.ID}}')">
-                        </button>
-                    </div>
-                    {{end}}
-                </div>
-            </div>
-            {{end}}
             <div class="view-title-row">
                 <div class="view-title-left">
                     <button class="weather-widget" onclick="openWeatherModal()" title="Weather details">
