@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.PowerManager
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
@@ -22,6 +23,9 @@ class CommandServer(
     companion object {
         private const val TAG = "CommandServer"
     }
+
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    private var screenWakeLock: PowerManager.WakeLock? = null
 
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri
@@ -498,12 +502,22 @@ class CommandServer(
         )
     }
 
+    @Suppress("DEPRECATION")
     private fun handleWake(): Response {
         Log.d(TAG, "Wake/doorbell request received")
 
         try {
-            // Wake the screen using input keyevent
-            executeCommand("input keyevent KEYCODE_WAKEUP", 2000)
+            // Wake the screen using PowerManager wake lock (works without root/shell)
+            screenWakeLock?.release()
+            screenWakeLock = powerManager.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK or
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                PowerManager.ON_AFTER_RELEASE,
+                "HomeControlSensors::DoorbellWakeLock"
+            ).apply {
+                acquire(10000) // Hold for 10 seconds, then release
+            }
+            Log.d(TAG, "Screen woken via wake lock")
 
             // Also send proximity broadcast to dismiss screensaver in WebView
             val intent = Intent(KioskActivity.ACTION_PROXIMITY).apply {
@@ -512,7 +526,7 @@ class CommandServer(
             }
             context.sendBroadcast(intent)
 
-            Log.d(TAG, "Wake command executed and proximity broadcast sent")
+            Log.d(TAG, "Proximity broadcast sent to dismiss screensaver")
 
             return newFixedLengthResponse(
                 Response.Status.OK,
