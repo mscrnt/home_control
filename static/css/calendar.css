@@ -158,11 +158,11 @@
 }
 
 .view-btn {
-    padding: 0.65rem 1.25rem;
+    padding: 0.4rem 0.85rem;
     border-radius: 8px;
     text-decoration: none;
     color: var(--text-secondary);
-    font-size: 1rem;
+    font-size: 0.85rem;
     font-weight: 600;
     transition: all 0.2s;
 }
@@ -498,6 +498,9 @@
 }
 
 .view-title-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     min-width: 80px;
 }
 
@@ -515,45 +518,45 @@
 }
 
 .nav-arrow {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     text-decoration: none;
-    transition: opacity 0.15s, transform 0.15s;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    transition: all 0.2s;
 }
 
-.nav-arrow img {
-    width: 100%;
-    height: 100%;
-    filter: invert(70%) sepia(10%) saturate(200%) hue-rotate(180deg) brightness(95%);
-    transition: filter 0.15s;
-}
-
-.nav-arrow:hover img {
-    filter: invert(100%) sepia(0%) saturate(0%) brightness(100%);
+.nav-arrow:hover {
+    background: var(--bg-hover);
 }
 
 .nav-arrow:active {
     transform: scale(0.95);
 }
 
-.nav-arrow:active img {
-    filter: invert(45%) sepia(80%) saturate(1000%) hue-rotate(320deg) brightness(95%);
+.nav-arrow img {
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) invert(1);
+    opacity: 0.7;
+    transition: opacity 0.2s;
 }
 
-/* Light theme: make nav arrows Night Blue */
+.nav-arrow:hover img {
+    opacity: 1;
+}
+
+/* Light theme */
 [data-theme="light"] .nav-arrow img {
-    filter: invert(27%) sepia(15%) saturate(800%) hue-rotate(145deg) brightness(95%);
+    filter: brightness(0);
+    opacity: 0.6;
 }
 
 [data-theme="light"] .nav-arrow:hover img {
-    filter: invert(15%) sepia(20%) saturate(900%) hue-rotate(145deg) brightness(90%);
-}
-
-[data-theme="light"] .nav-arrow:active img {
-    filter: invert(35%) sepia(40%) saturate(600%) hue-rotate(350deg) brightness(90%);
+    opacity: 0.9;
 }
 
 .nav-today-btn {
@@ -587,25 +590,24 @@
 }
 
 .calendar-dropdown-btn {
+    height: 36px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
     background: var(--bg-tertiary);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid var(--border-light);
-    border-radius: 20px;
-    color: var(--text-primary);
+    border: none;
+    border-radius: 8px;
+    color: var(--accent);
     font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: all 0.2s;
 }
 
 .calendar-dropdown-btn:hover {
     background: var(--bg-hover);
-    border-color: var(--border);
+    color: var(--text-primary);
 }
 
 .dropdown-arrow {
@@ -959,9 +961,10 @@
     background: var(--accent);
 }
 
-/* Add Event Button & Tasks Button */
+/* Add Event Button, Tasks Button & Today Button */
 .add-event-btn,
-.tasks-btn {
+.tasks-btn,
+.today-btn {
     height: 36px;
     padding: 0 0.75rem;
     background: var(--bg-tertiary);
@@ -976,16 +979,19 @@
     font-size: 0.9rem;
     font-weight: 500;
     transition: all 0.2s;
+    text-decoration: none;
 }
 
 .add-event-btn:hover,
-.tasks-btn:hover {
+.tasks-btn:hover,
+.today-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
 
 .add-event-btn svg,
-.tasks-btn svg {
+.tasks-btn svg,
+.today-btn svg {
     width: 18px;
     height: 18px;
     flex-shrink: 0;

@@ -4,28 +4,32 @@
 
 /* ===== Weather Widget (Header Button) ===== */
 .weather-widget {
+    height: 36px;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: var(--bg-secondary);
+    padding: 0 0.75rem;
+    background: var(--bg-tertiary);
     border: none;
     border-radius: 8px;
-    color: var(--text-primary);
+    color: var(--accent);
     cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
     transition: all 0.2s;
 }
 
 .weather-widget:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
 .weather-icon {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
 }
 
 .weather-temp {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
 }
 

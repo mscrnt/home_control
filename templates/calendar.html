@@ -65,6 +65,15 @@
                         <span class="weather-icon" id="weatherIconMonth"></span>
                         <span class="weather-temp" id="weatherTempMonth">--°</span>
                     </button>
+                    {{if ne .CurrentDate .TodayDate}}<a href="?view=month&date={{.TodayDate}}" class="today-btn" title="Go to today">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        <span>Today</span>
+                    </a>{{end}}
                 </div>
                 <div class="view-title-center">
                     <a href="?view=month&date={{.PrevDate}}" class="nav-arrow"><img src="/icon/circle-arrow-left" alt="Previous"></a>
@@ -130,6 +139,15 @@
                         <span class="weather-icon" id="weatherIconWeek"></span>
                         <span class="weather-temp" id="weatherTempWeek">--°</span>
                     </button>
+                    {{if ne .CurrentDate .TodayDate}}<a href="?view=week&date={{.TodayDate}}" class="today-btn" title="Go to today">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        <span>Today</span>
+                    </a>{{end}}
                 </div>
                 <div class="view-title-center">
                     <a href="?view=week&date={{.PrevDate}}" class="nav-arrow"><img src="/icon/circle-arrow-left" alt="Previous"></a>
@@ -197,6 +215,15 @@
                         <span class="weather-icon" id="weatherIconDay"></span>
                         <span class="weather-temp" id="weatherTempDay">--°</span>
                     </button>
+                    {{if ne .CurrentDate .TodayDate}}<a href="?view=day&date={{.TodayDate}}" class="today-btn" title="Go to today">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        <span>Today</span>
+                    </a>{{end}}
                 </div>
                 <div class="view-title-center">
                     <a href="?view=day&date={{.PrevDate}}" class="nav-arrow"><img src="/icon/circle-arrow-left" alt="Previous"></a>
@@ -1811,6 +1838,11 @@ async function checkForEventUpdates() {
         return;
     }
 
+    // Get current view and date from URL
+    const params = new URLSearchParams(window.location.search);
+    const currentView = params.get('view') || 'day';
+    const currentDate = params.get('date') || '{{.TodayDate}}';
+
     try {
         const resp = await fetch(`/api/calendar/events?view=${currentView}&date=${currentDate}`);
         if (!resp.ok) {
@@ -1893,7 +1925,7 @@ setTimeout(checkForEventUpdates, 5000);
 
     // Intercept clicks on calendar navigation links
     document.addEventListener('click', function(e) {
-        const link = e.target.closest('a.view-btn, a.nav-arrow');
+        const link = e.target.closest('a.view-btn, a.nav-arrow, a.today-btn');
         if (!link) return;
 
         const href = link.getAttribute('href');
@@ -1982,6 +2014,72 @@ setTimeout(checkForEventUpdates, 5000);
             }
         });
     }
+
+    // Swipe gesture support for calendar navigation
+    let swipeJustHappened = false;
+    (function initSwipeNavigation() {
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+        const minSwipeDistance = 50;
+
+        function handleSwipe() {
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            // Only trigger if horizontal swipe is dominant
+            if (Math.abs(deltaX) < minSwipeDistance || Math.abs(deltaX) < Math.abs(deltaY)) {
+                return false;
+            }
+
+            // Find the current nav arrows
+            const prevArrow = document.querySelector('.view-title-center .nav-arrow:first-child');
+            const nextArrow = document.querySelector('.view-title-center .nav-arrow:last-child');
+
+            if (deltaX > 0 && prevArrow) {
+                // Swipe right -> go to previous
+                const href = prevArrow.getAttribute('href');
+                if (href) {
+                    navigateCalendar(href);
+                    return true;
+                }
+            } else if (deltaX < 0 && nextArrow) {
+                // Swipe left -> go to next
+                const href = nextArrow.getAttribute('href');
+                if (href) {
+                    navigateCalendar(href);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        document.addEventListener('touchstart', function(e) {
+            if (e.target.closest('.modal')) return;
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        document.addEventListener('touchend', function(e) {
+            if (e.target.closest('.modal')) return;
+            touchEndX = e.changedTouches[0].screenX;
+            touchEndY = e.changedTouches[0].screenY;
+            if (handleSwipe()) {
+                swipeJustHappened = true;
+                setTimeout(() => { swipeJustHappened = false; }, 300);
+            }
+        }, { passive: true });
+    })();
+
+    // Prevent clicks after swipe (for month-day cells, etc.)
+    document.addEventListener('click', function(e) {
+        if (swipeJustHappened) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        }
+    }, true); // Use capture phase to intercept before other handlers
 
     // Handle browser back/forward
     window.addEventListener('popstate', function() {
