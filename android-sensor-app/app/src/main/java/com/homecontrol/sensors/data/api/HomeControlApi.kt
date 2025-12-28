@@ -267,6 +267,16 @@ interface HomeControlApi {
     @GET("api/camera/{name}/snapshot")
     suspend fun getCameraSnapshot(@Path("name") name: String): Response<okhttp3.ResponseBody>
 
+    /**
+     * Send audio to camera for push-to-talk.
+     * Body should be raw PCM audio: 16-bit, mono, 8kHz sample rate.
+     */
+    @POST("api/camera/{name}/talk")
+    suspend fun postCameraAudio(
+        @Path("name") name: String,
+        @Body audio: okhttp3.RequestBody
+    ): Response<Unit>
+
     // ============ Entertainment ============
 
     @GET("api/entertainment/devices")

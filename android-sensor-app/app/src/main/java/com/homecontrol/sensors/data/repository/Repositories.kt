@@ -4,6 +4,8 @@ import com.homecontrol.sensors.data.api.HomeControlApi
 import com.homecontrol.sensors.data.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 // ============ Entity Repository ============
@@ -372,6 +374,12 @@ interface CameraRepository {
     suspend fun getCameras(): Result<List<Camera>>
     fun getSnapshotUrl(name: String): String
     fun getStreamUrl(name: String): String
+    /**
+     * Send audio to camera for push-to-talk.
+     * @param name Camera name
+     * @param pcmData Raw PCM audio: 16-bit, mono, 8kHz sample rate
+     */
+    suspend fun postAudio(name: String, pcmData: ByteArray): Result<Unit>
 }
 
 class CameraRepositoryImpl @Inject constructor(
@@ -391,6 +399,14 @@ class CameraRepositoryImpl @Inject constructor(
     override fun getSnapshotUrl(name: String): String = "${serverUrl}api/camera/$name/snapshot"
 
     override fun getStreamUrl(name: String): String = "${serverUrl}api/camera/$name/stream"
+
+    override suspend fun postAudio(name: String, pcmData: ByteArray): Result<Unit> = runCatching {
+        val requestBody = pcmData.toRequestBody("application/octet-stream".toMediaType())
+        val response = api.postCameraAudio(name, requestBody)
+        if (!response.isSuccessful) {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
 }
 
 // ============ Entertainment Repository ============

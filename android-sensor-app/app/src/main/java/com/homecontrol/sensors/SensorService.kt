@@ -73,6 +73,22 @@ class SensorService : Service(), SensorEventListener {
     private var adbCheckJob: Job? = null
     private var lastReportedAdbPort: Int = 0
 
+    // Receiver for native UI bridge commands
+    private val bridgeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ACTION_RESET_ACTIVITY -> {
+                    Log.d(TAG, "Bridge: Reset activity timer")
+                    lastActivityTime = System.currentTimeMillis()
+                }
+                ACTION_WAKE_SCREEN -> {
+                    Log.d(TAG, "Bridge: Wake screen request")
+                    wakeScreen()
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "SensorService"
         private const val NOTIFICATION_ID = 1
@@ -104,6 +120,10 @@ class SensorService : Service(), SensorEventListener {
 
         // Command server port
         const val COMMAND_SERVER_PORT = 8888
+
+        // Bridge actions from native UI
+        const val ACTION_RESET_ACTIVITY = "com.homecontrol.sensors.RESET_ACTIVITY"
+        const val ACTION_WAKE_SCREEN = "com.homecontrol.sensors.WAKE_SCREEN"
     }
 
     override fun onCreate() {
@@ -157,6 +177,18 @@ class SensorService : Service(), SensorEventListener {
         // Start the HTTP command server for remote shell execution
         startCommandServer()
 
+        // Register receiver for bridge commands from native UI
+        val bridgeFilter = android.content.IntentFilter().apply {
+            addAction(ACTION_RESET_ACTIVITY)
+            addAction(ACTION_WAKE_SCREEN)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(bridgeReceiver, bridgeFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(bridgeReceiver, bridgeFilter)
+        }
+        Log.d(TAG, "Bridge receiver registered")
+
         // Configure and connect to WiFi
         configureWifi()
 
@@ -172,6 +204,11 @@ class SensorService : Service(), SensorEventListener {
     override fun onDestroy() {
         super.onDestroy()
         sensorManager.unregisterListener(this)
+        try {
+            unregisterReceiver(bridgeReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister bridge receiver: ${e.message}")
+        }
         idleCheckJob?.cancel()
         heartbeatJob?.cancel()
         adbCheckJob?.cancel()

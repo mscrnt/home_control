@@ -1,6 +1,8 @@
 package com.homecontrol.sensors.di
 
 import com.homecontrol.sensors.data.repository.*
+import com.homecontrol.sensors.service.SensorServiceBridge
+import com.homecontrol.sensors.service.SensorServiceBridgeImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -52,4 +54,10 @@ abstract class RepositoryModule {
     abstract fun bindWeatherRepository(
         impl: WeatherRepositoryImpl
     ): WeatherRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSensorServiceBridge(
+        impl: SensorServiceBridgeImpl
+    ): SensorServiceBridge
 }
