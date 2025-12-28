@@ -2,7 +2,7 @@
 /server
 /home_control
 *.exe
-data/
+/data/
 token.json
 client_secret*.json
 fontawesome-pro-6.7.2-web/*

@@ -119,9 +119,9 @@ class CommandServer(
     }
 
     private fun handleLogcat(session: IHTTPSession): Response {
-        val params = session.parms
-        val lines = params["lines"]?.toIntOrNull() ?: 100
-        val filter = params["filter"] ?: ""
+        val params = session.parameters
+        val lines = params["lines"]?.firstOrNull()?.toIntOrNull() ?: 100
+        val filter = params["filter"]?.firstOrNull() ?: ""
 
         val command = if (filter.isNotEmpty()) {
             "logcat -d -t $lines | grep -i '$filter'"
@@ -235,9 +235,9 @@ class CommandServer(
     }
 
     private fun handleListApps(session: IHTTPSession): Response {
-        val params = session.parms
-        val showSystem = params["system"]?.toBoolean() ?: true
-        val showHidden = params["hidden"]?.toBoolean() ?: false
+        val params = session.parameters
+        val showSystem = params["system"]?.firstOrNull()?.toBoolean() ?: true
+        val showHidden = params["hidden"]?.firstOrNull()?.toBoolean() ?: false
 
         val pm = context.packageManager
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager

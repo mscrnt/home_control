@@ -14,6 +14,7 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.ProgressBar
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 
 class KioskActivity : AppCompatActivity() {
@@ -89,7 +90,7 @@ class KioskActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            databaseEnabled = true
+            // databaseEnabled is deprecated - databases are always enabled on modern WebView
             cacheMode = WebSettings.LOAD_DEFAULT
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
@@ -154,6 +155,17 @@ class KioskActivity : AppCompatActivity() {
 
         // Load the URL
         loadUrl()
+
+        // Handle back press with modern API
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // In kiosk mode, allow WebView back navigation but prevent app exit
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                }
+                // Don't call remove() or isEnabled = false - prevent exiting
+            }
+        })
     }
 
     private fun configureLockTaskFeatures() {
@@ -259,14 +271,6 @@ class KioskActivity : AppCompatActivity() {
             "window.onSystemThemeChange && window.onSystemThemeChange($isDark)",
             null
         )
-    }
-
-    override fun onBackPressed() {
-        // Disable back button in kiosk mode
-        if (webView.canGoBack()) {
-            webView.goBack()
-        }
-        // Don't call super - prevent exiting
     }
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {

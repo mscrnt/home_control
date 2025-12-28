@@ -1,8 +1,6 @@
 package com.homecontrol.sensors
 
-import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -23,12 +21,12 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action in validActions) {
             Log.d(TAG, "Boot completed - action: ${intent.action}")
 
-            val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
+            // TODO: Phase 7 - Add auto-launch kiosk/native mode based on saved preference
+            // Will need DevicePolicyManager and adminComponent for kiosk lock task mode
 
             // Just start the sensor service on boot - DON'T auto-launch kiosk
             // User can manually enable kiosk mode when ready
-            Log.d(TAG, "Boot completed - starting sensor service only (kiosk disabled for troubleshooting)")
+            Log.d(TAG, "Boot completed - starting sensor service only")
 
             val serviceIntent = Intent(context, SensorService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

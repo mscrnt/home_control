@@ -18,7 +18,8 @@ class DeviceAdminReceiver : DeviceAdminReceiver() {
         Log.d(TAG, "Device admin enabled")
 
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
+        // TODO: Phase 7 - adminComponent needed for lock task and policy configuration
+        // val adminComponent = ComponentName(context, DeviceAdminReceiver::class.java)
 
         if (dpm.isDeviceOwnerApp(context.packageName)) {
             Log.d(TAG, "Device owner confirmed - NOT setting restrictive policies for troubleshooting")
