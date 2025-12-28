@@ -20,6 +20,12 @@ All notable changes to the Android sensor app will be documented in this file.
   - HomeControlApi with 80+ endpoints
   - Data models: Entity, Hue, Spotify, Calendar, Weather, Entertainment
   - Repository interfaces for all domains
+- **Phase 2 Data Layer** (`4afb120`)
+  - WebSocketClient with auto-reconnect and exponential backoff
+  - Event handling for doorbell and proximity_wake events
+  - SensorServiceBridge interface and implementation
+  - Push-to-talk endpoint for camera audio
+  - SensorService integration with bridge commands
 
 ### Changed
 - Upgraded to Android 15 (API 35)
