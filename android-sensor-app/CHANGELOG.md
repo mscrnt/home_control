@@ -26,6 +26,14 @@ All notable changes to the Android sensor app will be documented in this file.
   - SensorServiceBridge interface and implementation
   - Push-to-talk endpoint for camera audio
   - SensorService integration with bridge commands
+- **Phase 3 UI Screens** (`af647fc`)
+  - HomeScreen with GroupCard and EntityCard components
+  - HueScreen with room controls, brightness sliders, scene selection
+  - Sync Box controls with mode, brightness, and input selection
+  - SettingsScreen with server URL, theme, and app mode configuration
+  - SettingsRepository with DataStore persistence
+  - Glassmorphism theme matching web UI (dark navy, tan text, accent colors)
+  - Fixed JSON parsing for Entity, HueRoom, HueLight, SyncBoxStatus models
 
 ### Changed
 - Upgraded to Android 15 (API 35)
