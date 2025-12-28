@@ -11,7 +11,7 @@ import javax.inject.Inject
 // ============ Entity Repository ============
 
 interface EntityRepository {
-    suspend fun getEntities(): Result<EntitiesResponse>
+    suspend fun getEntities(): Result<List<EntityGroup>>
     suspend fun toggleEntity(entityId: String): Result<Unit>
     suspend fun setClimateTemperature(entityId: String, request: TemperatureRequest): Result<Unit>
     suspend fun setClimateMode(entityId: String, mode: String): Result<Unit>
@@ -22,10 +22,10 @@ class EntityRepositoryImpl @Inject constructor(
     private val api: HomeControlApi
 ) : EntityRepository {
 
-    override suspend fun getEntities(): Result<EntitiesResponse> = runCatching {
+    override suspend fun getEntities(): Result<List<EntityGroup>> = runCatching {
         val response = api.getEntities()
         if (response.isSuccessful) {
-            response.body() ?: throw Exception("Empty response")
+            response.body() ?: emptyList()
         } else {
             throw Exception("API error: ${response.code()}")
         }
@@ -72,7 +72,9 @@ interface HueRepository {
     suspend fun getSyncBoxes(): Result<List<SyncBox>>
     suspend fun getSyncBoxStatus(index: Int): Result<SyncBoxStatus>
     suspend fun setSyncBoxSync(index: Int, sync: Boolean): Result<Unit>
+    suspend fun setSyncBoxMode(index: Int, mode: String): Result<Unit>
     suspend fun setSyncBoxBrightness(index: Int, brightness: Int): Result<Unit>
+    suspend fun setSyncBoxInput(index: Int, input: String): Result<Unit>
 }
 
 class HueRepositoryImpl @Inject constructor(
@@ -136,8 +138,18 @@ class HueRepositoryImpl @Inject constructor(
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 
+    override suspend fun setSyncBoxMode(index: Int, mode: String): Result<Unit> = runCatching {
+        val response = api.setSyncBoxMode(index, ModeRequest(mode))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
     override suspend fun setSyncBoxBrightness(index: Int, brightness: Int): Result<Unit> = runCatching {
         val response = api.setSyncBoxBrightness(index, BrightnessRequest(brightness))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun setSyncBoxInput(index: Int, input: String): Result<Unit> = runCatching {
+        val response = api.setSyncBoxInput(index, InputRequest(input))
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 }

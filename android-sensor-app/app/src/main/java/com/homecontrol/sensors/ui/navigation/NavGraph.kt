@@ -12,6 +12,9 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.homecontrol.sensors.ui.screens.home.HomeScreen
+import com.homecontrol.sensors.ui.screens.hue.HueScreen
+import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -51,13 +54,11 @@ fun HomeControlNavGraph(
     ) {
         // Main screens
         composable(Screen.Home.route) {
-            // HomeScreen will be implemented in Phase 3
-            PlaceholderScreen("Home")
+            HomeScreen()
         }
 
         composable(Screen.Hue.route) {
-            // HueScreen will be implemented in Phase 3
-            PlaceholderScreen("Hue Lights")
+            HueScreen()
         }
 
         composable(Screen.Spotify.route) {
@@ -81,8 +82,7 @@ fun HomeControlNavGraph(
         }
 
         composable(Screen.Settings.route) {
-            // SettingsScreen will be implemented in Phase 6
-            PlaceholderScreen("Settings")
+            SettingsScreen()
         }
 
         composable(Screen.Screensaver.route) {

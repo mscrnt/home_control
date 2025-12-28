@@ -1,0 +1,116 @@
+package com.homecontrol.sensors.ui.screens.settings
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.homecontrol.sensors.data.repository.AppMode
+import com.homecontrol.sensors.data.repository.AppSettings
+import com.homecontrol.sensors.data.repository.SettingsRepository
+import com.homecontrol.sensors.data.repository.ThemeMode
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class SettingsUiState(
+    val settings: AppSettings = AppSettings(),
+    val isLoading: Boolean = true,
+    val error: String? = null,
+    val serverUrlInput: String = "",
+    val showRestartRequired: Boolean = false
+)
+
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    private val settingsRepository: SettingsRepository
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(SettingsUiState())
+    val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    init {
+        loadSettings()
+    }
+
+    private fun loadSettings() {
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                _uiState.update {
+                    it.copy(
+                        settings = settings,
+                        serverUrlInput = settings.serverUrl,
+                        isLoading = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateServerUrl(url: String) {
+        _uiState.update { it.copy(serverUrlInput = url) }
+    }
+
+    fun saveServerUrl() {
+        val url = _uiState.value.serverUrlInput.trim()
+        if (url.isNotEmpty()) {
+            viewModelScope.launch {
+                try {
+                    // Ensure URL ends with /
+                    val normalizedUrl = if (url.endsWith("/")) url else "$url/"
+                    settingsRepository.setServerUrl(normalizedUrl)
+                    _uiState.update {
+                        it.copy(
+                            serverUrlInput = normalizedUrl,
+                            showRestartRequired = true
+                        )
+                    }
+                } catch (e: Exception) {
+                    _uiState.update {
+                        it.copy(error = "Failed to save server URL: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            settingsRepository.setThemeMode(mode)
+        }
+    }
+
+    fun setAppMode(mode: AppMode) {
+        viewModelScope.launch {
+            settingsRepository.setAppMode(mode)
+            _uiState.update { it.copy(showRestartRequired = true) }
+        }
+    }
+
+    fun setIdleTimeout(seconds: Int) {
+        viewModelScope.launch {
+            settingsRepository.setIdleTimeout(seconds)
+        }
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setKeepScreenOn(enabled)
+        }
+    }
+
+    fun setShowNotifications(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setShowNotifications(enabled)
+        }
+    }
+
+    fun dismissRestartRequired() {
+        _uiState.update { it.copy(showRestartRequired = false) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+}

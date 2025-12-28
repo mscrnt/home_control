@@ -31,9 +31,10 @@ annotation class ServerUrl
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    private const val PREFS_NAME = "home_control_prefs"
+    // Use same SharedPreferences as SensorService for consistency
+    private const val PREFS_NAME = "sensor_prefs"
     private const val KEY_SERVER_URL = "server_url"
-    private const val DEFAULT_SERVER_URL = "http://192.168.1.100:8080/"
+    private const val DEFAULT_SERVER_URL = "http://192.168.69.229:8080/"
 
     @Provides
     @Singleton

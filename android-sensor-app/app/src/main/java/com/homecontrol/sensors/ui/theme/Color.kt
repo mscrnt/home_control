@@ -2,53 +2,66 @@ package com.homecontrol.sensors.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Primary colors - Blue accent matching web UI
-val Primary = Color(0xFF60A5FA)  // Blue-400
-val PrimaryVariant = Color(0xFF3B82F6)  // Blue-500
-val OnPrimary = Color.White
+// ============================================
+// Colors matching web UI CSS variables
+// ============================================
+
+// Primary colors - Weldon Blue accent (matching --accent)
+val Primary = Color(0xFF8197AC)  // Weldon Blue
+val PrimaryVariant = Color(0xFF9AADBC)  // Lighter Weldon Blue (--accent-hover)
+val OnPrimary = Color(0xFF0E141C)  // Dark background for contrast
 
 // Secondary colors
-val Secondary = Color(0xFF818CF8)  // Indigo-400
-val SecondaryVariant = Color(0xFF6366F1)  // Indigo-500
-val OnSecondary = Color.White
+val Secondary = Color(0xFF607EA2)  // Rackley (--info)
+val SecondaryVariant = Color(0xFF314B6E)  // --bg-tertiary
+val OnSecondary = Color(0xFFBDB3A3)  // Tan text
 
-// Error colors
-val Error = Color(0xFFEF4444)  // Red-500
+// Error colors (matching --danger)
+val Error = Color(0xFFC45B5B)  // Muted red
 val OnError = Color.White
 
-// Light theme colors
-val LightBackground = Color(0xFFF1F5F9)  // Slate-100
-val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFF8FAFC)  // Slate-50
-val LightOnBackground = Color(0xFF1E293B)  // Slate-800
-val LightOnSurface = Color(0xFF334155)  // Slate-700
-val LightOnSurfaceVariant = Color(0xFF64748B)  // Slate-500
-val LightOutline = Color(0xFFE2E8F0)  // Slate-200
-val LightCardBackground = Color(0xCCFFFFFF)  // White with 80% opacity
+// ============================================
+// Light theme colors (Sand Tan theme)
+// ============================================
+val LightBackground = Color(0xFFE1B382)  // Sand Tan (--bg-primary without alpha)
+val LightSurface = Color(0xFFF5EBE0)  // Light cream (--bg-secondary)
+val LightSurfaceVariant = Color(0xFFECDCC8)  // Warm beige (--bg-tertiary)
+val LightOnBackground = Color(0xFF12343B)  // Night Blue Shadow (--text-primary)
+val LightOnSurface = Color(0xFF2D545E)  // Night Blue (--text-secondary)
+val LightOnSurfaceVariant = Color(0xFF5A7A82)  // Muted blue-grey (--text-muted)
+val LightOutline = Color(0xFFC89666)  // Sand Tan Shadow (--border)
+val LightCardBackground = Color(0xE6F5EBE0)  // Cream with 90% opacity
 
-// Dark theme colors
-val DarkBackground = Color(0xFF0F172A)  // Slate-900
-val DarkSurface = Color(0xFF1E293B)  // Slate-800
-val DarkSurfaceVariant = Color(0xFF334155)  // Slate-700
-val DarkOnBackground = Color(0xFFF1F5F9)  // Slate-100
-val DarkOnSurface = Color(0xFFE2E8F0)  // Slate-200
-val DarkOnSurfaceVariant = Color(0xFF94A3B8)  // Slate-400
-val DarkOutline = Color(0xFF475569)  // Slate-600
-val DarkCardBackground = Color(0x4D1E293B)  // Slate-800 with 30% opacity
+// ============================================
+// Dark theme colors (Navy Glassmorphism theme)
+// ============================================
+val DarkBackground = Color(0xFF0E141C)  // --bg-primary (dark navy)
+val DarkSurface = Color(0xFF1A2332)  // --bg-secondary
+val DarkSurfaceVariant = Color(0xFF1E2D42)  // --bg-elevated
+val DarkOnBackground = Color(0xFFBDB3A3)  // --text-primary (tan/beige)
+val DarkOnSurface = Color(0xFFBDB3A3)  // --text-primary
+val DarkOnSurfaceVariant = Color(0xFF8197AC)  // --text-secondary (Weldon Blue)
+val DarkOutline = Color(0xFF314B6E)  // --border
+val DarkCardBackground = Color(0x661A2332)  // --bg-secondary with 40% opacity for glass effect
 
-// Entity state colors
-val StateOn = Color(0xFF22C55E)  // Green-500
-val StateOff = Color(0xFF6B7280)  // Gray-500
-val StateUnavailable = Color(0xFFEF4444)  // Red-500
+// Additional dark theme colors
+val DarkTertiary = Color(0xFF314B6E)  // --bg-tertiary
+val DarkHover = Color(0xFF607EA2)  // --bg-hover
+val DarkTextMuted = Color(0xFF607EA2)  // --text-muted
+
+// Entity state colors (matching web UI --success, --danger)
+val StateOn = Color(0xFF7A9E8A)  // Muted teal-green (--success)
+val StateOff = Color(0xFF607EA2)  // Rackley (--text-muted)
+val StateUnavailable = Color(0xFFC45B5B)  // Muted red (--danger)
 
 // Climate colors
-val ClimateHeating = Color(0xFFEF4444)  // Red-500
-val ClimateCooling = Color(0xFF3B82F6)  // Blue-500
-val ClimateIdle = Color(0xFF6B7280)  // Gray-500
+val ClimateHeating = Color(0xFFC45B5B)  // Muted red (matches --danger)
+val ClimateCooling = Color(0xFF8197AC)  // Weldon Blue (matches --accent)
+val ClimateIdle = Color(0xFF607EA2)  // Rackley
 
 // Hue colors for lights
-val HueLightOn = Color(0xFFFBBF24)  // Amber-400
-val HueLightOff = Color(0xFF6B7280)  // Gray-500
+val HueLightOn = Color(0xFFFBBF24)  // Amber-400 (warm light)
+val HueLightOff = Color(0xFF607EA2)  // Rackley
 
 // Spotify colors
 val SpotifyGreen = Color(0xFF1DB954)

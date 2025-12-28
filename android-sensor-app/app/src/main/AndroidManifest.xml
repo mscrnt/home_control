@@ -43,7 +43,7 @@
 
         <activity
             android:name=".NativeActivity"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/Theme.AppCompat.NoActionBar"
             android:screenOrientation="landscape"

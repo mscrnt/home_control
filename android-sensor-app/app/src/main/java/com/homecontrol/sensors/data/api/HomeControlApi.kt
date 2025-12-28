@@ -9,7 +9,7 @@ interface HomeControlApi {
     // ============ Entities (Home Assistant) ============
 
     @GET("api/entities")
-    suspend fun getEntities(): Response<EntitiesResponse>
+    suspend fun getEntities(): Response<List<EntityGroup>>
 
     @POST("api/toggle/{entityId}")
     suspend fun toggleEntity(@Path("entityId") entityId: String): Response<Unit>

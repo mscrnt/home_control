@@ -4,19 +4,16 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class EntitiesResponse(
-    val groups: List<EntityGroup>
-)
-
-@Serializable
 data class EntityGroup(
     val name: String,
     val icon: String? = null,
-    val entities: List<Entity>
+    @SerialName("cards")
+    val entities: List<Entity> = emptyList()
 )
 
 @Serializable
 data class Entity(
+    @SerialName("entityId")
     val id: String,
     val name: String,
     val state: String,
