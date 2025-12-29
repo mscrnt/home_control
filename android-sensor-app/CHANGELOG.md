@@ -7,6 +7,23 @@ All notable changes to the Android sensor app will be documented in this file.
 ## [1.2.0] - 2025-12-28
 
 ### Added
+- **Phase 6 Spotify Screen** (`57a9d0b`)
+  - Full Spotify playback control UI with two-column layout
+  - Now Playing panel with album art, track info, progress bar
+  - Playback controls: play/pause, next, previous, seek, volume slider
+  - Shuffle and repeat toggle with visual state indicators
+  - Device picker dialog for transferring playback between devices
+  - Browse tab with sections: Recently Played, Top Artists, Your Playlists, Jump Back In
+  - Library tab with filters: All, Playlists, Albums, Artists, Liked Songs
+  - Album detail view with track listing, play/shuffle buttons, save to library
+  - Artist detail view with top tracks, discography, follow button
+  - Playlist detail view with full track listing
+  - "Show all" functionality for home sections with full-screen grid views
+  - Search with global Spotify search and local library filtering
+  - MiniSpotifyPlayer component in drawer with compact controls
+  - Spotify branding with logo and green accent color throughout
+  - SpotifyTopTracksResponse type for correct API response handling
+
 - **Phase 5 Calendar Screen** (`45a1a69`)
   - Full calendar implementation with Day, Week, and Month views
   - Swipe gesture navigation between time periods
