@@ -16,6 +16,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +31,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
@@ -49,6 +49,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +65,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.homecontrol.sensors.data.repository.SettingsRepository
+import com.homecontrol.sensors.data.repository.ThemeMode
 import com.homecontrol.sensors.ui.components.MiniSpotifyPlayer
 import com.homecontrol.sensors.ui.screens.home.HomeScreen
 import com.homecontrol.sensors.ui.screens.hue.HueScreen
@@ -74,9 +77,13 @@ import com.homecontrol.sensors.ui.theme.HomeControlColors
 import com.homecontrol.sensors.ui.theme.HomeControlTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class NativeActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     companion object {
         private const val TAG = "NativeActivity"
@@ -97,7 +104,20 @@ class NativeActivity : ComponentActivity() {
         }
 
         setContent {
-            HomeControlTheme {
+            // Observe theme settings
+            val settings by settingsRepository.settings.collectAsState(
+                initial = com.homecontrol.sensors.data.repository.AppSettings()
+            )
+            val systemDarkTheme = isSystemInDarkTheme()
+
+            // Determine dark theme based on user preference
+            val darkTheme = when (settings.themeMode) {
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+                ThemeMode.SYSTEM -> systemDarkTheme
+            }
+
+            HomeControlTheme(darkTheme = darkTheme) {
                 MainContent()
             }
         }
@@ -208,12 +228,6 @@ fun MainContent() {
                             scope.launch {
                                 drawerState.close()
                                 activeModal = modal
-                            }
-                        },
-                        onCalendarClick = {
-                            scope.launch {
-                                drawerState.close()
-                                activeModal = null
                             }
                         },
                         onClose = {
@@ -376,7 +390,6 @@ private fun SpotifyLogoTitle() {
 @Composable
 private fun SmartHomeDrawerContent(
     onItemClick: (SmartHomeModal) -> Unit,
-    onCalendarClick: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -419,18 +432,6 @@ private fun SmartHomeDrawerContent(
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider(color = HomeControlColors.cardBorder())
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Calendar button (to go back)
-        DrawerItem(
-            icon = Icons.Filled.CalendarMonth,
-            label = "Calendar",
-            selected = false,
-            onClick = onCalendarClick
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = HomeControlColors.cardBorder())
-        Spacer(modifier = Modifier.height(8.dp))
 
         // Smart home items
         smartHomeNavItems.forEach { item ->

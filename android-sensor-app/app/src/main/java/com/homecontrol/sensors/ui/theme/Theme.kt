@@ -7,11 +7,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+// CompositionLocal for tracking dark theme state across composables
+val LocalDarkTheme = compositionLocalOf { false }
 
 // Light theme uses Night Blue as accent (matching web UI [data-theme="light"])
 private val LightPrimary = Color(0xFF2D545E)  // Night Blue
@@ -102,19 +107,21 @@ fun HomeControlTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = Shapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = Shapes,
+            content = content
+        )
+    }
 }
 
 // Extension properties for custom colors not in Material3
 object HomeControlColors {
     // Glass card background - semi-transparent for glassmorphism effect
     @Composable
-    fun cardBackground(): Color = if (isSystemInDarkTheme()) {
+    fun cardBackground(): Color = if (LocalDarkTheme.current) {
         Color(0x26FFFFFF)  // rgba(255, 255, 255, 0.15) from CSS
     } else {
         Color(0x80FDFBF8)  // rgba(253, 251, 248, 0.5) from CSS
@@ -122,11 +129,11 @@ object HomeControlColors {
 
     // Solid card background for nested elements
     @Composable
-    fun cardBackgroundSolid(): Color = if (isSystemInDarkTheme()) DarkSurface else LightSurface
+    fun cardBackgroundSolid(): Color = if (LocalDarkTheme.current) DarkSurface else LightSurface
 
     // Card border color
     @Composable
-    fun cardBorder(): Color = if (isSystemInDarkTheme()) {
+    fun cardBorder(): Color = if (LocalDarkTheme.current) {
         Color(0x33FFFFFF)  // rgba(255, 255, 255, 0.2) from CSS
     } else {
         LightOutline
@@ -134,7 +141,7 @@ object HomeControlColors {
 
     // Hover/elevated card background
     @Composable
-    fun cardHover(): Color = if (isSystemInDarkTheme()) {
+    fun cardHover(): Color = if (LocalDarkTheme.current) {
         Color(0x40FFFFFF)  // rgba(255, 255, 255, 0.25) from CSS
     } else {
         Color(0xE6FFFFFF)  // rgba(255, 255, 255, 0.9)
@@ -142,7 +149,7 @@ object HomeControlColors {
 
     // Accent soft background
     @Composable
-    fun accentSoft(): Color = if (isSystemInDarkTheme()) {
+    fun accentSoft(): Color = if (LocalDarkTheme.current) {
         Color(0x408197AC)  // rgba(129, 151, 172, 0.25) from CSS
     } else {
         Color(0x262D545E)  // rgba(45, 84, 94, 0.15)
@@ -150,7 +157,7 @@ object HomeControlColors {
 
     // Text colors
     @Composable
-    fun textMuted(): Color = if (isSystemInDarkTheme()) DarkTextMuted else LightOnSurfaceVariant
+    fun textMuted(): Color = if (LocalDarkTheme.current) DarkTextMuted else LightOnSurfaceVariant
 
     @Composable
     fun stateOn(): Color = StateOn
