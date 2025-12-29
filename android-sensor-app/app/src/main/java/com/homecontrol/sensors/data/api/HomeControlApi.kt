@@ -199,11 +199,11 @@ interface HomeControlApi {
 
     @GET("api/calendar/events")
     suspend fun getCalendarEvents(
-        @Query("start") start: String,
-        @Query("end") end: String
+        @Query("view") view: String,
+        @Query("date") date: String
     ): Response<List<CalendarEvent>>
 
-    @GET("api/calendar/calendars")
+    @GET("api/calendar/prefs")
     suspend fun getCalendars(): Response<List<Calendar>>
 
     @GET("api/calendar/colors")
@@ -234,10 +234,10 @@ interface HomeControlApi {
     // ============ Tasks ============
 
     @GET("api/tasks")
-    suspend fun getTasks(): Response<List<Task>>
+    suspend fun getTasks(): Response<List<Task>?>
 
     @GET("api/tasks/lists")
-    suspend fun getTaskLists(): Response<List<TaskList>>
+    suspend fun getTaskLists(): Response<List<TaskList>?>
 
     @POST("api/tasks")
     suspend fun createTask(@Body task: TaskRequest): Response<Task>

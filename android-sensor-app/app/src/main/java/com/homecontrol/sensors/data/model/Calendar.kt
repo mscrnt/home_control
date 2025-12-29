@@ -6,32 +6,28 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CalendarEvent(
     val id: String,
-    @SerialName("calendar_id")
     val calendarId: String,
-    val summary: String,
+    val title: String,  // API returns "title"
     val description: String? = null,
     val location: String? = null,
-    val start: CalendarDateTime,
-    val end: CalendarDateTime,
-    @SerialName("all_day")
+    val start: String,  // API returns ISO date string directly
+    val end: String,
     val allDay: Boolean = false,
-    @SerialName("color_id")
     val colorId: String? = null,
-    @SerialName("background_color")
-    val backgroundColor: String? = null,
-    @SerialName("foreground_color")
+    val color: String? = null,  // API returns "color" for background color
     val foregroundColor: String? = null,
     val status: String? = null,
     val recurrence: List<String>? = null,
-    @SerialName("recurring_event_id")
     val recurringEventId: String? = null,
     val attendees: List<Attendee>? = null,
-    @SerialName("html_link")
     val htmlLink: String? = null,
     val visibility: String? = null,
-    @SerialName("conference_data")
     val conferenceData: ConferenceData? = null
-)
+) {
+    // Helper properties for compatibility
+    val summary: String get() = title
+    val backgroundColor: String? get() = color
+}
 
 @Serializable
 data class CalendarDateTime(
@@ -79,17 +75,15 @@ data class EntryPoint(
 @Serializable
 data class Calendar(
     val id: String,
-    val summary: String,
-    val description: String? = null,
-    @SerialName("background_color")
-    val backgroundColor: String? = null,
-    @SerialName("foreground_color")
-    val foregroundColor: String? = null,
-    val primary: Boolean = false,
-    val selected: Boolean = true,
-    @SerialName("access_role")
-    val accessRole: String? = null
-)
+    val name: String,  // API returns "name"
+    val color: String? = null,  // API returns "color"
+    val visible: Boolean = true  // From /api/calendar/prefs endpoint
+) {
+    // Helper properties for compatibility
+    val summary: String get() = name
+    val backgroundColor: String? get() = color
+    val selected: Boolean get() = visible
+}
 
 @Serializable
 data class CalendarColors(
@@ -106,16 +100,13 @@ data class ColorPair(
 // Request models
 @Serializable
 data class CalendarEventRequest(
-    @SerialName("calendar_id")
     val calendarId: String,
-    val summary: String,
+    val title: String,
     val description: String? = null,
     val location: String? = null,
-    val start: CalendarDateTime,
-    val end: CalendarDateTime,
-    @SerialName("all_day")
+    val start: String,  // ISO date string
+    val end: String,
     val allDay: Boolean = false,
-    @SerialName("color_id")
     val colorId: String? = null,
     val recurrence: List<String>? = null,
     val visibility: String? = null

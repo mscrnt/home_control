@@ -12,6 +12,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.homecontrol.sensors.ui.screens.calendar.CalendarScreen
 import com.homecontrol.sensors.ui.screens.home.HomeScreen
 import com.homecontrol.sensors.ui.screens.hue.HueScreen
 import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
@@ -45,7 +46,8 @@ sealed class Screen(val route: String) {
 fun HomeControlNavGraph(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    startDestination: String = Screen.Home.route
+    startDestination: String = Screen.Calendar.route,
+    onOpenDrawer: () -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -67,8 +69,7 @@ fun HomeControlNavGraph(
         }
 
         composable(Screen.Calendar.route) {
-            // CalendarScreen will be implemented in Phase 5
-            PlaceholderScreen("Calendar")
+            CalendarScreen(onOpenDrawer = onOpenDrawer)
         }
 
         composable(Screen.Cameras.route) {

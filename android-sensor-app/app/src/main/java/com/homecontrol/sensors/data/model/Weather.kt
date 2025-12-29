@@ -1,6 +1,5 @@
 package com.homecontrol.sensors.data.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -8,86 +7,46 @@ data class Weather(
     val current: CurrentWeather,
     val hourly: List<HourlyWeather> = emptyList(),
     val daily: List<DailyWeather> = emptyList(),
-    val alerts: List<WeatherAlert> = emptyList()
+    val timezone: String = "",
+    val fetchedAt: String = ""
 )
 
 @Serializable
 data class CurrentWeather(
     val temp: Double,
-    @SerialName("feels_like")
-    val feelsLike: Double,
-    val humidity: Int,
-    val pressure: Int,
-    @SerialName("wind_speed")
-    val windSpeed: Double,
-    @SerialName("wind_deg")
-    val windDeg: Int,
-    val clouds: Int,
-    val visibility: Int,
-    val uvi: Double,
-    val weather: List<WeatherCondition>,
-    val sunrise: Long,
-    val sunset: Long,
-    val dt: Long
+    val feelsLike: Double = 0.0,
+    val humidity: Int = 0,
+    val windSpeed: Double = 0.0,
+    val windDeg: Int = 0,
+    val clouds: Int = 0,
+    val uvi: Double = 0.0,
+    val condition: String = "",
+    val icon: String = "",
+    val sunrise: Long = 0,
+    val sunset: Long = 0
 )
 
 @Serializable
 data class HourlyWeather(
-    val dt: Long,
+    val time: Long,
     val temp: Double,
-    @SerialName("feels_like")
-    val feelsLike: Double,
-    val humidity: Int,
-    val weather: List<WeatherCondition>,
-    val pop: Double = 0.0  // Probability of precipitation
+    val feelsLike: Double = 0.0,
+    val humidity: Int = 0,
+    val condition: String = "",
+    val icon: String = "",
+    val pop: Double = 0.0
 )
 
 @Serializable
 data class DailyWeather(
-    val dt: Long,
-    val temp: DailyTemp,
-    @SerialName("feels_like")
-    val feelsLike: DailyFeelsLike,
-    val humidity: Int,
-    val weather: List<WeatherCondition>,
+    val time: Long,
+    val tempMin: Double,
+    val tempMax: Double,
+    val humidity: Int = 0,
+    val condition: String = "",
+    val icon: String = "",
     val pop: Double = 0.0,
-    val sunrise: Long,
-    val sunset: Long,
-    @SerialName("moon_phase")
-    val moonPhase: Double = 0.0
-)
-
-@Serializable
-data class DailyTemp(
-    val day: Double,
-    val min: Double,
-    val max: Double,
-    val night: Double,
-    val eve: Double,
-    val morn: Double
-)
-
-@Serializable
-data class DailyFeelsLike(
-    val day: Double,
-    val night: Double,
-    val eve: Double,
-    val morn: Double
-)
-
-@Serializable
-data class WeatherCondition(
-    val id: Int,
-    val main: String,
-    val description: String,
-    val icon: String
-)
-
-@Serializable
-data class WeatherAlert(
-    val event: String,
-    val sender: String? = null,
-    val start: Long,
-    val end: Long,
-    val description: String
+    val sunrise: Long = 0,
+    val sunset: Long = 0,
+    val summary: String = ""
 )

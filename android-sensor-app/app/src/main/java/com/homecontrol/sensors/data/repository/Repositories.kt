@@ -311,7 +311,7 @@ class SpotifyRepositoryImpl @Inject constructor(
 // ============ Calendar Repository ============
 
 interface CalendarRepository {
-    suspend fun getEvents(start: String, end: String): Result<List<CalendarEvent>>
+    suspend fun getEvents(view: String, date: String): Result<List<CalendarEvent>>
     suspend fun getCalendars(): Result<List<Calendar>>
     suspend fun createEvent(event: CalendarEventRequest): Result<CalendarEvent>
     suspend fun updateEvent(calendarId: String, eventId: String, event: CalendarEventRequest): Result<CalendarEvent>
@@ -324,8 +324,8 @@ class CalendarRepositoryImpl @Inject constructor(
     private val api: HomeControlApi
 ) : CalendarRepository {
 
-    override suspend fun getEvents(start: String, end: String): Result<List<CalendarEvent>> = runCatching {
-        val response = api.getCalendarEvents(start, end)
+    override suspend fun getEvents(view: String, date: String): Result<List<CalendarEvent>> = runCatching {
+        val response = api.getCalendarEvents(view, date)
         if (response.isSuccessful) {
             response.body() ?: emptyList()
         } else {
