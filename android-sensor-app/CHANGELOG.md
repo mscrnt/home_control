@@ -4,6 +4,30 @@ All notable changes to the Android sensor app will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-12-28
+
+### Added
+- **Phase 5 Calendar Screen** (`45a1a69`)
+  - Full calendar implementation with Day, Week, and Month views
+  - Swipe gesture navigation between time periods
+  - Event creation/editing modal with calendar selection
+  - Google Calendar integration via REST API
+  - Tasks panel with Google Tasks support
+  - US holidays display (federal, religious, observances)
+  - Moon phase calculations and display
+  - Weather widget in calendar header with border outline
+  - Expanded weather modal matching web UI design:
+    - Current conditions (temp, feels like, humidity, wind, clouds)
+    - Sunrise/sunset times with moon phase
+    - Hourly forecast (TODAY section)
+    - 5-day forecast with precipitation percentages
+  - Current time indicator in day view
+  - Event color coding from Google Calendar
+
+### Fixed
+- Weather model updated to match actual API response format
+- Icon mapping for weather conditions (sun, moon, clouds, etc.)
+
 ## [1.1.0] - 2025-12-27
 
 ### Added
