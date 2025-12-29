@@ -135,6 +135,12 @@ data class SpotifyTrackItem(
     val addedAt: String? = null
 )
 
+// Response for top tracks endpoint (items are tracks directly, not wrapped)
+@Serializable
+data class SpotifyTopTracksResponse(
+    val items: List<SpotifyTrack> = emptyList()
+)
+
 @Serializable
 data class SpotifySearchResponse(
     val tracks: SpotifyTracksResponse? = null,
@@ -178,6 +184,11 @@ data class SpotifyFollowers(
 )
 
 @Serializable
+data class SpotifyArtistTopTracksResponse(
+    val tracks: List<SpotifyTrack> = emptyList()
+)
+
+@Serializable
 data class SpotifyAlbumsResponse(
     val items: List<SpotifyAlbum> = emptyList(),
     val total: Int = 0
@@ -218,18 +229,10 @@ data class FollowingResponse(
 // Request models
 @Serializable
 data class SpotifyPlayRequest(
-    @SerialName("context_uri")
-    val contextUri: String? = null,
-    val uris: List<String>? = null,
-    val offset: SpotifyPlayOffset? = null,
-    @SerialName("position_ms")
-    val positionMs: Long? = null
-)
-
-@Serializable
-data class SpotifyPlayOffset(
-    val position: Int? = null,
-    val uri: String? = null
+    @SerialName("device_id")
+    val deviceId: String? = null,
+    val uri: String? = null,
+    val position: Int? = null
 )
 
 @Serializable

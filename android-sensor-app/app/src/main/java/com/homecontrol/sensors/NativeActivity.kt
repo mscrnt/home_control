@@ -1,6 +1,10 @@
 package com.homecontrol.sensors
 
+import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -9,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,15 +57,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.homecontrol.sensors.ui.components.MiniSpotifyPlayer
 import com.homecontrol.sensors.ui.screens.home.HomeScreen
 import com.homecontrol.sensors.ui.screens.hue.HueScreen
 import com.homecontrol.sensors.ui.screens.calendar.CalendarScreen
 import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
+import com.homecontrol.sensors.ui.screens.spotify.SpotifyScreen
 import com.homecontrol.sensors.ui.theme.HomeControlColors
 import com.homecontrol.sensors.ui.theme.HomeControlTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -69,14 +78,60 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class NativeActivity : ComponentActivity() {
 
+    companion object {
+        private const val TAG = "NativeActivity"
+        private const val SPOTIFY_PACKAGE = "com.spotify.music"
+        private var spotifyLaunched = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Start managed apps manager (auto-installs Spotify, Home Assistant, etc.)
+        ManagedAppsManager.start(this)
+
+        // Launch Spotify quickly in background (only once per app session)
+        if (!spotifyLaunched) {
+            launchSpotifyQuickly()
+        }
 
         setContent {
             HomeControlTheme {
                 MainContent()
             }
+        }
+    }
+
+    private fun launchSpotifyQuickly() {
+        try {
+            val spotifyIntent = packageManager.getLaunchIntentForPackage(SPOTIFY_PACKAGE)
+            if (spotifyIntent == null) {
+                Log.d(TAG, "Spotify not installed")
+                return
+            }
+
+            spotifyLaunched = true
+
+            // Launch Spotify with no animation
+            spotifyIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+            )
+            startActivity(spotifyIntent)
+
+            // Immediately bring our app back (50ms delay - just enough for Spotify to start)
+            Handler(Looper.getMainLooper()).postDelayed({
+                val bringBackIntent = Intent(this, NativeActivity::class.java)
+                bringBackIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                )
+                startActivity(bringBackIntent)
+                overridePendingTransition(0, 0)
+            }, 50)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch Spotify: ${e.message}")
         }
     }
 }
@@ -110,8 +165,8 @@ val smartHomeNavItems = listOf(
     ),
     DrawerNavItem(
         modal = SmartHomeModal.Music,
-        label = "Music",
-        icon = Icons.Filled.MusicNote
+        label = "Spotify",
+        icon = Icons.Filled.MusicNote // Will be overridden with Spotify logo in drawer
     ),
     DrawerNavItem(
         modal = SmartHomeModal.Cameras,
@@ -193,12 +248,15 @@ fun MainContent() {
                     SmartHomeModal.Settings -> "Settings"
                     null -> ""
                 },
-                onClose = { activeModal = null }
+                onClose = { activeModal = null },
+                titleContent = if (activeModal == SmartHomeModal.Music) {
+                    { SpotifyLogoTitle() }
+                } else null
             ) {
                 when (activeModal) {
                     SmartHomeModal.Home -> HomeScreen()
                     SmartHomeModal.Lights -> HueScreen()
-                    SmartHomeModal.Music -> PlaceholderContent("Spotify")
+                    SmartHomeModal.Music -> SpotifyScreen()
                     SmartHomeModal.Cameras -> PlaceholderContent("Cameras")
                     SmartHomeModal.Media -> PlaceholderContent("Media")
                     SmartHomeModal.Settings -> SettingsScreen()
@@ -213,6 +271,7 @@ fun MainContent() {
 private fun FullScreenModal(
     title: String,
     onClose: () -> Unit,
+    titleContent: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Box(
@@ -232,15 +291,23 @@ private fun FullScreenModal(
                 // Empty spacer for balance
                 Spacer(modifier = Modifier.size(48.dp))
 
-                // Title
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Light,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
+                // Title - either custom composable or text
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (titleContent != null) {
+                        titleContent()
+                    } else {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Light,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
 
                 // Close button
                 IconButton(
@@ -278,6 +345,30 @@ private fun PlaceholderContent(title: String) {
             text = title,
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// Spotify brand color
+private val SpotifyGreen = Color(0xFF1DB954)
+
+@Composable
+private fun SpotifyLogoTitle() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_spotify),
+            contentDescription = "Spotify",
+            modifier = Modifier.size(32.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Spotify",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = SpotifyGreen
         )
     }
 }
@@ -343,15 +434,28 @@ private fun SmartHomeDrawerContent(
 
         // Smart home items
         smartHomeNavItems.forEach { item ->
-            DrawerItem(
-                icon = item.icon,
-                label = item.label,
-                selected = false,
-                onClick = { onItemClick(item.modal) }
-            )
+            if (item.modal == SmartHomeModal.Music) {
+                // Special Spotify drawer item with logo
+                SpotifyDrawerItem(
+                    selected = false,
+                    onClick = { onItemClick(item.modal) }
+                )
+            } else {
+                DrawerItem(
+                    icon = item.icon,
+                    label = item.label,
+                    selected = false,
+                    onClick = { onItemClick(item.modal) }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))
+
+        // Mini Spotify Player
+        MiniSpotifyPlayer()
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Version info
         Text(
@@ -403,6 +507,41 @@ private fun DrawerItem(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = contentColor
+        )
+    }
+}
+
+@Composable
+private fun SpotifyDrawerItem(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        SpotifyGreen.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_spotify),
+            contentDescription = "Spotify",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = "Spotify",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = SpotifyGreen
         )
     }
 }

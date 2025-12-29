@@ -190,7 +190,7 @@ class SensorService : Service(), SensorEventListener {
         Log.d(TAG, "Bridge receiver registered")
 
         // Configure and connect to WiFi
-        configureWifi()
+        // configureWifi()  // Disabled for emulator testing
 
         // Ensure ADB WiFi is enabled and report port to server
         ensureAdbWifiEnabled()

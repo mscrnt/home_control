@@ -171,22 +171,41 @@ interface SpotifyRepository {
     suspend fun getPlaylists(): Result<SpotifyPlaylistsResponse>
     suspend fun getPlaylistTracks(id: String): Result<SpotifyTracksResponse>
     suspend fun search(query: String): Result<SpotifySearchResponse>
+    suspend fun getRecentlyPlayed(): Result<SpotifyRecentResponse>
+    suspend fun getTopArtists(): Result<SpotifyArtistsResponse>
+    suspend fun getTopTracks(): Result<SpotifyTopTracksResponse>
     suspend fun getAlbum(id: String): Result<SpotifyAlbum>
+    suspend fun isAlbumSaved(id: String): Result<Boolean>
+    suspend fun saveAlbum(id: String): Result<Unit>
+    suspend fun removeAlbum(id: String): Result<Unit>
     suspend fun getArtist(id: String): Result<SpotifyArtist>
+    suspend fun getArtistAlbums(id: String): Result<SpotifyAlbumsResponse>
+    suspend fun getArtistTopTracks(id: String): Result<SpotifyArtistTopTracksResponse>
+    suspend fun isFollowingArtist(id: String): Result<Boolean>
+    suspend fun followArtist(id: String): Result<Unit>
+    suspend fun unfollowArtist(id: String): Result<Unit>
     suspend fun getLibraryAlbums(): Result<SpotifyAlbumsResponse>
     suspend fun getLibraryArtists(): Result<SpotifyArtistsResponse>
+    suspend fun getLibraryTracks(): Result<SpotifyTracksResponse>
 }
 
 class SpotifyRepositoryImpl @Inject constructor(
     private val api: HomeControlApi
 ) : SpotifyRepository {
 
-    override suspend fun getPlayback(): Result<SpotifyPlayback> = runCatching {
-        val response = api.getSpotifyPlayback()
-        if (response.isSuccessful) {
-            response.body() ?: SpotifyPlayback()
-        } else {
-            throw Exception("API error: ${response.code()}")
+    override suspend fun getPlayback(): Result<SpotifyPlayback> {
+        return try {
+            val response = api.getSpotifyPlayback()
+            if (response.isSuccessful) {
+                Result.success(response.body() ?: SpotifyPlayback())
+            } else {
+                Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: kotlinx.serialization.SerializationException) {
+            // API returns literal "null" when nothing is playing
+            Result.success(SpotifyPlayback())
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -200,7 +219,8 @@ class SpotifyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun play(request: SpotifyPlayRequest?): Result<Unit> = runCatching {
-        val response = api.spotifyPlay(request)
+        // Always send a request object (empty for resume, with uri for specific track)
+        val response = api.spotifyPlay(request ?: SpotifyPlayRequest())
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 
@@ -271,6 +291,33 @@ class SpotifyRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getRecentlyPlayed(): Result<SpotifyRecentResponse> = runCatching {
+        val response = api.getSpotifyRecentlyPlayed()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyRecentResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getTopArtists(): Result<SpotifyArtistsResponse> = runCatching {
+        val response = api.getSpotifyTopArtists()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyArtistsResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getTopTracks(): Result<SpotifyTopTracksResponse> = runCatching {
+        val response = api.getSpotifyTopTracks()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyTopTracksResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
     override suspend fun getAlbum(id: String): Result<SpotifyAlbum> = runCatching {
         val response = api.getSpotifyAlbum(id)
         if (response.isSuccessful) {
@@ -280,6 +327,25 @@ class SpotifyRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun isAlbumSaved(id: String): Result<Boolean> = runCatching {
+        val response = api.isSpotifyAlbumSaved(id)
+        if (response.isSuccessful) {
+            response.body()?.saved ?: false
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun saveAlbum(id: String): Result<Unit> = runCatching {
+        val response = api.saveSpotifyAlbum(id)
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun removeAlbum(id: String): Result<Unit> = runCatching {
+        val response = api.removeSpotifyAlbum(id)
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
     override suspend fun getArtist(id: String): Result<SpotifyArtist> = runCatching {
         val response = api.getSpotifyArtist(id)
         if (response.isSuccessful) {
@@ -287,6 +353,43 @@ class SpotifyRepositoryImpl @Inject constructor(
         } else {
             throw Exception("API error: ${response.code()}")
         }
+    }
+
+    override suspend fun getArtistAlbums(id: String): Result<SpotifyAlbumsResponse> = runCatching {
+        val response = api.getSpotifyArtistAlbums(id)
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyAlbumsResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getArtistTopTracks(id: String): Result<SpotifyArtistTopTracksResponse> = runCatching {
+        val response = api.getSpotifyArtistTopTracks(id)
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyArtistTopTracksResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun isFollowingArtist(id: String): Result<Boolean> = runCatching {
+        val response = api.isFollowingArtist(id)
+        if (response.isSuccessful) {
+            response.body()?.following ?: false
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun followArtist(id: String): Result<Unit> = runCatching {
+        val response = api.followArtist(id)
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun unfollowArtist(id: String): Result<Unit> = runCatching {
+        val response = api.unfollowArtist(id)
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 
     override suspend fun getLibraryAlbums(): Result<SpotifyAlbumsResponse> = runCatching {
@@ -302,6 +405,15 @@ class SpotifyRepositoryImpl @Inject constructor(
         val response = api.getSpotifyLibraryArtists()
         if (response.isSuccessful) {
             response.body() ?: SpotifyArtistsResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getLibraryTracks(): Result<SpotifyTracksResponse> = runCatching {
+        val response = api.getSpotifyLibraryTracks()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyTracksResponse()
         } else {
             throw Exception("API error: ${response.code()}")
         }

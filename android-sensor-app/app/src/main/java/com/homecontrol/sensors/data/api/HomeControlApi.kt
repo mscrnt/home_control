@@ -106,7 +106,7 @@ interface HomeControlApi {
     suspend fun getSpotifyStatus(): Response<SpotifyStatus>
 
     @GET("api/spotify/playback")
-    suspend fun getSpotifyPlayback(): Response<SpotifyPlayback>
+    suspend fun getSpotifyPlayback(): Response<SpotifyPlayback?>
 
     @GET("api/spotify/devices")
     suspend fun getSpotifyDevices(): Response<List<SpotifyDevice>>
@@ -154,7 +154,7 @@ interface HomeControlApi {
     suspend fun getSpotifyTopArtists(): Response<SpotifyArtistsResponse>
 
     @GET("api/spotify/top/tracks")
-    suspend fun getSpotifyTopTracks(): Response<SpotifyTracksResponse>
+    suspend fun getSpotifyTopTracks(): Response<SpotifyTopTracksResponse>
 
     @GET("api/spotify/album/{id}")
     suspend fun getSpotifyAlbum(@Path("id") id: String): Response<SpotifyAlbum>
@@ -175,7 +175,7 @@ interface HomeControlApi {
     suspend fun getSpotifyArtistAlbums(@Path("id") id: String): Response<SpotifyAlbumsResponse>
 
     @GET("api/spotify/artist/{id}/top-tracks")
-    suspend fun getSpotifyArtistTopTracks(@Path("id") id: String): Response<SpotifyTracksResponse>
+    suspend fun getSpotifyArtistTopTracks(@Path("id") id: String): Response<SpotifyArtistTopTracksResponse>
 
     @GET("api/spotify/artist/{id}/following")
     suspend fun isFollowingArtist(@Path("id") id: String): Response<FollowingResponse>
