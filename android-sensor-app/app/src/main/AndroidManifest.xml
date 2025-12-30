@@ -49,14 +49,6 @@
             android:exported="false" />
 
         <activity
-            android:name=".KioskActivity"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:theme="@style/Theme.AppCompat.NoActionBar"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
-
-        <activity
             android:name=".NativeActivity"
             android:exported="true"
             android:launchMode="singleTask"

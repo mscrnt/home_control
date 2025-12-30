@@ -188,32 +188,20 @@ class CommandServer(
     }
 
     private fun handleReload(): Response {
-        Log.d(TAG, "WebView reload requested")
-
-        // Send broadcast to KioskActivity to reload WebView
-        val intent = Intent(KioskActivity.ACTION_RELOAD)
-        intent.setPackage(context.packageName)
-        context.sendBroadcast(intent)
-
+        Log.d(TAG, "WebView reload requested - not supported in native mode")
         return newFixedLengthResponse(
             Response.Status.OK,
             "application/json",
-            """{"status": "reload_triggered"}"""
+            """{"status": "not_supported", "message": "WebView reload not available in native mode"}"""
         )
     }
 
     private fun handleExitKiosk(): Response {
-        Log.d(TAG, "Exit kiosk mode requested")
-
-        // Send broadcast to KioskActivity to exit kiosk mode
-        val intent = Intent(KioskActivity.ACTION_EXIT_KIOSK)
-        intent.setPackage(context.packageName)
-        context.sendBroadcast(intent)
-
+        Log.d(TAG, "Exit kiosk mode requested - not supported in native mode")
         return newFixedLengthResponse(
             Response.Status.OK,
             "application/json",
-            """{"status": "exit_kiosk_triggered"}"""
+            """{"status": "not_supported", "message": "Kiosk mode not available in native mode"}"""
         )
     }
 
@@ -519,9 +507,9 @@ class CommandServer(
             }
             Log.d(TAG, "Screen woken via wake lock")
 
-            // Also send proximity broadcast to dismiss screensaver in WebView
-            val intent = Intent(KioskActivity.ACTION_PROXIMITY).apply {
-                putExtra(KioskActivity.EXTRA_NEAR, true)
+            // Also send proximity broadcast to dismiss screensaver
+            val intent = Intent(SensorService.ACTION_PROXIMITY).apply {
+                putExtra(SensorService.EXTRA_NEAR, true)
                 setPackage(context.packageName)
             }
             context.sendBroadcast(intent)

@@ -124,6 +124,10 @@ class SensorService : Service(), SensorEventListener {
         // Bridge actions from native UI
         const val ACTION_RESET_ACTIVITY = "com.homecontrol.sensors.RESET_ACTIVITY"
         const val ACTION_WAKE_SCREEN = "com.homecontrol.sensors.WAKE_SCREEN"
+
+        // Broadcast actions for proximity events
+        const val ACTION_PROXIMITY = "com.homecontrol.sensors.PROXIMITY_CHANGED"
+        const val EXTRA_NEAR = "near"
     }
 
     override fun onCreate() {
@@ -169,8 +173,9 @@ class SensorService : Service(), SensorEventListener {
             Log.d(TAG, "Light sensor registered")
         }
 
-        // Start idle check loop, heartbeat, and periodic ADB check
-        startIdleCheck()
+        // Start heartbeat and periodic ADB check
+        // Note: Idle check disabled - NativeActivity handles its own screensaver
+        // startIdleCheck()
         startHeartbeat()
         startAdbCheck()
 
@@ -969,9 +974,9 @@ class SensorService : Service(), SensorEventListener {
     }
 
     private fun reportProximity(near: Boolean) {
-        // Broadcast locally to KioskActivity for immediate screensaver dismissal
-        val intent = android.content.Intent(KioskActivity.ACTION_PROXIMITY).apply {
-            putExtra(KioskActivity.EXTRA_NEAR, near)
+        // Broadcast locally for immediate screensaver dismissal
+        val intent = android.content.Intent(ACTION_PROXIMITY).apply {
+            putExtra(EXTRA_NEAR, near)
             setPackage(packageName)
         }
         sendBroadcast(intent)

@@ -1,8 +1,11 @@
 package com.homecontrol.sensors
 
 import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +14,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -104,6 +108,16 @@ object TouchCallbackHolder {
     var callback: TouchCallback? = null
 }
 
+// Callback for proximity events from SensorService
+interface ProximityCallback {
+    fun onProximityChanged(isNear: Boolean)
+}
+
+// Global holder for proximity callback
+object ProximityCallbackHolder {
+    var callback: ProximityCallback? = null
+}
+
 @AndroidEntryPoint
 class NativeActivity : ComponentActivity() {
 
@@ -114,6 +128,20 @@ class NativeActivity : ComponentActivity() {
     lateinit var spotifyRepository: SpotifyRepository
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // Broadcast receiver for proximity events from SensorService
+    private val proximityReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == SensorService.ACTION_PROXIMITY) {
+                val isNear = intent.getBooleanExtra(SensorService.EXTRA_NEAR, false)
+                Log.d(TAG, "Proximity broadcast received: near=$isNear")
+                if (isNear) {
+                    // Dismiss screensaver via callback
+                    ProximityCallbackHolder.callback?.onProximityChanged(isNear)
+                }
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "NativeActivity"
@@ -136,6 +164,18 @@ class NativeActivity : ComponentActivity() {
         // Start managed apps manager (auto-installs Spotify, Home Assistant, etc.)
         ManagedAppsManager.start(this)
 
+        // Start the sensor service for proximity/light detection
+        startSensorService()
+
+        // Register broadcast receiver for proximity events
+        val proximityFilter = IntentFilter(SensorService.ACTION_PROXIMITY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(proximityReceiver, proximityFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(proximityReceiver, proximityFilter)
+        }
+        Log.d(TAG, "Proximity receiver registered")
+
         // Launch Spotify quickly in background (only once per app session)
         if (!spotifyLaunched) {
             launchSpotifyQuickly()
@@ -155,9 +195,30 @@ class NativeActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> systemDarkTheme
             }
 
+            // Apply keep screen on setting
+            LaunchedEffect(settings.keepScreenOn) {
+                if (settings.keepScreenOn) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    Log.d(TAG, "Keep screen on: enabled")
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    Log.d(TAG, "Keep screen on: disabled")
+                }
+            }
+
             HomeControlTheme(darkTheme = darkTheme) {
                 MainContent(idleTimeoutSeconds = settings.idleTimeout)
             }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(proximityReceiver)
+            Log.d(TAG, "Proximity receiver unregistered")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister proximity receiver: ${e.message}")
         }
     }
 
@@ -167,6 +228,16 @@ class NativeActivity : ComponentActivity() {
             TouchCallbackHolder.callback?.onUserInteraction()
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    private fun startSensorService() {
+        val intent = Intent(this, SensorService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        Log.d(TAG, "SensorService started")
     }
 
     @Suppress("DEPRECATION")
@@ -343,7 +414,7 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
 
     // Register touch callback to reset idle timer
     DisposableEffect(Unit) {
-        val callback = object : TouchCallback {
+        val touchCallback = object : TouchCallback {
             override fun onUserInteraction() {
                 lastInteractionTime = System.currentTimeMillis()
                 if (showScreensaver) {
@@ -351,9 +422,24 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
                 }
             }
         }
-        TouchCallbackHolder.callback = callback
+        TouchCallbackHolder.callback = touchCallback
+
+        // Register proximity callback to dismiss screensaver when someone approaches
+        val proximityCallback = object : ProximityCallback {
+            override fun onProximityChanged(isNear: Boolean) {
+                if (isNear) {
+                    lastInteractionTime = System.currentTimeMillis()
+                    if (showScreensaver) {
+                        showScreensaver = false
+                    }
+                }
+            }
+        }
+        ProximityCallbackHolder.callback = proximityCallback
+
         onDispose {
             TouchCallbackHolder.callback = null
+            ProximityCallbackHolder.callback = null
         }
     }
 

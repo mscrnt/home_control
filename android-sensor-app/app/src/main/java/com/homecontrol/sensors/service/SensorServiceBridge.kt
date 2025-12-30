@@ -7,7 +7,6 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
-import com.homecontrol.sensors.KioskActivity
 import com.homecontrol.sensors.SensorService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,8 +57,8 @@ class SensorServiceBridgeImpl @Inject constructor(
 
     private val proximityReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == KioskActivity.ACTION_PROXIMITY) {
-                val near = intent.getBooleanExtra(KioskActivity.EXTRA_NEAR, false)
+            if (intent?.action == SensorService.ACTION_PROXIMITY) {
+                val near = intent.getBooleanExtra(SensorService.EXTRA_NEAR, false)
                 Log.d(TAG, "Proximity broadcast received: near=$near")
                 _proximityNear.value = near
             }
@@ -70,7 +69,7 @@ class SensorServiceBridgeImpl @Inject constructor(
         if (isStarted) return
         isStarted = true
 
-        val filter = IntentFilter(KioskActivity.ACTION_PROXIMITY)
+        val filter = IntentFilter(SensorService.ACTION_PROXIMITY)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(proximityReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {

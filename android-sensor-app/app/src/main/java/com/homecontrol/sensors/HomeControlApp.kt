@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.homecontrol.sensors.data.api.WebSocketClient
 import com.homecontrol.sensors.data.sync.PhotoSyncManager
 import com.homecontrol.sensors.data.sync.PhotoSyncWorker
 import dagger.hilt.android.HiltAndroidApp
@@ -22,6 +23,9 @@ class HomeControlApp : Application(), Configuration.Provider {
     @Inject
     lateinit var photoSyncManager: PhotoSyncManager
 
+    @Inject
+    lateinit var webSocketClient: WebSocketClient
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -34,6 +38,10 @@ class HomeControlApp : Application(), Configuration.Provider {
         super.onCreate()
         // App initialization happens here
         // Hilt will handle dependency injection setup automatically
+
+        // Connect to WebSocket for real-time events (doorbell, etc.)
+        webSocketClient.connect()
+        Log.d("HomeControlApp", "WebSocket client connecting...")
 
         // Schedule hourly photo sync
         PhotoSyncWorker.scheduleHourlySync(this)

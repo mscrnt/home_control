@@ -61,20 +61,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateKioskButtonState() {
-        if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-            kioskButton.isEnabled = true
-            kioskButton.text = "Launch Kiosk Mode"
-        } else {
-            kioskButton.isEnabled = false
-            kioskButton.text = "Kiosk (needs device owner)"
-        }
+        // Native app is always available
+        kioskButton.isEnabled = true
+        kioskButton.text = "Launch App"
     }
 
     private fun launchKiosk() {
         // Save settings first
         savePreferences()
-        // Launch kiosk activity
-        startActivity(Intent(this, KioskActivity::class.java))
+        // Launch native activity
+        startActivity(Intent(this, NativeActivity::class.java))
         finish()
     }
 
