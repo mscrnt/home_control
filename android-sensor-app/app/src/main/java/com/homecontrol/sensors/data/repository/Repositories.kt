@@ -642,3 +642,47 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 }
+
+// ============ Drive Repository (Background Images & Screensaver) ============
+
+interface DriveRepository {
+    suspend fun getPhotos(): Result<List<DrivePhoto>>
+    suspend fun getRandomPhoto(): Result<DrivePhoto>
+    suspend fun getScreensaverConfig(): Result<ScreensaverConfig>
+    fun getPhotoUrl(id: String): String
+}
+
+class DriveRepositoryImpl @Inject constructor(
+    private val api: HomeControlApi,
+    @com.homecontrol.sensors.di.ServerUrl private val serverUrl: String
+) : DriveRepository {
+
+    override suspend fun getPhotos(): Result<List<DrivePhoto>> = runCatching {
+        val response = api.getDrivePhotos()
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getRandomPhoto(): Result<DrivePhoto> = runCatching {
+        val response = api.getRandomDrivePhoto()
+        if (response.isSuccessful) {
+            response.body() ?: throw Exception("Empty response")
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getScreensaverConfig(): Result<ScreensaverConfig> = runCatching {
+        val response = api.getScreensaverConfig()
+        if (response.isSuccessful) {
+            response.body() ?: ScreensaverConfig()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override fun getPhotoUrl(id: String): String = "${serverUrl}api/drive/photo/$id"
+}

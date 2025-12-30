@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Thunderstorm
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbCloudy
@@ -57,15 +57,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.homecontrol.sensors.data.model.Calendar
 import com.homecontrol.sensors.data.model.Weather
 import com.homecontrol.sensors.ui.components.LoadingIndicator
@@ -87,6 +90,20 @@ fun CalendarScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showWeatherModal by remember { mutableStateOf(false) }
 
+    // Current time state - respect app's 24-hour format setting
+    val timeFormatter = remember(uiState.use24HourFormat) {
+        DateTimeFormatter.ofPattern(if (uiState.use24HourFormat) "HH:mm" else "h:mm a")
+    }
+    var currentTime by remember { mutableStateOf(LocalTime.now().format(timeFormatter)) }
+
+    // Update time every second (re-run when format setting changes)
+    LaunchedEffect(uiState.use24HourFormat) {
+        while (true) {
+            currentTime = LocalTime.now().format(timeFormatter)
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     // Show errors
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -96,8 +113,28 @@ fun CalendarScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        // Background image from Google Drive
+        uiState.backgroundImageUrl?.let { imageUrl ->
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Background",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+
+        // Frosted glass overlay - semi-transparent for text readability while showing background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+                )
+        )
+
         Scaffold(
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            containerColor = Color.Transparent
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -108,6 +145,7 @@ fun CalendarScreen(
                 CalendarHeader(
                     viewMode = uiState.viewMode,
                     currentDate = uiState.currentDate,
+                    currentTime = currentTime,
                     weather = uiState.weather,
                     calendars = uiState.calendars,
                     onViewModeChange = { viewModel.setViewMode(it) },
@@ -305,6 +343,7 @@ private fun getWeatherIconColor(iconCode: String): Color {
 private fun CalendarHeader(
     viewMode: CalendarViewMode,
     currentDate: LocalDate,
+    currentTime: String,
     weather: com.homecontrol.sensors.data.model.Weather?,
     calendars: List<Calendar>,
     onViewModeChange: (CalendarViewMode) -> Unit,
@@ -329,56 +368,15 @@ private fun CalendarHeader(
         ),
         border = BorderStroke(1.dp, HomeControlColors.cardBorder())
     ) {
-        // Single compact row with all controls
-        Row(
+        // Use Box to layer center content for true centering
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
-            // Left: Smart Home button + View mode toggle
+            // Center: Navigation with date - truly centered in the viewport
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Smart Home button
-                IconButton(
-                    onClick = onSmartHomeClick,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SmartToy,
-                        contentDescription = "Smart Home",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                CalendarViewMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = viewMode == mode,
-                        onClick = { onViewModeChange(mode) },
-                        label = {
-                            Text(
-                                text = mode.name.lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    )
-                }
-
-                // Compact weather widget
-                if (weather != null) {
-                    CompactWeatherButton(
-                        weather = weather,
-                        onClick = onWeatherClick
-                    )
-                }
-            }
-
-            // Center: Navigation with date
-            Row(
+                modifier = Modifier.align(Alignment.Center),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -427,11 +425,63 @@ private fun CalendarHeader(
                 }
             }
 
-            // Right: Actions
+            // Left: Menu button + Weather + View mode toggle
             Row(
+                modifier = Modifier.align(Alignment.CenterStart),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Menu button (hamburger)
+                IconButton(
+                    onClick = onSmartHomeClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Menu",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Compact weather widget (before view mode chips)
+                if (weather != null) {
+                    CompactWeatherButton(
+                        weather = weather,
+                        onClick = onWeatherClick
+                    )
+                }
+
+                CalendarViewMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = viewMode == mode,
+                        onClick = { onViewModeChange(mode) },
+                        label = {
+                            Text(
+                                text = mode.name.lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    )
+                }
+            }
+
+            // Right: Current time + Actions
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Current time
+                Text(
+                    text = currentTime,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 // Calendars dropdown
                 if (calendars.isNotEmpty()) {
                     Box {

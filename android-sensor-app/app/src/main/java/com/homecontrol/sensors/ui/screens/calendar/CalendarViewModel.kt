@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homecontrol.sensors.data.model.*
 import com.homecontrol.sensors.data.repository.CalendarRepository
+import com.homecontrol.sensors.data.repository.DriveRepository
+import com.homecontrol.sensors.data.repository.SettingsRepository
 import com.homecontrol.sensors.data.repository.WeatherRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +33,8 @@ data class CalendarUiState(
     val calendars: List<Calendar> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val weather: Weather? = null,
+    val backgroundImageUrl: String? = null,
+    val use24HourFormat: Boolean = false,
     val isLoading: Boolean = true,
     val isTasksPanelOpen: Boolean = false,
     val error: String? = null,
@@ -45,7 +49,9 @@ data class CalendarUiState(
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
     private val calendarRepository: CalendarRepository,
-    private val weatherRepository: WeatherRepository
+    private val weatherRepository: WeatherRepository,
+    private val driveRepository: DriveRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalendarUiState())
@@ -55,17 +61,36 @@ class CalendarViewModel @Inject constructor(
 
     init {
         loadInitialData()
+        observeSettings()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                _uiState.update { it.copy(use24HourFormat = settings.use24HourFormat) }
+            }
+        }
     }
 
     private fun loadInitialData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            // Load calendars, events, tasks, and weather in parallel
+            // Load calendars, events, tasks, weather, and background in parallel
             launch { loadCalendars() }
             launch { loadEvents() }
             launch { loadTasks() }
             launch { loadWeather() }
+            launch { loadBackgroundImage() }
+        }
+    }
+
+    private suspend fun loadBackgroundImage() {
+        driveRepository.getRandomPhoto().onSuccess { photo ->
+            val imageUrl = driveRepository.getPhotoUrl(photo.id)
+            _uiState.update { it.copy(backgroundImageUrl = imageUrl) }
+        }.onFailure { e ->
+            android.util.Log.e("CalendarViewModel", "Failed to load background: ${e.message}")
         }
     }
 

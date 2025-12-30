@@ -57,6 +57,12 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindDriveRepository(
+        impl: DriveRepositoryImpl
+    ): DriveRepository
+
+    @Binds
+    @Singleton
     abstract fun bindSensorServiceBridge(
         impl: SensorServiceBridgeImpl
     ): SensorServiceBridge

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.ScreenshotMonitor
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Web
@@ -202,6 +203,24 @@ fun SettingsScreen(
                 Switch(
                     checked = uiState.settings.keepScreenOn,
                     onCheckedChange = { viewModel.setKeepScreenOn(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 24-Hour Time Format
+            SettingsRow(
+                title = "24-Hour Time",
+                subtitle = "Use 24-hour format (e.g., 14:30)",
+                icon = Icons.Default.Schedule
+            ) {
+                Switch(
+                    checked = uiState.settings.use24HourFormat,
+                    onCheckedChange = { viewModel.setUse24HourFormat(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = MaterialTheme.colorScheme.primary,
                         checkedTrackColor = MaterialTheme.colorScheme.primaryContainer

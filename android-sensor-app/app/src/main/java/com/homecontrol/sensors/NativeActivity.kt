@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -49,6 +50,8 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,19 +68,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.homecontrol.sensors.data.repository.AppSettings
 import com.homecontrol.sensors.data.repository.SettingsRepository
 import com.homecontrol.sensors.data.repository.ThemeMode
 import com.homecontrol.sensors.ui.components.MiniSpotifyPlayer
 import com.homecontrol.sensors.ui.screens.home.HomeScreen
 import com.homecontrol.sensors.ui.screens.hue.HueScreen
 import com.homecontrol.sensors.ui.screens.calendar.CalendarScreen
+import com.homecontrol.sensors.ui.screens.screensaver.ScreensaverScreen
 import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
 import com.homecontrol.sensors.ui.screens.spotify.SpotifyScreen
 import com.homecontrol.sensors.ui.theme.HomeControlColors
 import com.homecontrol.sensors.ui.theme.HomeControlTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// Callback interface for touch events
+interface TouchCallback {
+    fun onUserInteraction()
+}
+
+// Global holder for the callback
+object TouchCallbackHolder {
+    var callback: TouchCallback? = null
+}
 
 @AndroidEntryPoint
 class NativeActivity : ComponentActivity() {
@@ -106,7 +122,7 @@ class NativeActivity : ComponentActivity() {
         setContent {
             // Observe theme settings
             val settings by settingsRepository.settings.collectAsState(
-                initial = com.homecontrol.sensors.data.repository.AppSettings()
+                initial = AppSettings()
             )
             val systemDarkTheme = isSystemInDarkTheme()
 
@@ -118,9 +134,17 @@ class NativeActivity : ComponentActivity() {
             }
 
             HomeControlTheme(darkTheme = darkTheme) {
-                MainContent()
+                MainContent(idleTimeoutSeconds = settings.idleTimeout)
             }
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        // Reset idle timer on any touch
+        if (ev?.action == MotionEvent.ACTION_DOWN) {
+            TouchCallbackHolder.callback?.onUserInteraction()
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun launchSpotifyQuickly() {
@@ -206,12 +230,45 @@ val smartHomeNavItems = listOf(
 )
 
 @Composable
-fun MainContent() {
+fun MainContent(idleTimeoutSeconds: Int = 60) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     // Track which modal is currently open (null = none)
     var activeModal by remember { mutableStateOf<SmartHomeModal?>(null) }
+
+    // Screensaver state
+    var showScreensaver by remember { mutableStateOf(false) }
+    var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    // Register touch callback to reset idle timer
+    DisposableEffect(Unit) {
+        val callback = object : TouchCallback {
+            override fun onUserInteraction() {
+                lastInteractionTime = System.currentTimeMillis()
+                if (showScreensaver) {
+                    showScreensaver = false
+                }
+            }
+        }
+        TouchCallbackHolder.callback = callback
+        onDispose {
+            TouchCallbackHolder.callback = null
+        }
+    }
+
+    // Idle timer - check periodically if we should show screensaver
+    LaunchedEffect(idleTimeoutSeconds, lastInteractionTime) {
+        if (idleTimeoutSeconds > 0) {
+            while (true) {
+                delay(1000)
+                val elapsed = System.currentTimeMillis() - lastInteractionTime
+                if (elapsed >= idleTimeoutSeconds * 1000L && !showScreensaver) {
+                    showScreensaver = true
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Main content - Calendar with drawer
@@ -277,6 +334,21 @@ fun MainContent() {
                     null -> {}
                 }
             }
+        }
+
+        // Screensaver overlay
+        AnimatedVisibility(
+            visible = showScreensaver,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            ScreensaverScreen(
+                onDismiss = {
+                    showScreensaver = false
+                    lastInteractionTime = System.currentTimeMillis()
+                },
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }

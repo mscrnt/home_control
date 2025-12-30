@@ -26,7 +26,8 @@ data class AppSettings(
     val appMode: AppMode = AppMode.NATIVE,
     val idleTimeout: Int = 60, // seconds
     val keepScreenOn: Boolean = true,
-    val showNotifications: Boolean = true
+    val showNotifications: Boolean = true,
+    val use24HourFormat: Boolean = false
 )
 
 @Singleton
@@ -40,6 +41,7 @@ class SettingsRepository @Inject constructor(
         private val KEY_IDLE_TIMEOUT = intPreferencesKey("idle_timeout")
         private val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         private val KEY_SHOW_NOTIFICATIONS = booleanPreferencesKey("show_notifications")
+        private val KEY_USE_24_HOUR_FORMAT = booleanPreferencesKey("use_24_hour_format")
 
         // SharedPreferences keys (for compatibility with SensorService)
         private const val PREFS_KEY_SERVER_URL = "server_url"
@@ -53,7 +55,8 @@ class SettingsRepository @Inject constructor(
             appMode = AppMode.valueOf(preferences[KEY_APP_MODE] ?: AppMode.NATIVE.name),
             idleTimeout = preferences[KEY_IDLE_TIMEOUT] ?: 60,
             keepScreenOn = preferences[KEY_KEEP_SCREEN_ON] ?: true,
-            showNotifications = preferences[KEY_SHOW_NOTIFICATIONS] ?: true
+            showNotifications = preferences[KEY_SHOW_NOTIFICATIONS] ?: true,
+            use24HourFormat = preferences[KEY_USE_24_HOUR_FORMAT] ?: false
         )
     }
 
@@ -88,6 +91,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setShowNotifications(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_SHOW_NOTIFICATIONS] = enabled
+        }
+    }
+
+    suspend fun setUse24HourFormat(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_USE_24_HOUR_FORMAT] = enabled
         }
     }
 }

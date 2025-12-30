@@ -106,6 +106,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setUse24HourFormat(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setUse24HourFormat(enabled)
+        }
+    }
+
     fun dismissRestartRequired() {
         _uiState.update { it.copy(showRestartRequired = false) }
     }
