@@ -1,59 +1,68 @@
 package com.homecontrol.sensors.ui.screens.hue
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.homecontrol.sensors.data.model.HueLight
 import com.homecontrol.sensors.data.model.HueRoom
@@ -61,12 +70,16 @@ import com.homecontrol.sensors.data.model.HueScene
 import com.homecontrol.sensors.data.model.SyncBox
 import com.homecontrol.sensors.data.model.SyncBoxStatus
 import com.homecontrol.sensors.ui.components.ErrorState
-import com.homecontrol.sensors.ui.components.LightSlider
 import com.homecontrol.sensors.ui.components.LoadingIndicator
 import com.homecontrol.sensors.ui.theme.HomeControlColors
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Hue brand colors
+private val HueOrange = Color(0xFFffa726)
+private val HuePurple = Color(0xFFa855f7)
+private val SyncGreen = Color(0xFF2ecc71)
+private val SyncRed = Color(0xFFe74c3c)
+
 @Composable
 fun HueScreen(
     viewModel: HueViewModel = hiltViewModel(),
@@ -74,21 +87,6 @@ fun HueScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val pullToRefreshState = rememberPullToRefreshState()
-
-    // Handle pull to refresh
-    if (pullToRefreshState.isRefreshing) {
-        LaunchedEffect(true) {
-            viewModel.refresh()
-        }
-    }
-
-    // Update refresh state when loading completes
-    LaunchedEffect(uiState.isRefreshing) {
-        if (!uiState.isRefreshing) {
-            pullToRefreshState.endRefresh()
-        }
-    }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -109,74 +107,65 @@ fun HueScreen(
                 )
             }
             else -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(pullToRefreshState.nestedScrollConnection)
-                ) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                val rooms = uiState.rooms.filter { it.type == "Room" || it.type == "Zone" }
+                val hasEntertainment = uiState.syncBoxes.isNotEmpty()
+
+                // Calculate total tabs
+                val totalTabs = rooms.size + if (hasEntertainment) 1 else 0
+
+                // Ensure selectedTabIndex is valid
+                val selectedTabIndex = uiState.selectedTabIndex.coerceIn(0, maxOf(0, totalTabs - 1))
+
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Tab bar (fixed at top, outside pull-to-refresh)
+                    HueTabBar(
+                        rooms = rooms,
+                        hasEntertainment = hasEntertainment,
+                        selectedTabIndex = selectedTabIndex,
+                        onTabSelected = { viewModel.selectTab(it) }
+                    )
+
+                    // Content
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f)
                     ) {
-                        // Rooms
-                        items(
-                            items = uiState.rooms,
-                            key = { it.id }
-                        ) { room ->
-                            RoomCard(
+                        if (selectedTabIndex < rooms.size) {
+                            // Room content
+                            val room = rooms[selectedTabIndex]
+                            RoomContent(
                                 room = room,
-                                isExpanded = uiState.expandedRoomId == room.id,
-                                onToggle = { viewModel.toggleRoom(room.id) },
-                                onExpand = { viewModel.expandRoom(room.id) },
-                                onLightToggle = { lightId -> viewModel.toggleLight(lightId) },
-                                onLightBrightnessChange = { lightId, brightness ->
-                                    viewModel.setLightBrightness(lightId, brightness)
-                                },
+                                onToggleRoom = { viewModel.toggleRoom(room.id) },
                                 onRoomBrightnessChange = { brightness ->
                                     viewModel.setRoomBrightness(room.id, brightness)
                                 },
-                                onSceneActivate = { sceneId -> viewModel.activateScene(sceneId) }
+                                onSceneActivate = { sceneId -> viewModel.activateScene(sceneId) },
+                                onLightToggle = { lightId -> viewModel.toggleLight(lightId) },
+                                onLightBrightnessChange = { lightId, brightness ->
+                                    viewModel.setLightBrightness(lightId, brightness)
+                                }
+                            )
+                        } else if (hasEntertainment) {
+                            // Entertainment Areas content
+                            EntertainmentContent(
+                                syncBoxes = uiState.syncBoxes,
+                                syncBoxStatuses = uiState.syncBoxStatuses,
+                                onToggleSync = { index, sync ->
+                                    viewModel.toggleSyncBoxSync(index, sync)
+                                },
+                                onModeChange = { index, mode ->
+                                    viewModel.setSyncBoxMode(index, mode)
+                                },
+                                onBrightnessChange = { index, brightness ->
+                                    viewModel.setSyncBoxBrightness(index, brightness)
+                                },
+                                onInputChange = { index, input ->
+                                    viewModel.setSyncBoxInput(index, input)
+                                }
                             )
                         }
-
-                        // Sync Boxes
-                        if (uiState.syncBoxes.isNotEmpty()) {
-                            item {
-                                Text(
-                                    text = "Sync Boxes",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                )
-                            }
-                            items(
-                                items = uiState.syncBoxes,
-                                key = { it.index }
-                            ) { syncBox ->
-                                SyncBoxCard(
-                                    syncBox = syncBox,
-                                    status = uiState.syncBoxStatuses[syncBox.index],
-                                    onToggleSync = { sync ->
-                                        viewModel.toggleSyncBoxSync(syncBox.index, sync)
-                                    },
-                                    onModeChange = { mode ->
-                                        viewModel.setSyncBoxMode(syncBox.index, mode)
-                                    },
-                                    onBrightnessChange = { brightness ->
-                                        viewModel.setSyncBoxBrightness(syncBox.index, brightness)
-                                    },
-                                    onInputChange = { input ->
-                                        viewModel.setSyncBoxInput(syncBox.index, input)
-                                    }
-                                )
-                            }
-                        }
                     }
-
-                    PullToRefreshContainer(
-                        state = pullToRefreshState,
-                        modifier = Modifier.align(Alignment.TopCenter)
-                    )
                 }
             }
         }
@@ -189,256 +178,221 @@ fun HueScreen(
 }
 
 @Composable
-private fun RoomCard(
+private fun HueTabBar(
+    rooms: List<HueRoom>,
+    hasEntertainment: Boolean,
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .background(HomeControlColors.cardBackground())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Room tabs
+        rooms.forEachIndexed { index, room ->
+            HueTab(
+                icon = getRoomIcon(room.roomClass ?: room.type),
+                label = room.name,
+                isSelected = selectedTabIndex == index,
+                isEntertainment = false,
+                onClick = { onTabSelected(index) }
+            )
+        }
+
+        // Entertainment Areas tab
+        if (hasEntertainment) {
+            HueTab(
+                icon = "🎬",
+                label = "Entertainment Areas",
+                isSelected = selectedTabIndex == rooms.size,
+                isEntertainment = true,
+                onClick = { onTabSelected(rooms.size) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun HueTab(
+    icon: String,
+    label: String,
+    isSelected: Boolean,
+    isEntertainment: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = when {
+        isSelected && isEntertainment -> HuePurple
+        isSelected -> HueOrange
+        else -> Color.Transparent
+    }
+    val contentColor = when {
+        isSelected -> Color.White
+        isEntertainment -> HuePurple.copy(alpha = 0.8f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() },
+        color = backgroundColor,
+        shape = RoundedCornerShape(8.dp),
+        border = if (isSelected) null else BorderStroke(2.dp, Color.Transparent)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = icon,
+                fontSize = 20.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoomContent(
     room: HueRoom,
-    isExpanded: Boolean,
-    onToggle: () -> Unit,
-    onExpand: () -> Unit,
-    onLightToggle: (String) -> Unit,
-    onLightBrightnessChange: (String, Int) -> Unit,
+    onToggleRoom: () -> Unit,
     onRoomBrightnessChange: (Int) -> Unit,
     onSceneActivate: (String) -> Unit,
-    modifier: Modifier = Modifier
+    onLightToggle: (String) -> Unit,
+    onLightBrightnessChange: (String, Int) -> Unit
 ) {
     var brightnessValue by remember(room.brightness) { mutableFloatStateOf(room.brightness.toFloat()) }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = HomeControlColors.cardBackground()
-        ),
-        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        // Left column - Power button and brightness
         Column(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onExpand() }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Lightbulb,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = if (room.on) HomeControlColors.hueLightOn() else HomeControlColors.hueLightOff()
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = room.name,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "${room.lights.count { it.on }} of ${room.lights.size} lights on",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = room.on,
-                    onCheckedChange = { onToggle() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = HomeControlColors.hueLightOn(),
-                        checkedTrackColor = HomeControlColors.hueLightOn().copy(alpha = 0.5f)
-                    )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            // Power button
+            PowerButton(
+                isOn = room.on,
+                roomName = room.name,
+                onClick = onToggleRoom,
+                modifier = Modifier.weight(1f)
+            )
 
-            // Room brightness slider
-            if (room.on) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Room Brightness",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${brightnessValue.roundToInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Slider(
-                        value = brightnessValue,
-                        onValueChange = { brightnessValue = it },
-                        onValueChangeFinished = { onRoomBrightnessChange(brightnessValue.roundToInt()) },
-                        valueRange = 0f..100f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = HomeControlColors.hueLightOn(),
-                            activeTrackColor = HomeControlColors.hueLightOn()
-                        )
+            // Brightness slider
+            BrightnessControl(
+                label = "Brightness",
+                value = brightnessValue,
+                onValueChange = { brightnessValue = it },
+                onValueChangeFinished = { onRoomBrightnessChange(brightnessValue.roundToInt()) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Right column - Scenes and Lights
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Scenes button
+            room.scenes?.let { scenes ->
+                if (scenes.isNotEmpty()) {
+                    ScenesSection(
+                        sceneCount = scenes.size,
+                        scenes = scenes,
+                        onSceneActivate = onSceneActivate
                     )
                 }
             }
 
-            // Expanded content
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
-                ) {
-                    // Scenes
-                    room.scenes?.let { scenes ->
-                        if (scenes.isNotEmpty()) {
-                            Text(
-                                text = "Scenes",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(scenes) { scene ->
-                                    AssistChip(
-                                        onClick = { onSceneActivate(scene.id) },
-                                        label = { Text(scene.name) }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Individual lights
-                    Text(
-                        text = "Lights",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    room.lights.forEach { light ->
-                        LightRow(
-                            light = light,
-                            onToggle = { onLightToggle(light.id) },
-                            onBrightnessChange = { brightness ->
-                                onLightBrightnessChange(light.id, brightness)
-                            }
-                        )
-                    }
-                }
-            }
+            // Lights section
+            LightsSection(
+                lights = room.lights,
+                onLightToggle = onLightToggle,
+                onLightBrightnessChange = onLightBrightnessChange
+            )
         }
     }
 }
 
 @Composable
-private fun LightRow(
-    light: HueLight,
-    onToggle: () -> Unit,
-    onBrightnessChange: (Int) -> Unit,
+private fun PowerButton(
+    isOn: Boolean,
+    roomName: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var brightnessValue by remember(light.brightness) { mutableFloatStateOf(light.brightness.toFloat()) }
-
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = Modifier
+                .size(280.dp)
+                .clip(CircleShape)
+                .clickable { onClick() },
+            shape = CircleShape,
+            color = if (isOn) HueOrange else HomeControlColors.cardBackground(),
+            shadowElevation = if (isOn) 16.dp else 4.dp,
+            tonalElevation = if (isOn) 8.dp else 0.dp
         ) {
-            Text(
-                text = light.name,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-                color = if (light.reachable) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-            if (!light.reachable) {
-                Text(
-                    text = "Unreachable",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = HomeControlColors.stateUnavailable()
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            Switch(
-                checked = light.on,
-                onCheckedChange = { onToggle() },
-                enabled = light.reachable,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = HomeControlColors.hueLightOn(),
-                    checkedTrackColor = HomeControlColors.hueLightOn().copy(alpha = 0.5f)
-                )
-            )
-        }
-        if (light.on && light.reachable) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Slider(
-                    value = brightnessValue,
-                    onValueChange = { brightnessValue = it },
-                    onValueChangeFinished = { onBrightnessChange(brightnessValue.roundToInt()) },
-                    valueRange = 0f..100f,
-                    modifier = Modifier.weight(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = HomeControlColors.hueLightOn(),
-                        activeTrackColor = HomeControlColors.hueLightOn()
-                    )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "${brightnessValue.roundToInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(
+                    imageVector = Icons.Filled.PowerSettingsNew,
+                    contentDescription = "Power",
+                    modifier = Modifier.size(140.dp),
+                    tint = if (isOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = if (isOn) "Turn off $roomName" else "Turn on $roomName",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
-private fun SyncBoxCard(
-    syncBox: SyncBox,
-    status: SyncBoxStatus?,
-    onToggleSync: (Boolean) -> Unit,
-    onModeChange: (String) -> Unit,
-    onBrightnessChange: (Int) -> Unit,
-    onInputChange: (String) -> Unit,
+private fun BrightnessControl(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var brightnessValue by remember(status?.brightness ?: 0) {
-        mutableFloatStateOf((status?.brightness ?: 0).toFloat())
-    }
-
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = HomeControlColors.cardBackground()
-        ),
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
         border = BorderStroke(1.dp, HomeControlColors.cardBorder())
     ) {
         Column(
@@ -446,128 +400,662 @@ private fun SyncBoxCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Sync,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = if (status?.syncActive == true) {
-                        HomeControlColors.hueLightOn()
-                    } else {
-                        HomeControlColors.hueLightOff()
-                    }
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = syncBox.name,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = status?.let {
-                            if (it.syncActive) "Syncing - ${it.mode}" else "Off"
-                        } ?: "Loading...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFF0f3460),
+                                    HueOrange
+                                )
+                            )
+                        )
+                ) {
+                    Slider(
+                        value = value,
+                        onValueChange = onValueChange,
+                        onValueChangeFinished = onValueChangeFinished,
+                        valueRange = 0f..100f,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.Transparent,
+                            inactiveTrackColor = Color.Transparent
+                        )
                     )
                 }
-                Switch(
-                    checked = status?.syncActive == true,
-                    onCheckedChange = { onToggleSync(it) },
-                    enabled = status != null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = HomeControlColors.hueLightOn(),
-                        checkedTrackColor = HomeControlColors.hueLightOn().copy(alpha = 0.5f)
-                    )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = "${value.roundToInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+    }
+}
 
-            if (status != null && status.syncActive) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Mode selection
-                Text(
-                    text = "Mode",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ScenesSection(
+    sceneCount: Int,
+    scenes: List<HueScene>,
+    onSceneActivate: (String) -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
+        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("video", "music", "game").forEach { mode ->
-                        FilterChip(
-                            selected = status.mode == mode,
-                            onClick = { onModeChange(mode) },
-                            label = { Text(mode.replaceFirstChar { it.uppercase() }) }
-                        )
-                    }
+                    Text(text = "🎬", fontSize = 20.sp)
+                    Text(
+                        text = "Scenes",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Brightness
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = HueOrange
                 ) {
                     Text(
-                        text = "Brightness",
+                        text = "$sceneCount",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${brightnessValue.roundToInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
                 }
-                Slider(
-                    value = brightnessValue,
-                    onValueChange = { brightnessValue = it },
-                    onValueChangeFinished = { onBrightnessChange(brightnessValue.roundToInt()) },
-                    valueRange = 0f..100f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = HomeControlColors.hueLightOn(),
-                        activeTrackColor = HomeControlColors.hueLightOn()
-                    )
-                )
+            }
 
-                // Input selection
-                status.inputs?.let { inputs ->
-                    if (inputs.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                scenes.forEach { scene ->
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onSceneActivate(scene.id) },
+                        shape = RoundedCornerShape(8.dp),
+                        color = HomeControlColors.cardBackground(),
+                        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+                    ) {
                         Text(
-                            text = "Input",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = scene.name,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(inputs) { input ->
-                                FilterChip(
-                                    selected = status.input == input.id,
-                                    onClick = { onInputChange(input.id) },
-                                    label = { Text(input.name) },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Filled.Tv,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                )
-                            }
-                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LightsSection(
+    lights: List<HueLight>,
+    onLightToggle: (String) -> Unit,
+    onLightBrightnessChange: (String, Int) -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
+        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "LIGHTS",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 150.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.height(300.dp)
+            ) {
+                items(lights) { light ->
+                    LightCard(
+                        light = light,
+                        onClick = { onLightToggle(light.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LightCard(
+    light: HueLight,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (light.on) {
+        HueOrange.copy(alpha = 0.15f)
+    } else {
+        HomeControlColors.cardBackground()
+    }
+    val borderColor = if (light.on) {
+        HueOrange.copy(alpha = 0.3f)
+    } else {
+        Color.Transparent
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = backgroundColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "💡",
+                fontSize = 32.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = light.name,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (light.on) "${light.brightness}%" else "Off",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// ===== Entertainment Areas Content =====
+
+@Composable
+private fun EntertainmentContent(
+    syncBoxes: List<SyncBox>,
+    syncBoxStatuses: Map<Int, SyncBoxStatus>,
+    onToggleSync: (Int, Boolean) -> Unit,
+    onModeChange: (Int, String) -> Unit,
+    onBrightnessChange: (Int, Int) -> Unit,
+    onInputChange: (Int, String) -> Unit
+) {
+    var selectedSyncBoxIndex by remember { mutableIntStateOf(0) }
+    val selectedIndex = selectedSyncBoxIndex.coerceIn(0, maxOf(0, syncBoxes.size - 1))
+
+    if (syncBoxes.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No Sync Boxes configured",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    val currentBox = syncBoxes.getOrNull(selectedIndex) ?: return
+    val currentStatus = syncBoxStatuses[currentBox.index]
+    val isSyncing = currentStatus?.syncActive == true
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Sync Box Header with selector and toggle
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
+            border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Sync box selector
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        syncBoxes.forEachIndexed { index, box ->
+                            val boxStatus = syncBoxStatuses[box.index]
+                            val boxSyncing = boxStatus?.syncActive == true
+
+                            SyncBoxSelector(
+                                name = box.name,
+                                isSelected = index == selectedIndex,
+                                isSyncing = boxSyncing,
+                                onClick = { selectedSyncBoxIndex = index }
+                            )
+                        }
+                    }
+
+                    // Start/Stop Sync button
+                    Button(
+                        onClick = { onToggleSync(currentBox.index, !isSyncing) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSyncing) SyncRed else SyncGreen
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isSyncing) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isSyncing) "Stop Sync" else "Start Sync",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
+        // Split layout for entertainment area and controls
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Left column - Entertainment Areas
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                EntertainmentAreaGrid(
+                    status = currentStatus,
+                    onAreaSelect = { /* TODO: Add area selection */ }
+                )
+            }
+
+            // Right column - HDMI Input and Sync Mode
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // HDMI Input
+                HdmiInputGrid(
+                    status = currentStatus,
+                    onInputSelect = { onInputChange(currentBox.index, it) }
+                )
+
+                // Sync Mode
+                SyncModeGrid(
+                    status = currentStatus,
+                    onModeSelect = { onModeChange(currentBox.index, it) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncBoxSelector(
+    name: String,
+    isSelected: Boolean,
+    isSyncing: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = when {
+        isSyncing -> HuePurple
+        isSelected -> HueOrange
+        else -> Color.Transparent
+    }
+
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) HomeControlColors.cardBackground() else Color.Transparent,
+        border = BorderStroke(3.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (isSyncing) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = HuePurple.copy(alpha = 0.2f)
+                ) {
+                    Text(
+                        text = "Syncing",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HuePurple
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntertainmentAreaGrid(
+    status: SyncBoxStatus?,
+    onAreaSelect: (String) -> Unit
+) {
+    val groups = status?.hue?.groups ?: emptyMap()
+    val currentGroupId = status?.execution?.hueTarget ?: ""
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
+        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "ENTERTAINMENT AREA",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.height(200.dp)
+            ) {
+                items(groups.entries.toList()) { (id, group) ->
+                    SyncBoxTile(
+                        icon = "🎬",
+                        name = group.name,
+                        info = "${group.numLights} lights",
+                        isSelected = id == currentGroupId,
+                        onClick = { onAreaSelect(id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HdmiInputGrid(
+    status: SyncBoxStatus?,
+    onInputSelect: (String) -> Unit
+) {
+    val currentInput = status?.execution?.hdmiSource ?: "input1"
+    val inputs = status?.inputs ?: listOf(
+        com.homecontrol.sensors.data.model.SyncBoxInput("input1", "HDMI 1", ""),
+        com.homecontrol.sensors.data.model.SyncBoxInput("input2", "HDMI 2", ""),
+        com.homecontrol.sensors.data.model.SyncBoxInput("input3", "HDMI 3", ""),
+        com.homecontrol.sensors.data.model.SyncBoxInput("input4", "HDMI 4", "")
+    )
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
+        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "HDMI INPUT",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.height(180.dp)
+            ) {
+                items(inputs) { input ->
+                    SyncBoxTile(
+                        icon = "📺",
+                        name = input.name,
+                        info = input.id.replace("input", "HDMI "),
+                        isSelected = input.id == currentInput,
+                        onClick = { onInputSelect(input.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncModeGrid(
+    status: SyncBoxStatus?,
+    onModeSelect: (String) -> Unit
+) {
+    val currentMode = status?.execution?.mode ?: "video"
+    val modes = listOf(
+        Triple("video", "Video", Icons.Filled.Movie),
+        Triple("music", "Music", Icons.Filled.MusicNote),
+        Triple("game", "Game", Icons.Filled.SportsEsports)
+    )
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeControlColors.cardBackground()),
+        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "SYNC MODE",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                modes.forEach { (mode, label, icon) ->
+                    SyncModeTile(
+                        icon = icon,
+                        label = label,
+                        isSelected = mode == currentMode,
+                        onClick = { onModeSelect(mode) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncBoxTile(
+    icon: String,
+    name: String,
+    info: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (isSelected) {
+        HuePurple.copy(alpha = 0.2f)
+    } else {
+        HomeControlColors.cardBackground()
+    }
+    val borderColor = if (isSelected) HuePurple else Color.Transparent
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = backgroundColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = icon, fontSize = 28.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = info,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SyncModeTile(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (isSelected) {
+        HuePurple.copy(alpha = 0.2f)
+    } else {
+        HomeControlColors.cardBackground()
+    }
+    val borderColor = if (isSelected) HuePurple else Color.Transparent
+
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = backgroundColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(32.dp),
+                tint = if (isSelected) HuePurple else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+// Helper function to get room icon based on room class
+private fun getRoomIcon(roomClass: String?): String {
+    return when (roomClass) {
+        "Living room" -> "🛋️"
+        "Bedroom" -> "🛏️"
+        "Office" -> "💻"
+        "Kitchen" -> "🍳"
+        "Bathroom" -> "🚿"
+        "Hallway" -> "🚪"
+        "Garage" -> "🚗"
+        "Balcony" -> "🌅"
+        "TV" -> "📺"
+        "Entertainment" -> "🎬"
+        "Other" -> "💡"
+        "Room" -> "🏠"
+        "Zone" -> "📍"
+        else -> "💡"
     }
 }

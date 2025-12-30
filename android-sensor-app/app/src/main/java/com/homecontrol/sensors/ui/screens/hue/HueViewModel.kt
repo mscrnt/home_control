@@ -149,6 +149,10 @@ class HueViewModel @Inject constructor(
         }
     }
 
+    fun selectTab(index: Int) {
+        _uiState.update { it.copy(selectedTabIndex = index) }
+    }
+
     // Sync Box controls
     fun toggleSyncBoxSync(index: Int, sync: Boolean) {
         viewModelScope.launch {

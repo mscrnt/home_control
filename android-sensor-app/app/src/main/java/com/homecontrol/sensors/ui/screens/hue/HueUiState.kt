@@ -11,5 +11,6 @@ data class HueUiState(
     val rooms: List<HueRoom> = emptyList(),
     val expandedRoomId: String? = null,
     val syncBoxes: List<SyncBox> = emptyList(),
-    val syncBoxStatuses: Map<Int, SyncBoxStatus> = emptyMap()
+    val syncBoxStatuses: Map<Int, SyncBoxStatus> = emptyMap(),
+    val selectedTabIndex: Int = 0
 )
