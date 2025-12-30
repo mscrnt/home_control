@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -80,15 +81,6 @@ fun ScreensaverScreen(
                 )
         )
 
-        // Clock - bottom right
-        ClockOverlay(
-            time = uiState.currentTime,
-            date = uiState.currentDate,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        )
-
         // Weather - top right
         uiState.weather?.let { weather ->
             WeatherOverlay(
@@ -102,19 +94,35 @@ fun ScreensaverScreen(
             )
         }
 
-        // Spotify player - bottom
-        uiState.playback?.let { playback ->
-            if (playback.item != null) {
-                SpotifyOverlay(
-                    playback = playback,
-                    onTogglePlayPause = viewModel::togglePlayPause,
-                    onNext = viewModel::next,
-                    onPrevious = viewModel::previous,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(32.dp)
-                )
-            }
+        // Bottom area - Clock on right, Spotify player on left
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Spotify player - bottom left
+            uiState.playback?.let { playback ->
+                if (playback.item != null) {
+                    SpotifyOverlay(
+                        playback = playback,
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onNext = viewModel::next,
+                        onPrevious = viewModel::previous,
+                        modifier = Modifier.widthIn(max = 400.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
+                }
+            } ?: Spacer(modifier = Modifier.width(1.dp))
+
+            // Clock - bottom right
+            ClockOverlay(
+                time = uiState.currentTime,
+                date = uiState.currentDate
+            )
         }
     }
 }
@@ -262,6 +270,10 @@ private fun SpotifyOverlay(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { /* Consume clicks to prevent dismissing screensaver */ }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)

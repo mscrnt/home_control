@@ -1,5 +1,6 @@
 package com.homecontrol.sensors.ui.screens.screensaver
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homecontrol.sensors.data.model.DrivePhoto
@@ -21,10 +22,13 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+private const val TAG = "ScreensaverViewModel"
+
 data class ScreensaverUiState(
     val currentPhotoUrl: String? = null,
     val nextPhotoUrl: String? = null,
     val photos: List<DrivePhoto> = emptyList(),
+    val photoIds: List<String> = emptyList(),  // For cached photos fallback
     val currentPhotoIndex: Int = 0,
     val weather: Weather? = null,
     val playback: SpotifyPlayback? = null,
@@ -32,7 +36,8 @@ data class ScreensaverUiState(
     val currentTime: String = "",
     val currentDate: String = "",
     val isTransitioning: Boolean = false,
-    val serverUrl: String = ""
+    val serverUrl: String = "",
+    val usingCachedPhotos: Boolean = false
 )
 
 @HiltViewModel
@@ -67,21 +72,50 @@ class ScreensaverViewModel @Inject constructor(
                 _uiState.update { it.copy(config = config) }
             }
 
-            // Load photos
-            driveRepository.getPhotos().onSuccess { photos ->
-                if (photos.isNotEmpty()) {
-                    _uiState.update {
-                        it.copy(
-                            photos = photos,
-                            currentPhotoUrl = driveRepository.getPhotoUrl(photos[0].id)
-                        )
+            // Try to load photos from server, fall back to cached photos
+            driveRepository.getPhotos()
+                .onSuccess { photos ->
+                    if (photos.isNotEmpty()) {
+                        Log.d(TAG, "Loaded ${photos.size} photos from server")
+                        _uiState.update {
+                            it.copy(
+                                photos = photos,
+                                photoIds = photos.map { p -> p.id },
+                                currentPhotoUrl = driveRepository.getPhotoUrl(photos[0].id),
+                                usingCachedPhotos = false
+                            )
+                        }
+                        startSlideshow()
+                    } else {
+                        // No photos from server, try cached
+                        loadCachedPhotos()
                     }
-                    startSlideshow()
                 }
-            }
+                .onFailure { error ->
+                    Log.w(TAG, "Failed to load photos from server: ${error.message}")
+                    // Fall back to cached photos
+                    loadCachedPhotos()
+                }
 
             // Load weather
             loadWeather()
+        }
+    }
+
+    private fun loadCachedPhotos() {
+        val cachedIds = driveRepository.getCachedPhotoIds()
+        if (cachedIds.isNotEmpty()) {
+            Log.d(TAG, "Using ${cachedIds.size} cached photos")
+            _uiState.update {
+                it.copy(
+                    photoIds = cachedIds,
+                    currentPhotoUrl = driveRepository.getPhotoUrl(cachedIds[0]),
+                    usingCachedPhotos = true
+                )
+            }
+            startSlideshow()
+        } else {
+            Log.w(TAG, "No cached photos available")
         }
     }
 
@@ -115,10 +149,11 @@ class ScreensaverViewModel @Inject constructor(
             while (true) {
                 delay(intervalMs)
 
-                val photos = _uiState.value.photos
-                if (photos.isNotEmpty()) {
-                    val nextIndex = (_uiState.value.currentPhotoIndex + 1) % photos.size
-                    val nextPhotoUrl = driveRepository.getPhotoUrl(photos[nextIndex].id)
+                // Use photoIds which works for both server photos and cached photos
+                val photoIds = _uiState.value.photoIds
+                if (photoIds.isNotEmpty()) {
+                    val nextIndex = (_uiState.value.currentPhotoIndex + 1) % photoIds.size
+                    val nextPhotoUrl = driveRepository.getPhotoUrl(photoIds[nextIndex])
 
                     // Start transition
                     _uiState.update {

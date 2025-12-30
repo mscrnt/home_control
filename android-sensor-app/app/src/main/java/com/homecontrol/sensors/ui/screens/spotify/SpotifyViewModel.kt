@@ -53,9 +53,7 @@ class SpotifyViewModel @Inject constructor(
             .onSuccess { playback ->
                 _uiState.update { it.copy(playback = playback) }
             }
-            .onFailure { error ->
-                android.util.Log.e("SpotifyViewModel", "Failed to load playback: ${error.message}")
-            }
+            // Note: We don't log failures here to avoid spam from 1-second polling
     }
 
     private suspend fun loadDevices() {

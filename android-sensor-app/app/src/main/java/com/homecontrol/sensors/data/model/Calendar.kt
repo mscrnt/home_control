@@ -97,19 +97,19 @@ data class ColorPair(
     val foreground: String
 )
 
-// Request models
+// Request models - matches server's CreateEventRequest structure
 @Serializable
 data class CalendarEventRequest(
     val calendarId: String,
     val title: String,
     val description: String? = null,
     val location: String? = null,
-    val start: String,  // ISO date string
-    val end: String,
-    val allDay: Boolean = false,
-    val colorId: String? = null,
-    val recurrence: List<String>? = null,
-    val visibility: String? = null
+    val date: String,          // YYYY-MM-DD (start date, required)
+    val time: String? = null,  // HH:MM (optional, empty = all day)
+    val endDate: String? = null,  // YYYY-MM-DD (optional)
+    val endTime: String? = null,  // HH:MM (optional)
+    val type: String = "event",   // "event" or "task"
+    val repeat: String? = null
 )
 
 // Tasks models

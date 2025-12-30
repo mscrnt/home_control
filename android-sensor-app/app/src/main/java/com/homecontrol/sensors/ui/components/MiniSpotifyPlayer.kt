@@ -1,7 +1,9 @@
 package com.homecontrol.sensors.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -112,7 +114,8 @@ fun MiniSpotifyPlayer(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(HomeControlColors.cardBorder())
+            .background(HomeControlColors.cardBackgroundSolid())
+            .border(1.dp, HomeControlColors.cardBorder(), RoundedCornerShape(12.dp))
             .padding(12.dp)
     ) {
         // Header with Spotify logo
@@ -127,7 +130,7 @@ fun MiniSpotifyPlayer(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Now Playing",
+                text = if (track != null) "Now Playing" else "Spotify",
                 style = MaterialTheme.typography.labelMedium,
                 color = SpotifyGreen,
                 fontWeight = FontWeight.SemiBold

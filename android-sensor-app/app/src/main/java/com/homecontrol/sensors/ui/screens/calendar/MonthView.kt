@@ -74,7 +74,7 @@ fun MonthView(
                     text = day,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -116,17 +116,21 @@ private fun MonthDayCell(
     onEventClick: (CalendarEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Use surfaceVariant for non-current month to create stronger visual distinction
     val backgroundColor = when {
         day.isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        !day.inCurrentMonth -> MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
+        !day.inCurrentMonth -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         else -> Color.Transparent
     }
 
     val textColor = when {
-        !day.inCurrentMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+        !day.inCurrentMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
         day.isToday -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurface
     }
+
+    // Dim events on non-current month days
+    val eventAlpha = if (day.inCurrentMonth) 0.9f else 0.4f
 
     val regularHolidays = day.holidays.filter { !it.isMoonPhase }
     val moonPhases = day.holidays.filter { it.isMoonPhase }
@@ -148,34 +152,41 @@ private fun MonthDayCell(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(18.dp),
+                    .height(22.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Day number
                 Text(
                     text = day.date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal,
                     color = textColor
                 )
 
                 // Holiday name (in the middle, takes remaining space)
-                Text(
-                    text = regularHolidays.firstOrNull()?.name ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 7.sp,
-                    color = Color(0xFF9C27B0),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 2.dp)
-                )
+                if (regularHolidays.isNotEmpty()) {
+                    Text(
+                        text = regularHolidays.first().name,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 2.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFF9C27B0).copy(alpha = 0.85f))
+                            .padding(horizontal = 3.dp, vertical = 1.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
 
                 // Moon phase icon (right side) - always reserve space
                 Text(
                     text = moonPhases.firstOrNull()?.icon ?: "",
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     modifier = Modifier.padding(end = 2.dp)
                 )
             }
@@ -187,7 +198,8 @@ private fun MonthDayCell(
             visibleEvents.forEach { event ->
                 EventDot(
                     event = event,
-                    onClick = { onEventClick(event) }
+                    onClick = { onEventClick(event) },
+                    alpha = eventAlpha
                 )
             }
 
@@ -195,7 +207,7 @@ private fun MonthDayCell(
                 Text(
                     text = "+$moreCount",
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 2.dp)
                 )
@@ -208,7 +220,8 @@ private fun MonthDayCell(
 private fun EventDot(
     event: CalendarEvent,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    alpha: Float = 0.9f
 ) {
     val eventColor = event.backgroundColor?.let { parseHexColor(it) }
         ?: MaterialTheme.colorScheme.primary
@@ -218,15 +231,15 @@ private fun EventDot(
             .fillMaxWidth()
             .padding(vertical = 1.dp)
             .clip(RoundedCornerShape(2.dp))
-            .background(eventColor.copy(alpha = 0.9f))
+            .background(eventColor.copy(alpha = alpha))
             .clickable(onClick = onClick)
-            .padding(horizontal = 3.dp, vertical = 1.dp)
+            .padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
         Text(
             text = event.summary,
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 8.sp,
-            color = event.foregroundColor?.let { parseHexColor(it) } ?: Color.White,
+            fontSize = 10.sp,
+            color = (event.foregroundColor?.let { parseHexColor(it) } ?: Color.White).copy(alpha = alpha),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -250,7 +263,7 @@ private fun MoonPhaseIndicator(
     phaseIcon?.let {
         Text(
             text = it,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             modifier = modifier
         )
     }

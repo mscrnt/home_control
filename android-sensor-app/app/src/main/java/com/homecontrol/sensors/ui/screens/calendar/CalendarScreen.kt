@@ -10,17 +10,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -39,6 +43,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.homecontrol.sensors.data.model.Calendar
@@ -84,11 +90,19 @@ import java.time.format.DateTimeFormatter
 fun CalendarScreen(
     viewModel: CalendarViewModel = hiltViewModel(),
     onOpenDrawer: () -> Unit = {},
+    isScreensaverActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showWeatherModal by remember { mutableStateOf(false) }
+
+    // Dismiss weather modal when screensaver starts
+    LaunchedEffect(isScreensaverActive) {
+        if (isScreensaverActive && showWeatherModal) {
+            showWeatherModal = false
+        }
+    }
 
     // Current time state - respect app's 24-hour format setting
     val timeFormatter = remember(uiState.use24HourFormat) {
@@ -262,12 +276,27 @@ private fun WeatherModal(
     weather: Weather,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        WeatherWidgetExpanded(
-            weather = weather,
-            onDismiss = onDismiss,
-            modifier = Modifier.padding(16.dp)
-        )
+    // Full-screen overlay approach for better control
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        // Prevent clicks on the card from dismissing
+        Box(
+            modifier = Modifier
+                .clickable(enabled = false, onClick = {})
+                .widthIn(max = 950.dp)
+                .heightIn(max = 660.dp)
+        ) {
+            WeatherWidgetExpanded(
+                weather = weather,
+                onDismiss = onDismiss,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
@@ -453,15 +482,34 @@ private fun CalendarHeader(
                 }
 
                 CalendarViewMode.entries.forEach { mode ->
+                    val isSelected = viewMode == mode
                     FilterChip(
-                        selected = viewMode == mode,
+                        selected = isSelected,
                         onClick = { onViewModeChange(mode) },
                         label = {
                             Text(
                                 text = mode.name.lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelSmall
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected)
+                                    MaterialTheme.colorScheme.onPrimary
+                                else
+                                    MaterialTheme.colorScheme.onSurface
                             )
-                        }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = Color.Transparent,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            selectedBorderColor = MaterialTheme.colorScheme.primary,
+                            borderWidth = 1.dp,
+                            selectedBorderWidth = 1.dp
+                        )
                     )
                 }
             }
@@ -492,6 +540,7 @@ private fun CalendarHeader(
                             Icon(
                                 imageVector = Icons.Default.CalendarMonth,
                                 contentDescription = "Calendars",
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -511,15 +560,21 @@ private fun CalendarHeader(
                 }
 
                 // Add Event
-                IconButton(
+                TextButton(
                     onClick = onAddEventClick,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.height(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add Event",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        imageVector = Icons.Default.EditCalendar,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "New",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -531,6 +586,7 @@ private fun CalendarHeader(
                     Icon(
                         imageVector = Icons.Default.Checklist,
                         contentDescription = "Tasks",
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(20.dp)
                     )
                 }

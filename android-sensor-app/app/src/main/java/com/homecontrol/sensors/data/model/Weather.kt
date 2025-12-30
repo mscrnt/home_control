@@ -22,6 +22,7 @@ data class CurrentWeather(
     val uvi: Double = 0.0,
     val condition: String = "",
     val icon: String = "",
+    val iconUri: String = "", // Google Weather API icon URL
     val sunrise: Long = 0,
     val sunset: Long = 0
 )
@@ -34,6 +35,7 @@ data class HourlyWeather(
     val humidity: Int = 0,
     val condition: String = "",
     val icon: String = "",
+    val iconUri: String = "", // Google Weather API icon URL
     val pop: Double = 0.0
 )
 
@@ -45,6 +47,7 @@ data class DailyWeather(
     val humidity: Int = 0,
     val condition: String = "",
     val icon: String = "",
+    val iconUri: String = "", // Google Weather API icon URL
     val pop: Double = 0.0,
     val sunrise: Long = 0,
     val sunset: Long = 0,

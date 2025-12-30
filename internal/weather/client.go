@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -18,10 +20,11 @@ import (
 // - Hourly forecast: refresh every 6 hours (120/month)
 // Total: ~900 calls/month
 type Client struct {
-	apiKey   string
-	lat      float64
-	lon      float64
-	timezone *time.Location
+	apiKey    string
+	lat       float64
+	lon       float64
+	timezone  *time.Location
+	cacheFile string
 
 	// Cached data with separate timestamps
 	cache       *WeatherData
@@ -29,6 +32,14 @@ type Client struct {
 	lastCurrent time.Time
 	lastDaily   time.Time
 	lastHourly  time.Time
+}
+
+// persistedCache is the structure saved to disk
+type persistedCache struct {
+	Data        *WeatherData `json:"data"`
+	LastCurrent time.Time    `json:"lastCurrent"`
+	LastDaily   time.Time    `json:"lastDaily"`
+	LastHourly  time.Time    `json:"lastHourly"`
 }
 
 // WeatherData represents the cached weather information
@@ -51,6 +62,7 @@ type CurrentWeather struct {
 	UVI       float64 `json:"uvi"`
 	Condition string  `json:"condition"`
 	Icon      string  `json:"icon"`
+	IconUri   string  `json:"iconUri"` // Google Weather API icon URL
 	Sunrise   int64   `json:"sunrise"`
 	Sunset    int64   `json:"sunset"`
 }
@@ -63,7 +75,8 @@ type HourlyWeather struct {
 	Humidity  int     `json:"humidity"`
 	Condition string  `json:"condition"`
 	Icon      string  `json:"icon"`
-	Pop       float64 `json:"pop"` // Probability of precipitation
+	IconUri   string  `json:"iconUri"` // Google Weather API icon URL
+	Pop       float64 `json:"pop"`     // Probability of precipitation
 }
 
 // DailyWeather represents daily forecast
@@ -74,6 +87,7 @@ type DailyWeather struct {
 	Humidity  int     `json:"humidity"`
 	Condition string  `json:"condition"`
 	Icon      string  `json:"icon"`
+	IconUri   string  `json:"iconUri"` // Google Weather API icon URL
 	Pop       float64 `json:"pop"`
 	Sunrise   int64   `json:"sunrise"`
 	Sunset    int64   `json:"sunset"`
@@ -110,13 +124,27 @@ type googleDayForecast struct {
 	MaxTemperature    googleTemperature     `json:"maxTemperature"`
 	MinTemperature    googleTemperature     `json:"minTemperature"`
 	SunEvents         googleSunEvents       `json:"sunEvents"`
+	MoonEvents        googleMoonEvents      `json:"moonEvents"`
 }
 
 type googleDayPartForecast struct {
-	WeatherCondition         googleWeatherCondition `json:"weatherCondition"`
-	Humidity                 googlePercentage       `json:"humidity"`
-	Wind                     googleWind             `json:"wind"`
-	PrecipitationProbability googlePercentage       `json:"precipitationProbability"`
+	WeatherCondition   googleWeatherCondition `json:"weatherCondition"`
+	RelativeHumidity   int                    `json:"relativeHumidity"`
+	Wind               googleWind             `json:"wind"`
+	Precipitation      googlePrecipitation    `json:"precipitation"`
+	CloudCover         int                    `json:"cloudCover"`
+	UVIndex            int                    `json:"uvIndex"`
+}
+
+type googlePrecipitation struct {
+	Probability struct {
+		Percent int    `json:"percent"`
+		Type    string `json:"type"`
+	} `json:"probability"`
+}
+
+type googleMoonEvents struct {
+	MoonPhase string `json:"moonPhase"`
 }
 
 type googleForecastHoursResponse struct {
@@ -125,13 +153,13 @@ type googleForecastHoursResponse struct {
 }
 
 type googleHourForecast struct {
-	Interval                 googleInterval         `json:"interval"`
-	WeatherCondition         googleWeatherCondition `json:"weatherCondition"`
-	Temperature              googleTemperature      `json:"temperature"`
-	FeelsLikeTemperature     googleTemperature      `json:"feelsLikeTemperature"`
-	Humidity                 googlePercentage       `json:"humidity"`
-	PrecipitationProbability googlePercentage       `json:"precipitationProbability"`
-	IsDaytime                bool                   `json:"isDaytime"`
+	Interval             googleInterval         `json:"interval"`
+	WeatherCondition     googleWeatherCondition `json:"weatherCondition"`
+	Temperature          googleTemperature      `json:"temperature"`
+	FeelsLikeTemperature googleTemperature      `json:"feelsLikeTemperature"`
+	RelativeHumidity     int                    `json:"relativeHumidity"`
+	Precipitation        googlePrecipitation    `json:"precipitation"`
+	IsDaytime            bool                   `json:"isDaytime"`
 }
 
 type googleWeatherCondition struct {
@@ -167,8 +195,8 @@ type googleInterval struct {
 }
 
 type googleSunEvents struct {
-	Sunrise string `json:"sunrise"`
-	Sunset  string `json:"sunset"`
+	Sunrise string `json:"sunriseTime"`
+	Sunset  string `json:"sunsetTime"`
 }
 
 // Refresh intervals
@@ -179,21 +207,55 @@ const (
 )
 
 // NewClient creates a new weather client using API key authentication
-func NewClient(apiKey string, lat, lon float64, timezone *time.Location) *Client {
+// cacheFile is optional - pass empty string to disable disk caching
+func NewClient(apiKey string, lat, lon float64, timezone *time.Location, cacheFile string) *Client {
 	return &Client{
-		apiKey:   apiKey,
-		lat:      lat,
-		lon:      lon,
-		timezone: timezone,
-		cache:    &WeatherData{},
+		apiKey:    apiKey,
+		lat:       lat,
+		lon:       lon,
+		timezone:  timezone,
+		cacheFile: cacheFile,
+		cache:     &WeatherData{},
 	}
 }
 
 // Start begins the background refresh scheduler
 func (c *Client) Start() {
-	// Initial fetch of all data
-	if err := c.RefreshAll(); err != nil {
-		log.Printf("Initial weather fetch failed: %v", err)
+	// Try to load cached data from disk first
+	if err := c.loadCache(); err != nil {
+		log.Printf("Weather cache load failed (will fetch fresh): %v", err)
+	}
+
+	// Only refresh data that has expired based on TTL
+	now := time.Now()
+	needsCurrent := now.Sub(c.lastCurrent) >= currentRefreshInterval
+	needsDaily := now.Sub(c.lastDaily) >= dailyRefreshInterval
+	needsHourly := now.Sub(c.lastHourly) >= hourlyRefreshInterval
+
+	if needsCurrent || needsDaily || needsHourly {
+		log.Printf("Weather cache: current=%v daily=%v hourly=%v (refreshing expired data)",
+			!needsCurrent, !needsDaily, !needsHourly)
+
+		if needsCurrent {
+			if err := c.refreshCurrent(); err != nil {
+				log.Printf("Current weather refresh failed: %v", err)
+			}
+		}
+		if needsDaily {
+			if err := c.refreshDaily(); err != nil {
+				log.Printf("Daily forecast refresh failed: %v", err)
+			}
+		}
+		if needsHourly {
+			if err := c.refreshHourly(); err != nil {
+				log.Printf("Hourly forecast refresh failed: %v", err)
+			}
+		}
+	} else {
+		log.Printf("Weather cache: all data still valid (current: %s ago, daily: %s ago, hourly: %s ago)",
+			now.Sub(c.lastCurrent).Round(time.Minute),
+			now.Sub(c.lastDaily).Round(time.Minute),
+			now.Sub(c.lastHourly).Round(time.Minute))
 	}
 
 	// Start separate schedulers for tiered caching
@@ -293,8 +355,6 @@ func (c *Client) refreshCurrent() error {
 	}
 
 	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-
 	c.cache.Current = CurrentWeather{
 		Temp:      resp.Temperature.Degrees,
 		FeelsLike: resp.FeelsLikeTemperature.Degrees,
@@ -305,19 +365,24 @@ func (c *Client) refreshCurrent() error {
 		UVI:       float64(resp.UvIndex),
 		Condition: resp.WeatherCondition.Description.Text,
 		Icon:      c.mapConditionToIcon(resp.WeatherCondition.Type, resp.IsDaytime),
+		IconUri:   resp.WeatherCondition.IconBaseUri,
 	}
 	c.cache.Timezone = resp.TimeZone.ID
 	c.cache.FetchedAt = time.Now()
 	c.lastCurrent = time.Now()
+	c.cacheMu.Unlock()
 
 	log.Printf("Weather updated: %.0f°F, %s", c.cache.Current.Temp, c.cache.Current.Condition)
+	c.saveCache()
 	return nil
 }
 
 // refreshDaily fetches daily forecast from Google Weather API
 func (c *Client) refreshDaily() error {
+	// Request 10 days of forecast with pageSize=10 to get all days in one request
+	// (pageSize defaults to 5, so without it we'd only get 5 days per page)
 	url := fmt.Sprintf(
-		"https://weather.googleapis.com/v1/forecast/days:lookup?key=%s&location.latitude=%f&location.longitude=%f&unitsSystem=IMPERIAL",
+		"https://weather.googleapis.com/v1/forecast/days:lookup?key=%s&location.latitude=%f&location.longitude=%f&unitsSystem=IMPERIAL&days=10&pageSize=10",
 		c.apiKey, c.lat, c.lon,
 	)
 
@@ -332,8 +397,6 @@ func (c *Client) refreshDaily() error {
 	}
 
 	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-
 	c.cache.Daily = make([]DailyWeather, 0, len(resp.ForecastDays))
 	for _, day := range resp.ForecastDays {
 		startTime, _ := time.Parse(time.RFC3339, day.Interval.StartTime)
@@ -350,18 +413,21 @@ func (c *Client) refreshDaily() error {
 			Time:      startTime.Unix(),
 			TempMin:   day.MinTemperature.Degrees,
 			TempMax:   day.MaxTemperature.Degrees,
-			Humidity:  day.DaytimeForecast.Humidity.Percent,
+			Humidity:  day.DaytimeForecast.RelativeHumidity,
 			Condition: day.DaytimeForecast.WeatherCondition.Description.Text,
 			Icon:      c.mapConditionToIcon(day.DaytimeForecast.WeatherCondition.Type, true),
-			Pop:       float64(day.DaytimeForecast.PrecipitationProbability.Percent) / 100.0,
+			IconUri:   day.DaytimeForecast.WeatherCondition.IconBaseUri,
+			Pop:       float64(day.DaytimeForecast.Precipitation.Probability.Percent) / 100.0,
 			Sunrise:   sunrise.Unix(),
 			Sunset:    sunset.Unix(),
 			Summary:   day.DaytimeForecast.WeatherCondition.Description.Text,
 		})
 	}
 	c.lastDaily = time.Now()
+	c.cacheMu.Unlock()
 
 	log.Printf("Daily forecast updated: %d days", len(c.cache.Daily))
+	c.saveCache()
 	return nil
 }
 
@@ -383,8 +449,6 @@ func (c *Client) refreshHourly() error {
 	}
 
 	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-
 	c.cache.Hourly = make([]HourlyWeather, 0, len(resp.ForecastHours))
 	for _, hour := range resp.ForecastHours {
 		startTime, _ := time.Parse(time.RFC3339, hour.Interval.StartTime)
@@ -392,15 +456,18 @@ func (c *Client) refreshHourly() error {
 			Time:      startTime.Unix(),
 			Temp:      hour.Temperature.Degrees,
 			FeelsLike: hour.FeelsLikeTemperature.Degrees,
-			Humidity:  hour.Humidity.Percent,
+			Humidity:  hour.RelativeHumidity,
 			Condition: hour.WeatherCondition.Description.Text,
 			Icon:      c.mapConditionToIcon(hour.WeatherCondition.Type, hour.IsDaytime),
-			Pop:       float64(hour.PrecipitationProbability.Percent) / 100.0,
+			IconUri:   hour.WeatherCondition.IconBaseUri,
+			Pop:       float64(hour.Precipitation.Probability.Percent) / 100.0,
 		})
 	}
 	c.lastHourly = time.Now()
+	c.cacheMu.Unlock()
 
 	log.Printf("Hourly forecast updated: %d hours", len(c.cache.Hourly))
+	c.saveCache()
 	return nil
 }
 
@@ -482,4 +549,74 @@ func (c *Client) GetLastFetch() time.Time {
 	c.cacheMu.RLock()
 	defer c.cacheMu.RUnlock()
 	return c.cache.FetchedAt
+}
+
+// loadCache loads weather data from disk cache
+func (c *Client) loadCache() error {
+	if c.cacheFile == "" {
+		return fmt.Errorf("no cache file configured")
+	}
+
+	data, err := os.ReadFile(c.cacheFile)
+	if err != nil {
+		return fmt.Errorf("failed to read cache file: %w", err)
+	}
+
+	var cached persistedCache
+	if err := json.Unmarshal(data, &cached); err != nil {
+		return fmt.Errorf("failed to parse cache file: %w", err)
+	}
+
+	if cached.Data == nil {
+		return fmt.Errorf("cache file contains no data")
+	}
+
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+
+	c.cache = cached.Data
+	c.lastCurrent = cached.LastCurrent
+	c.lastDaily = cached.LastDaily
+	c.lastHourly = cached.LastHourly
+
+	log.Printf("Weather cache loaded: current=%s ago, daily=%s ago, hourly=%s ago",
+		time.Since(c.lastCurrent).Round(time.Minute),
+		time.Since(c.lastDaily).Round(time.Minute),
+		time.Since(c.lastHourly).Round(time.Minute))
+
+	return nil
+}
+
+// saveCache persists weather data to disk
+func (c *Client) saveCache() {
+	if c.cacheFile == "" {
+		return
+	}
+
+	c.cacheMu.RLock()
+	cached := persistedCache{
+		Data:        c.cache,
+		LastCurrent: c.lastCurrent,
+		LastDaily:   c.lastDaily,
+		LastHourly:  c.lastHourly,
+	}
+	c.cacheMu.RUnlock()
+
+	data, err := json.MarshalIndent(cached, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal weather cache: %v", err)
+		return
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(c.cacheFile)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("Failed to create cache directory: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(c.cacheFile, data, 0644); err != nil {
+		log.Printf("Failed to write weather cache: %v", err)
+		return
+	}
 }

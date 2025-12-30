@@ -1,5 +1,6 @@
 package com.homecontrol.sensors.ui.screens.calendar
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homecontrol.sensors.data.model.*
@@ -208,11 +209,14 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun createEvent(request: CalendarEventRequest) {
+        Log.d("CalendarViewModel", "createEvent called with request: $request")
         viewModelScope.launch {
             calendarRepository.createEvent(request).onSuccess {
+                Log.d("CalendarViewModel", "Event created successfully")
                 closeEventModal()
                 loadEvents()
             }.onFailure { e ->
+                Log.e("CalendarViewModel", "Failed to create event", e)
                 _uiState.update { it.copy(error = "Failed to create event: ${e.message}") }
             }
         }

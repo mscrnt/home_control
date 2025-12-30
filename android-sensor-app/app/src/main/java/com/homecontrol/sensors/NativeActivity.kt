@@ -1,11 +1,16 @@
 package com.homecontrol.sensors
 
+import android.app.ActivityManager
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -70,7 +75,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.homecontrol.sensors.data.repository.AppSettings
 import com.homecontrol.sensors.data.repository.SettingsRepository
+import com.homecontrol.sensors.data.repository.SpotifyRepository
 import com.homecontrol.sensors.data.repository.ThemeMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.homecontrol.sensors.ui.components.MiniSpotifyPlayer
 import com.homecontrol.sensors.ui.screens.home.HomeScreen
 import com.homecontrol.sensors.ui.screens.hue.HueScreen
@@ -101,6 +110,11 @@ class NativeActivity : ComponentActivity() {
     @Inject
     lateinit var settingsRepository: SettingsRepository
 
+    @Inject
+    lateinit var spotifyRepository: SpotifyRepository
+
+    private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     companion object {
         private const val TAG = "NativeActivity"
         private const val SPOTIFY_PACKAGE = "com.spotify.music"
@@ -109,7 +123,15 @@ class NativeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Override display density to make UI elements larger on low-density tablets
+        // Target 240 dpi (hdpi) for consistent sizing
+        adjustDisplayDensity(targetDpi = 240)
+
         enableEdgeToEdge()
+
+        // Enable immersive fullscreen mode - hides status bar until user swipes from edge
+        setupImmersiveMode()
 
         // Start managed apps manager (auto-installs Spotify, Home Assistant, etc.)
         ManagedAppsManager.start(this)
@@ -147,35 +169,128 @@ class NativeActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun launchSpotifyQuickly() {
+    @Suppress("DEPRECATION")
+    private fun isSpotifyRunning(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+
+        // Method 1: Check running tasks (works on Android TV)
         try {
-            val spotifyIntent = packageManager.getLaunchIntentForPackage(SPOTIFY_PACKAGE)
-            if (spotifyIntent == null) {
-                Log.d(TAG, "Spotify not installed")
-                return
+            val tasks = activityManager.getRunningTasks(10)
+            if (tasks.any { it.baseActivity?.packageName == SPOTIFY_PACKAGE }) {
+                return true
             }
+        } catch (e: Exception) {
+            Log.d(TAG, "getRunningTasks failed: ${e.message}")
+        }
 
-            spotifyLaunched = true
+        // Method 2: Check app processes as fallback
+        val runningProcesses = activityManager.runningAppProcesses ?: return false
+        return runningProcesses.any {
+            it.processName == SPOTIFY_PACKAGE &&
+            it.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+        }
+    }
 
-            // Launch Spotify with no animation
-            spotifyIntent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_NO_ANIMATION
-            )
-            startActivity(spotifyIntent)
+    @Suppress("DEPRECATION")
+    private fun setupImmersiveMode() {
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            or View.SYSTEM_UI_FLAG_FULLSCREEN
+            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
+    }
 
-            // Immediately bring our app back (50ms delay - just enough for Spotify to start)
-            Handler(Looper.getMainLooper()).postDelayed({
-                val bringBackIntent = Intent(this, NativeActivity::class.java)
-                bringBackIntent.addFlags(
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+    private fun adjustDisplayDensity(targetDpi: Int) {
+        val displayMetrics = resources.displayMetrics
+        val configuration = resources.configuration
+
+        // Calculate the scale factor to reach target DPI
+        // Only adjust if current density is lower than target
+        if (displayMetrics.densityDpi < targetDpi) {
+            val scaleFactor = targetDpi.toFloat() / displayMetrics.densityDpi.toFloat()
+            displayMetrics.density = displayMetrics.density * scaleFactor
+            displayMetrics.scaledDensity = displayMetrics.scaledDensity * scaleFactor
+            displayMetrics.densityDpi = targetDpi
+
+            configuration.densityDpi = targetDpi
+            resources.updateConfiguration(configuration, displayMetrics)
+
+            Log.d(TAG, "Adjusted display density to $targetDpi dpi (scale factor: $scaleFactor)")
+        } else {
+            Log.d(TAG, "Display density already at ${displayMetrics.densityDpi} dpi, no adjustment needed")
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            setupImmersiveMode()
+        }
+    }
+
+    private fun launchSpotifyQuickly() {
+        // Launch in a coroutine to check API first
+        activityScope.launch {
+            try {
+                // First check if Spotify has any active devices via API
+                val devicesResult = spotifyRepository.getDevices()
+                devicesResult.onSuccess { devices ->
+                    if (devices.isNotEmpty()) {
+                        Log.d(TAG, "Spotify already has ${devices.size} active device(s), skipping launch")
+                        spotifyLaunched = true
+                        return@launch
+                    }
+                }
+
+                // Also check current playback state
+                val playbackResult = spotifyRepository.getPlayback()
+                playbackResult.onSuccess { playback ->
+                    if (playback.device != null) {
+                        Log.d(TAG, "Spotify has active playback device: ${playback.device.name}, skipping launch")
+                        spotifyLaunched = true
+                        return@launch
+                    }
+                }
+
+                // Fallback: Check if Spotify process is running
+                if (isSpotifyRunning()) {
+                    Log.d(TAG, "Spotify process is already running, skipping launch")
+                    spotifyLaunched = true
+                    return@launch
+                }
+
+                val spotifyIntent = packageManager.getLaunchIntentForPackage(SPOTIFY_PACKAGE)
+                if (spotifyIntent == null) {
+                    Log.d(TAG, "Spotify not installed")
+                    return@launch
+                }
+
+                spotifyLaunched = true
+                Log.d(TAG, "Launching Spotify in background")
+
+                // Launch Spotify with no animation
+                spotifyIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_NO_ANIMATION
                 )
-                startActivity(bringBackIntent)
-                overridePendingTransition(0, 0)
-            }, 50)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch Spotify: ${e.message}")
+                startActivity(spotifyIntent)
+
+                // Immediately bring our app back (50ms delay - just enough for Spotify to start)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val bringBackIntent = Intent(this@NativeActivity, NativeActivity::class.java)
+                    bringBackIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    )
+                    startActivity(bringBackIntent)
+                    overridePendingTransition(0, 0)
+                }, 50)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to launch Spotify: ${e.message}")
+            }
         }
     }
 }
@@ -299,6 +414,7 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
                 onOpenDrawer = {
                     scope.launch { drawerState.open() }
                 },
+                isScreensaverActive = showScreensaver,
                 modifier = Modifier.fillMaxSize()
             )
         }

@@ -110,8 +110,8 @@ private fun WeekDayColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        if (day.isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                        else Color.Transparent
+                        if (day.isToday) MaterialTheme.colorScheme.primaryContainer
+                        else HomeControlColors.cardBackgroundSolid()
                     )
                     .clickable(onClick = onClick)
                     .padding(12.dp)
@@ -123,8 +123,8 @@ private fun WeekDayColumn(
                     Text(
                         text = day.dayName,
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (day.isToday) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (day.isToday) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface
                     )
                     Box(
                         modifier = Modifier
@@ -143,7 +143,7 @@ private fun WeekDayColumn(
                         Text(
                             text = day.dateStr,
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.SemiBold,
                             color = if (day.isToday) MaterialTheme.colorScheme.onPrimary
                             else MaterialTheme.colorScheme.onSurface
                         )
@@ -226,15 +226,14 @@ private fun HolidayCard(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF9C27B0).copy(alpha = 0.15f)
-        ),
-        border = BorderStroke(1.dp, Color(0xFF9C27B0).copy(alpha = 0.5f))
+            containerColor = Color(0xFF9C27B0).copy(alpha = 0.85f)
+        )
     ) {
         Text(
             text = holiday.name,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF9C27B0),
+            color = Color.White,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
         )
     }

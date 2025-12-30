@@ -1,5 +1,6 @@
 package com.homecontrol.sensors.data.repository
 
+import android.util.Log
 import com.homecontrol.sensors.data.api.HomeControlApi
 import com.homecontrol.sensors.data.model.*
 import kotlinx.coroutines.flow.Flow
@@ -455,11 +456,15 @@ class CalendarRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createEvent(event: CalendarEventRequest): Result<CalendarEvent> = runCatching {
+        Log.d("CalendarRepository", "createEvent called with: $event")
         val response = api.createEvent(event)
+        Log.d("CalendarRepository", "createEvent response: ${response.code()} - ${response.message()}")
         if (response.isSuccessful) {
             response.body() ?: throw Exception("Empty response")
         } else {
-            throw Exception("API error: ${response.code()}")
+            val errorBody = response.errorBody()?.string()
+            Log.e("CalendarRepository", "createEvent error body: $errorBody")
+            throw Exception("API error: ${response.code()} - $errorBody")
         }
     }
 
@@ -650,11 +655,15 @@ interface DriveRepository {
     suspend fun getRandomPhoto(): Result<DrivePhoto>
     suspend fun getScreensaverConfig(): Result<ScreensaverConfig>
     fun getPhotoUrl(id: String): String
+    fun getLocalPhotoPath(id: String): String?
+    fun hasCachedPhotos(): Boolean
+    fun getCachedPhotoIds(): List<String>
 }
 
 class DriveRepositoryImpl @Inject constructor(
     private val api: HomeControlApi,
-    @com.homecontrol.sensors.di.ServerUrl private val serverUrl: String
+    @com.homecontrol.sensors.di.ServerUrl private val serverUrl: String,
+    private val photoSyncManager: com.homecontrol.sensors.data.sync.PhotoSyncManager
 ) : DriveRepository {
 
     override suspend fun getPhotos(): Result<List<DrivePhoto>> = runCatching {
@@ -684,5 +693,25 @@ class DriveRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getPhotoUrl(id: String): String = "${serverUrl}api/drive/photo/$id"
+    override fun getPhotoUrl(id: String): String {
+        // Prefer local cached photo if available
+        val localPath = photoSyncManager.getCachedPhotoPath(id)
+        return if (localPath != null) {
+            "file://$localPath"
+        } else {
+            "${serverUrl}api/drive/photo/$id"
+        }
+    }
+
+    override fun getLocalPhotoPath(id: String): String? {
+        return photoSyncManager.getCachedPhotoPath(id)
+    }
+
+    override fun hasCachedPhotos(): Boolean {
+        return photoSyncManager.getCachedPhotos().isNotEmpty()
+    }
+
+    override fun getCachedPhotoIds(): List<String> {
+        return photoSyncManager.getCachedPhotos().map { it.nameWithoutExtension }
+    }
 }

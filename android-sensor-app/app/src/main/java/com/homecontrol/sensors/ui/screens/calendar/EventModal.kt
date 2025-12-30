@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -54,8 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.homecontrol.sensors.data.model.Calendar
 import com.homecontrol.sensors.data.model.CalendarDateTime
 import com.homecontrol.sensors.data.model.CalendarEvent
@@ -100,16 +99,20 @@ fun EventModal(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var calendarDropdownExpanded by remember { mutableStateOf(false) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false
-        )
+    // Full-screen overlay approach for better control with DPI scaling
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
     ) {
+        // Prevent clicks on the card from dismissing
         Surface(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
+                .clickable(enabled = false, onClick = {})
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.9f),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface
         ) {
@@ -603,7 +606,8 @@ private fun createEventRequest(
     endTime: LocalTime,
     calendarId: String
 ): CalendarEventRequest {
-    val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+    val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     return if (isAllDay) {
         CalendarEventRequest(
@@ -611,21 +615,21 @@ private fun createEventRequest(
             title = title,
             description = description.takeIf { it.isNotBlank() },
             location = location.takeIf { it.isNotBlank() },
-            allDay = true,
-            start = startDate.format(DateTimeFormatter.ISO_LOCAL_DATE),
-            end = endDate.plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
+            date = startDate.format(dateFormatter),
+            time = null,  // null time indicates all-day event
+            endDate = endDate.format(dateFormatter),
+            endTime = null
         )
     } else {
-        val startDateTime = LocalDateTime.of(startDate, startTime)
-        val endDateTime = LocalDateTime.of(endDate, endTime)
         CalendarEventRequest(
             calendarId = calendarId,
             title = title,
             description = description.takeIf { it.isNotBlank() },
             location = location.takeIf { it.isNotBlank() },
-            allDay = false,
-            start = startDateTime.format(dateTimeFormatter),
-            end = endDateTime.format(dateTimeFormatter)
+            date = startDate.format(dateFormatter),
+            time = startTime.format(timeFormatter),
+            endDate = endDate.format(dateFormatter),
+            endTime = endTime.format(timeFormatter)
         )
     }
 }

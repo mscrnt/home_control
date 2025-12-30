@@ -488,7 +488,8 @@ func main() {
 
 	// Initialize Weather client (Google Weather API - uses API key)
 	if cfg.GoogleWeatherAPIKey != "" && cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
-		weatherClient = weather.NewClient(cfg.GoogleWeatherAPIKey, cfg.WeatherLat, cfg.WeatherLon, cfg.Timezone)
+		weatherCacheFile := "data/weather_cache.json"
+		weatherClient = weather.NewClient(cfg.GoogleWeatherAPIKey, cfg.WeatherLat, cfg.WeatherLon, cfg.Timezone, weatherCacheFile)
 		weatherClient.Start()
 		log.Printf("Weather client initialized for coordinates (%.4f, %.4f)", cfg.WeatherLat, cfg.WeatherLon)
 	} else if cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
