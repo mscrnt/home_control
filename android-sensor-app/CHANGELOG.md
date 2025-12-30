@@ -4,6 +4,61 @@ All notable changes to the Android sensor app will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-12-30
+
+### Added
+- **Screensaver Screen** (`f9b0e18`)
+  - Photo slideshow with Google Drive integration
+  - Background music via Spotify integration
+  - Configurable idle timeout for screensaver activation
+  - Smooth crossfade transitions between photos
+  - Photo sync with local caching for offline display
+
+- **Photo Sync System** (`d20d098`)
+  - PhotoSyncManager for downloading and caching Google Drive photos
+  - PhotoSyncWorker for periodic background sync via WorkManager
+  - Hourly automatic sync with manual trigger option
+  - Efficient disk caching with cache size tracking
+
+- **Weather Enhancements** (`d20d098`, `af48079`)
+  - Weather data disk caching for offline fallback
+  - Improved weather widget with better layout and styling
+  - Enhanced hourly and daily forecast display
+
+### Changed
+- **Google Weather API Migration** (`af48079`)
+  - Migrated from OpenWeatherMap to Google Weather API
+  - Tiered caching strategy to stay within 1000 free calls/month:
+    - Current conditions: refreshed hourly (~720/month)
+    - Daily forecast: refreshed every 12 hours (~60/month)
+    - Hourly forecast: refreshed every 6 hours (~120/month)
+  - Updated weather client implementation with new API response handling
+
+- **Dark Theme Support** (`d8dd22d`)
+  - Refactored theme handling for proper dark mode support
+  - Updated NativeActivity theme configuration
+
+- **Calendar Improvements** (`d20d098`)
+  - Event modal refactored to full-screen overlay for better DPI scaling
+  - Improved MonthView with better text sizes and colors
+  - Enhanced WeekView with visual distinction for today and holidays
+  - Separate date and time fields for all-day event handling
+
+### Fixed
+- **ManagedAppsManager** (`2d8b94b`)
+  - Now compares versions BEFORE downloading APKs (was downloading unnecessarily)
+  - Fixed expected version handling with explicit version strings in config
+  - Removed APK parsing that caused AconfigFlags errors
+
+- **Spotify Launch Logic** (`2d8b94b`)
+  - Improved `launchSpotifyQuickly()` to check local process first
+  - Prevents false positives from other devices showing as "active"
+  - Better logging for debugging launch behavior
+
+- **Screensaver Stability** (`d20d098`)
+  - Improved layout to prevent accidental dismissals
+  - Better error handling for photo loading
+
 ## [1.2.0] - 2025-12-28
 
 ### Added
