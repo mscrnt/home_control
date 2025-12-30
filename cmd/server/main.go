@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"home_control/internal/adb"
 	"home_control/internal/calendar"
 	"home_control/internal/camera"
 	"home_control/internal/drive"
@@ -133,13 +132,6 @@ type Config struct {
 	// Spotify settings
 	SpotifyClientID     string
 	SpotifyClientSecret string
-	// Tablet ADB settings
-	TabletADBAddr          string
-	TabletProximityEnabled bool
-	TabletIdleTimeout      int  // Seconds before screen sleeps after no proximity
-	TabletAutoBrightness   bool
-	TabletMinBrightness    int
-	TabletMaxBrightness    int
 	// Entertainment device settings
 	// Sony devices (soundbar + TV) format: "name:host:port:psk:type" (type = soundbar|tv)
 	SonyDevices []SonyDeviceConfig
@@ -224,9 +216,6 @@ var wsHub *websocket.Hub
 var appConfig Config
 var calendarPrefs *CalendarPrefs
 var calendarPrefsFile string
-var tabletClient *adb.Client
-var proximityMonitor *adb.ProximityMonitor
-var brightnessController *adb.BrightnessController
 
 // Entertainment device managers
 var sonyManager *entertainment.SonyManager
@@ -341,12 +330,6 @@ func main() {
 		ScreensaverTimeout:     parseIntEnv("SCREENSAVER_TIMEOUT", 300),
 		SpotifyClientID:           getEnv("SPOTIFY_CLIENT_ID", ""),
 		SpotifyClientSecret:       getEnv("SPOTIFY_CLIENT_SECRET", ""),
-		TabletADBAddr:             getEnv("TABLET_ADB_ADDR", ""),
-		TabletProximityEnabled:    getEnv("TABLET_PROXIMITY_ENABLED", "false") == "true",
-		TabletIdleTimeout:         parseIntEnv("TABLET_IDLE_TIMEOUT", 60),
-		TabletAutoBrightness:      getEnv("TABLET_AUTO_BRIGHTNESS", "false") == "true",
-		TabletMinBrightness:       parseIntEnv("TABLET_MIN_BRIGHTNESS", 20),
-		TabletMaxBrightness:       parseIntEnv("TABLET_MAX_BRIGHTNESS", 255),
 		// Entertainment devices
 		SonyDevices:       parseSonyDevices(getEnv("SONY_DEVICES", "")),
 		ShieldDevices:     parseShieldDevices(getEnv("SHIELD_DEVICES", "")),
@@ -543,67 +526,6 @@ func main() {
 	// Initialize entertainment device managers
 	initEntertainmentManagers(cfg)
 
-	// Initialize Tablet ADB client
-	if cfg.TabletADBAddr != "" {
-		tabletClient = adb.NewClient(cfg.TabletADBAddr)
-		ctx := context.Background()
-
-		// Start connection monitor - will auto-reconnect if connection drops
-		tabletClient.OnReconnect(func() {
-			log.Printf("Tablet ADB connection restored to %s", cfg.TabletADBAddr)
-		})
-		tabletClient.StartConnectionMonitor(ctx, 10*time.Second) // Check every 10 seconds
-		log.Printf("Tablet ADB client monitoring %s (auto-reconnect enabled)", cfg.TabletADBAddr)
-
-		// Start proximity monitoring if enabled
-		if cfg.TabletProximityEnabled {
-			idleTimeout := time.Duration(cfg.TabletIdleTimeout) * time.Second
-			proximityMonitor = adb.NewProximityMonitor(tabletClient, 500*time.Millisecond, idleTimeout)
-
-			// Track last activity for idle timeout
-			var lastActivity time.Time
-			var screenOn bool = true
-
-			proximityMonitor.OnApproach(func() {
-				lastActivity = time.Now()
-				if !screenOn {
-					if err := tabletClient.WakeScreen(context.Background()); err == nil {
-						screenOn = true
-						log.Println("Tablet: Screen woken by proximity")
-					}
-				}
-			})
-
-			proximityMonitor.OnDepart(func() {
-				// Start idle timer - screen will sleep after timeout
-				go func() {
-					time.Sleep(idleTimeout)
-					if time.Since(lastActivity) >= idleTimeout && screenOn {
-						if err := tabletClient.SleepScreen(context.Background()); err == nil {
-							screenOn = false
-							log.Println("Tablet: Screen sleeping due to idle")
-						}
-					}
-				}()
-			})
-
-			proximityMonitor.Start(ctx)
-			log.Printf("Tablet proximity monitoring enabled (idle timeout: %ds)", cfg.TabletIdleTimeout)
-		}
-
-		// Start auto-brightness if enabled
-		if cfg.TabletAutoBrightness {
-			brightnessController = adb.NewBrightnessController(
-				tabletClient,
-				5*time.Second, // Check every 5 seconds
-				cfg.TabletMinBrightness,
-				cfg.TabletMaxBrightness,
-			)
-			brightnessController.Start(ctx)
-			log.Printf("Tablet auto-brightness enabled (range: %d-%d)", cfg.TabletMinBrightness, cfg.TabletMaxBrightness)
-		}
-	}
-
 	// Load templates with custom functions
 	templateFuncMap = template.FuncMap{
 		"formatDate":     formatDate,
@@ -703,16 +625,10 @@ func main() {
 	// Webhook for Home Assistant doorbell events
 	r.Post("/api/webhook/doorbell", handleDoorbellWebhook)
 
-	// Tablet ADB control routes
-	r.Get("/api/tablet/status", handleGetTabletStatus)
-	r.Post("/api/tablet/screen/wake", handleTabletWake)
-	r.Post("/api/tablet/screen/sleep", handleTabletSleep)
-	r.Post("/api/tablet/brightness", handleSetTabletBrightness)
-	r.Post("/api/tablet/auto-brightness", handleSetTabletAutoBrightness)
+	// Tablet app communication routes (app reports sensor data, server sends commands)
 	r.Post("/api/tablet/sensor/proximity", handleTabletProximity)
 	r.Post("/api/tablet/sensor/light", handleTabletLight)
 	r.Get("/api/tablet/sensor/state", handleGetSensorState)
-	r.Post("/api/tablet/adb/port", handleTabletAdbPort)
 	r.Post("/api/tablet/kiosk/exit", handleExitKiosk)
 	r.Post("/api/tablet/reload", handleTabletReload)
 	r.Get("/api/tablet/theme", handleGetTabletTheme)
@@ -4722,120 +4638,7 @@ func getCalendarsWithPrefs(ctx context.Context) ([]CalendarWithPrefs, error) {
 	return result, nil
 }
 
-// Tablet ADB control handlers
-
-func handleGetTabletStatus(w http.ResponseWriter, r *http.Request) {
-	if tabletClient == nil {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	status, err := tabletClient.GetStatus(r.Context())
-	if err != nil {
-		http.Error(w, "Failed to get tablet status: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Add sensor data from HCC app
-	sensorState.RLock()
-	response := map[string]interface{}{
-		"connected":       status.Connected,
-		"screenOn":        status.ScreenOn,
-		"batteryLevel":    status.BatteryLevel,
-		"batteryCharging": status.BatteryCharging,
-		"brightness":      status.Brightness,
-		"screenTimeout":   status.ScreenTimeout,
-		"proximityNear":   sensorState.ProximityNear,
-		"lightLevel":      sensorState.LightLevel,
-		"lastProximityAt": sensorState.LastProximityAt,
-		"lastLightAt":     sensorState.LastLightAt,
-	}
-	sensorState.RUnlock()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func handleTabletWake(w http.ResponseWriter, r *http.Request) {
-	if tabletClient == nil {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	if err := tabletClient.WakeScreen(r.Context()); err != nil {
-		http.Error(w, "Failed to wake screen: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
-}
-
-func handleTabletSleep(w http.ResponseWriter, r *http.Request) {
-	if tabletClient == nil {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	if err := tabletClient.SleepScreen(r.Context()); err != nil {
-		http.Error(w, "Failed to sleep screen: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
-}
-
-func handleSetTabletBrightness(w http.ResponseWriter, r *http.Request) {
-	if tabletClient == nil {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	var req struct {
-		Brightness int `json:"brightness"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := tabletClient.SetBrightness(r.Context(), req.Brightness); err != nil {
-		http.Error(w, "Failed to set brightness: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":    true,
-		"brightness": req.Brightness,
-	})
-}
-
-func handleSetTabletAutoBrightness(w http.ResponseWriter, r *http.Request) {
-	if brightnessController == nil {
-		http.Error(w, "Auto-brightness not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	var req struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	brightnessController.SetEnabled(req.Enabled)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"enabled": req.Enabled,
-	})
-}
-
-// handleTabletProximity receives proximity sensor data from HCC app
+// handleTabletProximity receives proximity sensor data from the app
 func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Near        bool `json:"near"`
@@ -4855,46 +4658,20 @@ func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 		tabletIdleTimeout = time.Duration(req.IdleTimeout) * time.Second
 	}
 
-	// Handle screen wake/sleep based on proximity
+	// Track proximity state changes
 	if req.Near && !wasNear {
-		// Someone approached - wake the screen
-		sensorState.ScreenIdleAt = time.Time{} // clear idle timer
+		// Someone approached - clear idle timer
+		sensorState.ScreenIdleAt = time.Time{}
 		sensorState.Unlock()
 		log.Println("Tablet proximity: someone approached")
-		if tabletClient != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			tabletClient.WakeScreen(ctx)
-		}
-		// Broadcast to dismiss screensaver on all connected clients
+		// Broadcast wake event to all connected clients
 		if wsHub != nil {
-			log.Println("Broadcasting proximity_wake to WebSocket clients")
 			wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
-			// Re-broadcast after a delay to catch clients that reconnect after screen wake
-			go func() {
-				time.Sleep(2 * time.Second)
-				log.Println("Re-broadcasting proximity_wake to WebSocket clients")
-				wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
-			}()
 		}
 	} else if !req.Near && wasNear {
 		// Someone left - start idle timer
 		sensorState.ScreenIdleAt = time.Now().Add(tabletIdleTimeout)
 		sensorState.Unlock()
-	} else if !req.Near {
-		// Still no one near - check if idle timer expired
-		idleAt := sensorState.ScreenIdleAt
-		sensorState.Unlock()
-		if !idleAt.IsZero() && time.Now().After(idleAt) {
-			if tabletClient != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				tabletClient.SleepScreen(ctx)
-			}
-			sensorState.Lock()
-			sensorState.ScreenIdleAt = time.Time{} // clear after sleeping
-			sensorState.Unlock()
-		}
 	} else {
 		sensorState.Unlock()
 	}
@@ -4905,7 +4682,7 @@ func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTabletLight receives light sensor data from HCC app
+// handleTabletLight receives light sensor data from the app
 func handleTabletLight(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Lux float64 `json:"lux"`
@@ -4920,50 +4697,10 @@ func handleTabletLight(w http.ResponseWriter, r *http.Request) {
 	sensorState.LastLightAt = time.Now()
 	sensorState.Unlock()
 
-	// Adjust brightness based on light level if auto-brightness is enabled
-	if tabletClient != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		// Map lux to brightness (0-255)
-		// 0-10 lux: dim room -> 10-30 brightness
-		// 10-100 lux: indoor -> 30-100 brightness
-		// 100-1000 lux: bright indoor -> 100-200 brightness
-		// 1000+ lux: direct sunlight -> 200-255 brightness
-		brightness := luxToBrightness(req.Lux)
-		tabletClient.SetBrightness(ctx, brightness)
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":    true,
-		"brightness": luxToBrightness(req.Lux),
+		"success": true,
 	})
-}
-
-// luxToBrightness maps light level to screen brightness (0-255)
-func luxToBrightness(lux float64) int {
-	if lux <= 0 {
-		return 10
-	}
-	if lux < 10 {
-		// Dim room: 10-30
-		return 10 + int(lux*2)
-	}
-	if lux < 100 {
-		// Indoor: 30-100
-		return 30 + int((lux-10)*0.78)
-	}
-	if lux < 1000 {
-		// Bright indoor: 100-200
-		return 100 + int((lux-100)*0.11)
-	}
-	// Direct sunlight: 200-255
-	brightness := 200 + int((lux-1000)*0.005)
-	if brightness > 255 {
-		brightness = 255
-	}
-	return brightness
 }
 
 // handleGetSensorState returns the current sensor state
@@ -4982,180 +4719,37 @@ func handleGetSensorState(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTabletAdbPort handles dynamic ADB port updates from the companion app
-func handleTabletAdbPort(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Port int `json:"port"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if req.Port < 1 || req.Port > 65535 {
-		http.Error(w, "Invalid port number", http.StatusBadRequest)
-		return
-	}
-
-	if tabletClient == nil {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Get current address and extract IP
-	currentAddr := tabletClient.GetAddress()
-	ip := currentAddr
-	if idx := strings.LastIndex(currentAddr, ":"); idx != -1 {
-		ip = currentAddr[:idx]
-	}
-
-	// Build new address with reported port
-	newAddr := fmt.Sprintf("%s:%d", ip, req.Port)
-
-	log.Printf("Tablet reported ADB port %d, updating connection to %s", req.Port, newAddr)
-
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-
-	if err := tabletClient.SetAddress(ctx, newAddr); err != nil {
-		log.Printf("Failed to update ADB address: %v", err)
-		http.Error(w, "Failed to connect to new port: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Successfully connected to tablet at %s", newAddr)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"address": newAddr,
-	})
-}
-
-// getTabletCommandServerURL returns the tablet's command server URL (port 8888)
-func getTabletCommandServerURL() string {
-	if tabletClient == nil {
-		return ""
-	}
-	currentAddr := tabletClient.GetAddress()
-	ip := currentAddr
-	if idx := strings.LastIndex(currentAddr, ":"); idx != -1 {
-		ip = currentAddr[:idx]
-	}
-	return fmt.Sprintf("http://%s:8888", ip)
-}
-
-// handleExitKiosk sends a request to the tablet to exit kiosk mode
+// handleExitKiosk broadcasts a command to exit kiosk mode via WebSocket
 func handleExitKiosk(w http.ResponseWriter, r *http.Request) {
-	baseURL := getTabletCommandServerURL()
-	if baseURL == "" {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
+	if wsHub != nil {
+		wsHub.Broadcast(websocket.Event{Type: "kiosk_exit"})
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/kiosk/exit", nil)
-	if err != nil {
-		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		http.Error(w, "Failed to contact tablet: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": resp.StatusCode == 200})
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
-// handleTabletReload sends a request to the tablet to reload the WebView
+// handleTabletReload broadcasts a reload command via WebSocket
 func handleTabletReload(w http.ResponseWriter, r *http.Request) {
-	baseURL := getTabletCommandServerURL()
-	if baseURL == "" {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
+	if wsHub != nil {
+		wsHub.Broadcast(websocket.Event{Type: "tablet_reload"})
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/reload", nil)
-	if err != nil {
-		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		http.Error(w, "Failed to contact tablet: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": resp.StatusCode == 200})
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
-// wakeTablet sends a wake request to the tablet to turn on screen and dismiss screensaver
+// wakeTablet broadcasts a wake event via WebSocket to dismiss screensaver
 // This is called asynchronously when doorbell events occur
 func wakeTablet() {
-	baseURL := getTabletCommandServerURL()
-	if baseURL == "" {
-		log.Println("Cannot wake tablet: not configured")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/wake", nil)
-	if err != nil {
-		log.Printf("Failed to create wake request: %v", err)
-		return
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to wake tablet: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		log.Println("Tablet wake request sent successfully")
-	} else {
-		log.Printf("Tablet wake request failed with status: %d", resp.StatusCode)
+	if wsHub != nil {
+		log.Println("Broadcasting tablet_wake to WebSocket clients")
+		wsHub.Broadcast(websocket.Event{Type: "tablet_wake"})
 	}
 }
 
+// handleGetTabletTheme returns the theme configuration
 func handleGetTabletTheme(w http.ResponseWriter, r *http.Request) {
-	baseURL := getTabletCommandServerURL()
-	if baseURL == "" {
-		http.Error(w, "Tablet not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/theme", nil)
-	if err != nil {
-		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		http.Error(w, "Failed to contact tablet: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "application/json")
-	io.Copy(w, resp.Body)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"theme": "dark",
+	})
 }

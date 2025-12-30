@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -ldflags="-s -w" -o server ./cmd/ser
 # Runtime stage
 FROM alpine:3.21
 
-RUN apk --no-cache add ca-certificates tzdata android-tools nmap
+RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
