@@ -4,6 +4,12 @@ All notable changes to the Android sensor app will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Spotify Launch Logic**
+  - Changed `launchSpotifyQuickly()` to check local process FIRST instead of API
+  - Prevents false positives from other devices showing as "active"
+  - Only checks API for active devices after confirming Spotify isn't running locally
+
 ## [1.3.0] - 2025-12-30
 
 ### Added
