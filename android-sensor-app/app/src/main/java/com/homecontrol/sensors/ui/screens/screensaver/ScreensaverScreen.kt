@@ -246,27 +246,40 @@ private fun WeatherOverlay(
     icon: String,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Row(
         modifier = modifier,
-        horizontalAlignment = Alignment.End
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "${temperature.roundToInt()}°",
-            style = TextStyle(
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Light,
-                color = Color.White,
-                shadow = textOutlineShadow
-            )
+        // Weather icon
+        AsyncImage(
+            model = "${serverUrl}icon/$icon",
+            contentDescription = condition,
+            modifier = Modifier.size(56.dp),
+            contentScale = ContentScale.Fit
         )
-        Text(
-            text = condition,
-            style = TextStyle(
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.9f),
-                shadow = textOutlineShadow
+
+        Column(
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                text = "${temperature.roundToInt()}°",
+                style = TextStyle(
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Light,
+                    color = Color.White,
+                    shadow = textOutlineShadow
+                )
             )
-        )
+            Text(
+                text = condition,
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    color = Color.White.copy(alpha = 0.9f),
+                    shadow = textOutlineShadow
+                )
+            )
+        }
     }
 }
 

@@ -390,7 +390,7 @@ val smartHomeNavItems = listOf(
     ),
     DrawerNavItem(
         modal = SmartHomeModal.Media,
-        label = "Media",
+        label = "Entertainment",
         icon = Icons.Filled.Tv
     ),
     DrawerNavItem(
@@ -502,7 +502,7 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
                     SmartHomeModal.Lights -> "hue"
                     SmartHomeModal.Music -> "Spotify"
                     SmartHomeModal.Cameras -> "Cameras"
-                    SmartHomeModal.Media -> "Media"
+                    SmartHomeModal.Media -> "Entertainment"
                     SmartHomeModal.Settings -> "Settings"
                     null -> ""
                 },
@@ -665,11 +665,11 @@ private fun SmartHomeDrawerContent(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Filled.SmartToy,
+                Image(
+                    painter = painterResource(id = R.drawable.ic_house_signal),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp),
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
@@ -694,19 +694,43 @@ private fun SmartHomeDrawerContent(
 
         // Smart home items
         smartHomeNavItems.forEach { item ->
-            if (item.modal == SmartHomeModal.Music) {
-                // Special Spotify drawer item with logo
-                SpotifyDrawerItem(
-                    selected = false,
-                    onClick = { onItemClick(item.modal) }
-                )
-            } else {
-                DrawerItem(
-                    icon = item.icon,
-                    label = item.label,
-                    selected = false,
-                    onClick = { onItemClick(item.modal) }
-                )
+            when (item.modal) {
+                SmartHomeModal.Music -> {
+                    // Special Spotify drawer item with logo
+                    SpotifyDrawerItem(
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
+                SmartHomeModal.Lights -> {
+                    // Special Philips Hue drawer item with logo
+                    PhilipsHueDrawerItem(
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
+                SmartHomeModal.Cameras -> {
+                    // Special Amcrest drawer item with logo
+                    AmcrestDrawerItem(
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
+                SmartHomeModal.Media -> {
+                    // Special Entertainment drawer item with icon
+                    EntertainmentDrawerItem(
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
+                else -> {
+                    DrawerItem(
+                        icon = item.icon,
+                        label = item.label,
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
             }
         }
 
@@ -802,6 +826,119 @@ private fun SpotifyDrawerItem(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = SpotifyGreen
+        )
+    }
+}
+
+// Philips Hue brand color
+private val PhilipsHueOrange = Color(0xFFFFB700)
+
+@Composable
+private fun PhilipsHueDrawerItem(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        PhilipsHueOrange.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_hue_lightbulb),
+            contentDescription = "Hue Lights",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Image(
+            painter = painterResource(id = R.drawable.ic_philipshue),
+            contentDescription = "Philips Hue",
+            modifier = Modifier.height(16.dp)
+        )
+    }
+}
+
+// Amcrest brand color
+private val AmcrestBlue = Color(0xFF091D40)
+
+@Composable
+private fun AmcrestDrawerItem(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        AmcrestBlue.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_amcrest),
+            contentDescription = "Amcrest Cameras",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = "Cameras",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = AmcrestBlue
+        )
+    }
+}
+
+// Entertainment purple color
+private val EntertainmentPurple = Color(0xFF9C27B0)
+
+@Composable
+private fun EntertainmentDrawerItem(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        EntertainmentPurple.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_photo_film_music),
+            contentDescription = "Entertainment",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = "Entertainment",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = EntertainmentPurple
         )
     }
 }
