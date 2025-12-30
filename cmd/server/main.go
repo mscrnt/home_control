@@ -104,10 +104,10 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleCalendars    []string
-	GooglePlacesAPIKey string
-	OpenWeatherAPIKey  string
-	WeatherLat         float64
-	WeatherLon         float64
+	GooglePlacesAPIKey  string
+	GoogleWeatherAPIKey string
+	WeatherLat          float64
+	WeatherLon          float64
 	Timezone           *time.Location
 	// MQTT settings
 	MQTTHost           string
@@ -319,10 +319,10 @@ func main() {
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleCalendars:    parseEntities(getEnv("GOOGLE_CALENDARS", "")),
-		GooglePlacesAPIKey: getEnv("GOOGLE_PLACES_API_KEY", ""),
-		OpenWeatherAPIKey:  getEnv("OPENWEATHER_API_KEY", ""),
-		WeatherLat:         weatherLat,
-		WeatherLon:         weatherLon,
+		GooglePlacesAPIKey:  getEnv("GOOGLE_PLACES_API_KEY", ""),
+		GoogleWeatherAPIKey: getEnv("GOOGLE_WEATHER_API_KEY", ""),
+		WeatherLat:          weatherLat,
+		WeatherLon:          weatherLon,
 		Timezone:           loc,
 		MQTTHost:           getEnv("MQTT_HOST", ""),
 		MQTTPort:           mqttPort,
@@ -486,13 +486,13 @@ func main() {
 		log.Println("Info: Spotify not configured (optional)")
 	}
 
-	// Initialize Weather client
-	if cfg.OpenWeatherAPIKey != "" && cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
-		weatherClient = weather.NewClient(cfg.OpenWeatherAPIKey, cfg.WeatherLat, cfg.WeatherLon, cfg.Timezone)
+	// Initialize Weather client (Google Weather API - uses API key)
+	if cfg.GoogleWeatherAPIKey != "" && cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
+		weatherClient = weather.NewClient(cfg.GoogleWeatherAPIKey, cfg.WeatherLat, cfg.WeatherLon, cfg.Timezone)
 		weatherClient.Start()
 		log.Printf("Weather client initialized for coordinates (%.4f, %.4f)", cfg.WeatherLat, cfg.WeatherLon)
-	} else if cfg.OpenWeatherAPIKey != "" {
-		log.Println("Warning: WEATHER_LAT and WEATHER_LON required for weather. Set your coordinates.")
+	} else if cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
+		log.Println("Warning: GOOGLE_WEATHER_API_KEY not set. Weather will not be available.")
 	}
 
 	// Initialize WebSocket hub
@@ -916,7 +916,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		"PrevDate":          prevDate,
 		"NextDate":          nextDate,
 		"TodayDate":         todayDate,
-		"WeatherConfigured": appConfig.OpenWeatherAPIKey != "",
+		"WeatherConfigured": weatherClient != nil,
 		"AsyncLoad":         asyncLoad,
 	}
 
@@ -1292,7 +1292,7 @@ func handleHome(cfg Config) http.HandlerFunc {
 		data := map[string]interface{}{
 			"Title":             "Home",
 			"Groups":            groups,
-			"WeatherConfigured": appConfig.OpenWeatherAPIKey != "",
+			"WeatherConfigured": weatherClient != nil,
 			"Cameras":           cameras,
 		}
 		getTemplate("home").ExecuteTemplate(w, "base", data)

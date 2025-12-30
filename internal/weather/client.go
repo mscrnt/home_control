@@ -10,16 +10,25 @@ import (
 	"time"
 )
 
-// Client handles OpenWeatherMap API requests with caching
+// Client handles Google Weather API requests with tiered caching
+// Uses API key authentication (same key as Google Places API)
+// Caching strategy to stay within 1000 calls/month:
+// - Current conditions: refresh hourly (720/month)
+// - Daily forecast: refresh every 12 hours (60/month)
+// - Hourly forecast: refresh every 6 hours (120/month)
+// Total: ~900 calls/month
 type Client struct {
-	apiKey    string
-	lat       float64
-	lon       float64
-	units     string
-	cache     *WeatherData
-	cacheMu   sync.RWMutex
-	lastFetch time.Time
-	timezone  *time.Location
+	apiKey   string
+	lat      float64
+	lon      float64
+	timezone *time.Location
+
+	// Cached data with separate timestamps
+	cache       *WeatherData
+	cacheMu     sync.RWMutex
+	lastCurrent time.Time
+	lastDaily   time.Time
+	lastHourly  time.Time
 }
 
 // WeatherData represents the cached weather information
@@ -71,163 +80,332 @@ type DailyWeather struct {
 	Summary   string  `json:"summary"`
 }
 
-// OpenWeatherMap 2.5 API response structures (FREE tier)
-type owmCurrentResponse struct {
-	Main struct {
-		Temp      float64 `json:"temp"`
-		FeelsLike float64 `json:"feels_like"`
-		Humidity  int     `json:"humidity"`
-	} `json:"main"`
-	Wind struct {
-		Speed float64 `json:"speed"`
-		Deg   int     `json:"deg"`
-	} `json:"wind"`
-	Clouds struct {
-		All int `json:"all"`
-	} `json:"clouds"`
-	Weather []struct {
-		Main        string `json:"main"`
-		Description string `json:"description"`
-		Icon        string `json:"icon"`
-	} `json:"weather"`
-	Sys struct {
-		Sunrise int64 `json:"sunrise"`
-		Sunset  int64 `json:"sunset"`
-	} `json:"sys"`
-	Timezone int    `json:"timezone"`
-	Name     string `json:"name"`
+// Google Weather API response structures
+type googleTimeZone struct {
+	ID string `json:"id"`
 }
 
-type owmForecastResponse struct {
-	List []struct {
-		Dt   int64 `json:"dt"`
-		Main struct {
-			Temp      float64 `json:"temp"`
-			FeelsLike float64 `json:"feels_like"`
-			TempMin   float64 `json:"temp_min"`
-			TempMax   float64 `json:"temp_max"`
-			Humidity  int     `json:"humidity"`
-		} `json:"main"`
-		Weather []struct {
-			Main        string `json:"main"`
-			Description string `json:"description"`
-			Icon        string `json:"icon"`
-		} `json:"weather"`
-		Pop float64 `json:"pop"`
-	} `json:"list"`
-	City struct {
-		Sunrise  int64 `json:"sunrise"`
-		Sunset   int64 `json:"sunset"`
-		Timezone int   `json:"timezone"`
-	} `json:"city"`
+type googleCurrentResponse struct {
+	CurrentTime          string                 `json:"currentTime"`
+	TimeZone             googleTimeZone         `json:"timeZone"`
+	IsDaytime            bool                   `json:"isDaytime"`
+	WeatherCondition     googleWeatherCondition `json:"weatherCondition"`
+	Temperature          googleTemperature      `json:"temperature"`
+	FeelsLikeTemperature googleTemperature      `json:"feelsLikeTemperature"`
+	Humidity             googlePercentage       `json:"humidity"`
+	Wind                 googleWind             `json:"wind"`
+	UvIndex              int                    `json:"uvIndex"`
+	CloudCover           int                    `json:"cloudCover"`
 }
 
-// NewClient creates a new weather client
+type googleForecastDaysResponse struct {
+	ForecastDays []googleDayForecast `json:"forecastDays"`
+	TimeZone     googleTimeZone      `json:"timeZone"`
+}
+
+type googleDayForecast struct {
+	Interval          googleInterval        `json:"interval"`
+	DaytimeForecast   googleDayPartForecast `json:"daytimeForecast"`
+	NighttimeForecast googleDayPartForecast `json:"nighttimeForecast"`
+	MaxTemperature    googleTemperature     `json:"maxTemperature"`
+	MinTemperature    googleTemperature     `json:"minTemperature"`
+	SunEvents         googleSunEvents       `json:"sunEvents"`
+}
+
+type googleDayPartForecast struct {
+	WeatherCondition         googleWeatherCondition `json:"weatherCondition"`
+	Humidity                 googlePercentage       `json:"humidity"`
+	Wind                     googleWind             `json:"wind"`
+	PrecipitationProbability googlePercentage       `json:"precipitationProbability"`
+}
+
+type googleForecastHoursResponse struct {
+	ForecastHours []googleHourForecast `json:"forecastHours"`
+	TimeZone      googleTimeZone       `json:"timeZone"`
+}
+
+type googleHourForecast struct {
+	Interval                 googleInterval         `json:"interval"`
+	WeatherCondition         googleWeatherCondition `json:"weatherCondition"`
+	Temperature              googleTemperature      `json:"temperature"`
+	FeelsLikeTemperature     googleTemperature      `json:"feelsLikeTemperature"`
+	Humidity                 googlePercentage       `json:"humidity"`
+	PrecipitationProbability googlePercentage       `json:"precipitationProbability"`
+	IsDaytime                bool                   `json:"isDaytime"`
+}
+
+type googleWeatherCondition struct {
+	IconBaseUri string `json:"iconBaseUri"`
+	Description struct {
+		Text string `json:"text"`
+	} `json:"description"`
+	Type string `json:"type"`
+}
+
+type googleTemperature struct {
+	Degrees float64 `json:"degrees"`
+	Unit    string  `json:"unit"`
+}
+
+type googlePercentage struct {
+	Percent int `json:"percent"`
+}
+
+type googleWind struct {
+	Speed struct {
+		Value float64 `json:"value"`
+		Unit  string  `json:"unit"`
+	} `json:"speed"`
+	Direction struct {
+		Degrees int `json:"degrees"`
+	} `json:"direction"`
+}
+
+type googleInterval struct {
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
+}
+
+type googleSunEvents struct {
+	Sunrise string `json:"sunrise"`
+	Sunset  string `json:"sunset"`
+}
+
+// Refresh intervals
+const (
+	currentRefreshInterval = 1 * time.Hour  // Refresh current conditions hourly
+	dailyRefreshInterval   = 12 * time.Hour // Refresh daily forecast every 12 hours
+	hourlyRefreshInterval  = 6 * time.Hour  // Refresh hourly forecast every 6 hours
+)
+
+// NewClient creates a new weather client using API key authentication
 func NewClient(apiKey string, lat, lon float64, timezone *time.Location) *Client {
 	return &Client{
 		apiKey:   apiKey,
 		lat:      lat,
 		lon:      lon,
-		units:    "imperial", // Fahrenheit
 		timezone: timezone,
+		cache:    &WeatherData{},
 	}
 }
 
 // Start begins the background refresh scheduler
 func (c *Client) Start() {
-	// Initial fetch
-	if err := c.Refresh(); err != nil {
+	// Initial fetch of all data
+	if err := c.RefreshAll(); err != nil {
 		log.Printf("Initial weather fetch failed: %v", err)
 	}
 
-	// Start scheduler
-	go c.runScheduler()
+	// Start separate schedulers for tiered caching
+	go c.runCurrentScheduler()
+	go c.runDailyScheduler()
+	go c.runHourlyScheduler()
 }
 
-// runScheduler runs the refresh at scheduled times (1am, 6am, 3pm)
-func (c *Client) runScheduler() {
-	for {
-		now := time.Now().In(c.timezone)
-		nextRefresh := c.getNextRefreshTime(now)
-		duration := nextRefresh.Sub(now)
+// runCurrentScheduler refreshes current conditions every hour
+func (c *Client) runCurrentScheduler() {
+	ticker := time.NewTicker(currentRefreshInterval)
+	defer ticker.Stop()
 
-		log.Printf("Weather: next refresh at %s (in %v)", nextRefresh.Format("3:04 PM"), duration.Round(time.Minute))
-
-		timer := time.NewTimer(duration)
-		<-timer.C
-
-		if err := c.Refresh(); err != nil {
-			log.Printf("Scheduled weather refresh failed: %v", err)
+	for range ticker.C {
+		if err := c.refreshCurrent(); err != nil {
+			log.Printf("Current weather refresh failed: %v", err)
 		}
 	}
 }
 
-// getNextRefreshTime calculates the next refresh time (1am, 6am, or 3pm)
-func (c *Client) getNextRefreshTime(now time.Time) time.Time {
-	refreshHours := []int{1, 6, 15} // 1am, 6am, 3pm
+// runDailyScheduler refreshes daily forecast every 12 hours
+func (c *Client) runDailyScheduler() {
+	ticker := time.NewTicker(dailyRefreshInterval)
+	defer ticker.Stop()
 
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, c.timezone)
-
-	for _, hour := range refreshHours {
-		candidate := today.Add(time.Duration(hour) * time.Hour)
-		if candidate.After(now) {
-			return candidate
+	for range ticker.C {
+		if err := c.refreshDaily(); err != nil {
+			log.Printf("Daily forecast refresh failed: %v", err)
 		}
 	}
-
-	// All refresh times today have passed, return 1am tomorrow
-	return today.Add(25 * time.Hour) // 1am next day
 }
 
-// Refresh fetches fresh weather data from OpenWeatherMap (FREE 2.5 API)
+// runHourlyScheduler refreshes hourly forecast every 6 hours
+func (c *Client) runHourlyScheduler() {
+	ticker := time.NewTicker(hourlyRefreshInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := c.refreshHourly(); err != nil {
+			log.Printf("Hourly forecast refresh failed: %v", err)
+		}
+	}
+}
+
+// RefreshAll fetches all weather data (used for initial load)
+func (c *Client) RefreshAll() error {
+	log.Printf("Weather API: fetching all data for lat=%.4f, lon=%.4f", c.lat, c.lon)
+
+	var wg sync.WaitGroup
+	var currentErr, dailyErr, hourlyErr error
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		currentErr = c.refreshCurrent()
+	}()
+	go func() {
+		defer wg.Done()
+		dailyErr = c.refreshDaily()
+	}()
+	go func() {
+		defer wg.Done()
+		hourlyErr = c.refreshHourly()
+	}()
+	wg.Wait()
+
+	// Return first error encountered
+	if currentErr != nil {
+		return currentErr
+	}
+	if dailyErr != nil {
+		return dailyErr
+	}
+	return hourlyErr
+}
+
+// Refresh is the legacy method name - now calls RefreshAll
 func (c *Client) Refresh() error {
-	log.Printf("Weather API request: lat=%.4f, lon=%.4f", c.lat, c.lon)
+	return c.RefreshAll()
+}
 
-	// Fetch current weather
-	currentURL := fmt.Sprintf(
-		"https://api.openweathermap.org/data/2.5/weather?lat=%f&lon=%f&units=%s&appid=%s",
-		c.lat, c.lon, c.units, c.apiKey,
+// refreshCurrent fetches current conditions from Google Weather API
+func (c *Client) refreshCurrent() error {
+	url := fmt.Sprintf(
+		"https://weather.googleapis.com/v1/currentConditions:lookup?key=%s&location.latitude=%f&location.longitude=%f&unitsSystem=IMPERIAL",
+		c.apiKey, c.lat, c.lon,
 	)
 
-	currentResp, err := c.fetchURL(currentURL)
+	body, err := c.doRequest(url)
 	if err != nil {
-		return fmt.Errorf("failed to fetch current weather: %w", err)
+		return fmt.Errorf("failed to fetch current conditions: %w", err)
 	}
 
-	var current owmCurrentResponse
-	if err := json.Unmarshal(currentResp, &current); err != nil {
-		return fmt.Errorf("failed to decode current weather: %w", err)
+	var resp googleCurrentResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return fmt.Errorf("failed to decode current conditions: %w", err)
 	}
-
-	// Fetch 5-day forecast
-	forecastURL := fmt.Sprintf(
-		"https://api.openweathermap.org/data/2.5/forecast?lat=%f&lon=%f&units=%s&appid=%s",
-		c.lat, c.lon, c.units, c.apiKey,
-	)
-
-	forecastResp, err := c.fetchURL(forecastURL)
-	if err != nil {
-		return fmt.Errorf("failed to fetch forecast: %w", err)
-	}
-
-	var forecast owmForecastResponse
-	if err := json.Unmarshal(forecastResp, &forecast); err != nil {
-		return fmt.Errorf("failed to decode forecast: %w", err)
-	}
-
-	// Convert to our format
-	data := c.convertResponse(&current, &forecast)
 
 	c.cacheMu.Lock()
-	c.cache = data
-	c.lastFetch = time.Now()
-	c.cacheMu.Unlock()
+	defer c.cacheMu.Unlock()
 
-	log.Printf("Weather updated: %.0f°F, %s", data.Current.Temp, data.Current.Condition)
+	c.cache.Current = CurrentWeather{
+		Temp:      resp.Temperature.Degrees,
+		FeelsLike: resp.FeelsLikeTemperature.Degrees,
+		Humidity:  resp.Humidity.Percent,
+		WindSpeed: resp.Wind.Speed.Value,
+		WindDeg:   resp.Wind.Direction.Degrees,
+		Clouds:    resp.CloudCover,
+		UVI:       float64(resp.UvIndex),
+		Condition: resp.WeatherCondition.Description.Text,
+		Icon:      c.mapConditionToIcon(resp.WeatherCondition.Type, resp.IsDaytime),
+	}
+	c.cache.Timezone = resp.TimeZone.ID
+	c.cache.FetchedAt = time.Now()
+	c.lastCurrent = time.Now()
+
+	log.Printf("Weather updated: %.0f°F, %s", c.cache.Current.Temp, c.cache.Current.Condition)
 	return nil
 }
 
-func (c *Client) fetchURL(url string) ([]byte, error) {
+// refreshDaily fetches daily forecast from Google Weather API
+func (c *Client) refreshDaily() error {
+	url := fmt.Sprintf(
+		"https://weather.googleapis.com/v1/forecast/days:lookup?key=%s&location.latitude=%f&location.longitude=%f&unitsSystem=IMPERIAL",
+		c.apiKey, c.lat, c.lon,
+	)
+
+	body, err := c.doRequest(url)
+	if err != nil {
+		return fmt.Errorf("failed to fetch daily forecast: %w", err)
+	}
+
+	var resp googleForecastDaysResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return fmt.Errorf("failed to decode daily forecast: %w", err)
+	}
+
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+
+	c.cache.Daily = make([]DailyWeather, 0, len(resp.ForecastDays))
+	for _, day := range resp.ForecastDays {
+		startTime, _ := time.Parse(time.RFC3339, day.Interval.StartTime)
+		sunrise, _ := time.Parse(time.RFC3339, day.SunEvents.Sunrise)
+		sunset, _ := time.Parse(time.RFC3339, day.SunEvents.Sunset)
+
+		// Update current weather sunrise/sunset from first day
+		if len(c.cache.Daily) == 0 {
+			c.cache.Current.Sunrise = sunrise.Unix()
+			c.cache.Current.Sunset = sunset.Unix()
+		}
+
+		c.cache.Daily = append(c.cache.Daily, DailyWeather{
+			Time:      startTime.Unix(),
+			TempMin:   day.MinTemperature.Degrees,
+			TempMax:   day.MaxTemperature.Degrees,
+			Humidity:  day.DaytimeForecast.Humidity.Percent,
+			Condition: day.DaytimeForecast.WeatherCondition.Description.Text,
+			Icon:      c.mapConditionToIcon(day.DaytimeForecast.WeatherCondition.Type, true),
+			Pop:       float64(day.DaytimeForecast.PrecipitationProbability.Percent) / 100.0,
+			Sunrise:   sunrise.Unix(),
+			Sunset:    sunset.Unix(),
+			Summary:   day.DaytimeForecast.WeatherCondition.Description.Text,
+		})
+	}
+	c.lastDaily = time.Now()
+
+	log.Printf("Daily forecast updated: %d days", len(c.cache.Daily))
+	return nil
+}
+
+// refreshHourly fetches hourly forecast from Google Weather API
+func (c *Client) refreshHourly() error {
+	url := fmt.Sprintf(
+		"https://weather.googleapis.com/v1/forecast/hours:lookup?key=%s&location.latitude=%f&location.longitude=%f&unitsSystem=IMPERIAL",
+		c.apiKey, c.lat, c.lon,
+	)
+
+	body, err := c.doRequest(url)
+	if err != nil {
+		return fmt.Errorf("failed to fetch hourly forecast: %w", err)
+	}
+
+	var resp googleForecastHoursResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return fmt.Errorf("failed to decode hourly forecast: %w", err)
+	}
+
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+
+	c.cache.Hourly = make([]HourlyWeather, 0, len(resp.ForecastHours))
+	for _, hour := range resp.ForecastHours {
+		startTime, _ := time.Parse(time.RFC3339, hour.Interval.StartTime)
+		c.cache.Hourly = append(c.cache.Hourly, HourlyWeather{
+			Time:      startTime.Unix(),
+			Temp:      hour.Temperature.Degrees,
+			FeelsLike: hour.FeelsLikeTemperature.Degrees,
+			Humidity:  hour.Humidity.Percent,
+			Condition: hour.WeatherCondition.Description.Text,
+			Icon:      c.mapConditionToIcon(hour.WeatherCondition.Type, hour.IsDaytime),
+			Pop:       float64(hour.PrecipitationProbability.Percent) / 100.0,
+		})
+	}
+	c.lastHourly = time.Now()
+
+	log.Printf("Hourly forecast updated: %d hours", len(c.cache.Hourly))
+	return nil
+}
+
+// doRequest makes a GET request to the Google Weather API
+func (c *Client) doRequest(url string) ([]byte, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -246,122 +424,37 @@ func (c *Client) fetchURL(url string) ([]byte, error) {
 	return body, nil
 }
 
-// convertResponse converts OpenWeatherMap 2.5 API responses to our format
-func (c *Client) convertResponse(current *owmCurrentResponse, forecast *owmForecastResponse) *WeatherData {
-	data := &WeatherData{
-		Timezone:  current.Name,
-		FetchedAt: time.Now(),
-	}
-
-	// Current weather
-	if len(current.Weather) > 0 {
-		data.Current = CurrentWeather{
-			Temp:      current.Main.Temp,
-			FeelsLike: current.Main.FeelsLike,
-			Humidity:  current.Main.Humidity,
-			WindSpeed: current.Wind.Speed,
-			WindDeg:   current.Wind.Deg,
-			Clouds:    current.Clouds.All,
-			UVI:       0, // Not available in free API
-			Condition: current.Weather[0].Main,
-			Icon:      c.mapIcon(current.Weather[0].Icon),
-			Sunrise:   current.Sys.Sunrise,
-			Sunset:    current.Sys.Sunset,
+// mapConditionToIcon converts Google Weather condition types to our icon names
+func (c *Client) mapConditionToIcon(conditionType string, isDaytime bool) string {
+	switch conditionType {
+	case "CLEAR":
+		if isDaytime {
+			return "sun"
 		}
-	}
-
-	// Hourly forecast (3-hour intervals from 5-day forecast)
-	for i, item := range forecast.List {
-		if i >= 8 { // ~24 hours (8 x 3-hour intervals)
-			break
-		}
-		if len(item.Weather) > 0 {
-			data.Hourly = append(data.Hourly, HourlyWeather{
-				Time:      item.Dt,
-				Temp:      item.Main.Temp,
-				FeelsLike: item.Main.FeelsLike,
-				Humidity:  item.Main.Humidity,
-				Condition: item.Weather[0].Main,
-				Icon:      c.mapIcon(item.Weather[0].Icon),
-				Pop:       item.Pop,
-			})
-		}
-	}
-
-	// Daily forecast - aggregate from 3-hour data
-	dailyMap := make(map[string]*DailyWeather)
-	for _, item := range forecast.List {
-		if len(item.Weather) == 0 {
-			continue
-		}
-
-		// Get date string for grouping
-		t := time.Unix(item.Dt, 0).In(c.timezone)
-		dateKey := t.Format("2006-01-02")
-
-		if daily, ok := dailyMap[dateKey]; ok {
-			// Update min/max temps
-			if item.Main.TempMin < daily.TempMin {
-				daily.TempMin = item.Main.TempMin
-			}
-			if item.Main.TempMax > daily.TempMax {
-				daily.TempMax = item.Main.TempMax
-			}
-			if item.Pop > daily.Pop {
-				daily.Pop = item.Pop
-			}
-		} else {
-			// Create new daily entry
-			dailyMap[dateKey] = &DailyWeather{
-				Time:      time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, c.timezone).Unix(),
-				TempMin:   item.Main.TempMin,
-				TempMax:   item.Main.TempMax,
-				Humidity:  item.Main.Humidity,
-				Condition: item.Weather[0].Main,
-				Icon:      c.mapIcon(item.Weather[0].Icon),
-				Pop:       item.Pop,
-				Sunrise:   forecast.City.Sunrise,
-				Sunset:    forecast.City.Sunset,
-				Summary:   item.Weather[0].Description,
-			}
-		}
-	}
-
-	// Convert map to sorted slice (up to 5 days)
-	for i := 0; i < 5; i++ {
-		t := time.Now().In(c.timezone).AddDate(0, 0, i)
-		dateKey := t.Format("2006-01-02")
-		if daily, ok := dailyMap[dateKey]; ok {
-			data.Daily = append(data.Daily, *daily)
-		}
-	}
-
-	return data
-}
-
-// mapIcon converts OpenWeatherMap icon codes to our icon names
-func (c *Client) mapIcon(code string) string {
-	switch code {
-	case "01d": // clear sky day
-		return "sun"
-	case "01n": // clear sky night
 		return "moon"
-	case "02d", "02n": // few clouds
-		return "cloud-sun"
-	case "03d", "03n": // scattered clouds
+	case "MOSTLY_CLEAR", "PARTLY_CLOUDY":
+		if isDaytime {
+			return "cloud-sun"
+		}
+		return "cloud-moon"
+	case "MOSTLY_CLOUDY":
 		return "cloud"
-	case "04d", "04n": // broken clouds
+	case "CLOUDY", "OVERCAST":
 		return "clouds"
-	case "09d", "09n": // shower rain
-		return "cloud-rain"
-	case "10d", "10n": // rain
+	case "LIGHT_RAIN", "RAIN", "HEAVY_RAIN", "RAIN_SHOWERS":
 		return "cloud-showers"
-	case "11d", "11n": // thunderstorm
+	case "DRIZZLE", "LIGHT_DRIZZLE":
+		return "cloud-rain"
+	case "THUNDERSTORM", "THUNDERSTORM_WITH_RAIN":
 		return "bolt"
-	case "13d", "13n": // snow
+	case "SNOW", "LIGHT_SNOW", "HEAVY_SNOW", "SNOW_SHOWERS", "BLOWING_SNOW":
 		return "snowflake"
-	case "50d", "50n": // mist
+	case "SLEET", "FREEZING_RAIN", "ICE_PELLETS":
+		return "snowflake"
+	case "FOG", "HAZE", "MIST":
 		return "smog"
+	case "WINDY", "BREEZY":
+		return "wind"
 	default:
 		return "cloud"
 	}
@@ -371,6 +464,11 @@ func (c *Client) mapIcon(code string) string {
 func (c *Client) GetWeather() *WeatherData {
 	c.cacheMu.RLock()
 	defer c.cacheMu.RUnlock()
+
+	// Return nil if no data has been fetched yet
+	if c.cache.FetchedAt.IsZero() {
+		return nil
+	}
 	return c.cache
 }
 
@@ -383,5 +481,5 @@ func (c *Client) IsConfigured() bool {
 func (c *Client) GetLastFetch() time.Time {
 	c.cacheMu.RLock()
 	defer c.cacheMu.RUnlock()
-	return c.lastFetch
+	return c.cache.FetchedAt
 }
