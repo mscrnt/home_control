@@ -24,11 +24,11 @@ object ManagedAppsManager {
     private const val PREFS_NAME = "managed_apps"
     private const val CHECK_INTERVAL_HOURS = 6L
 
-    // Apps to manage with their download URLs
-    // Format: package name to download URL
+    // Apps to manage with their download URLs and expected versions
+    // Format: package name to Pair(download URL, expected version)
     private val MANAGED_APPS = mapOf(
-        "com.spotify.music" to "https://mdm.mscrnt.com/files/spotify-9-1-6-1137.apk",
-        "io.homeassistant.companion.android.minimal" to "https://mdm.mscrnt.com/files/io.homeassistant.companion.android.minimal_19134.apk"
+        "com.spotify.music" to Pair("https://mdm.mscrnt.com/files/spotify-9-1-6-1137.apk", "9.1.6.1137"),
+        "io.homeassistant.companion.android.minimal" to Pair("https://mdm.mscrnt.com/files/io.homeassistant.companion.android.minimal_19134.apk", "2024.12.1-minimal")
     )
 
     private var scheduler: ScheduledExecutorService? = null
@@ -71,9 +71,9 @@ object ManagedAppsManager {
     fun checkAndInstallAll(context: Context) {
         Log.d(TAG, "Checking ${MANAGED_APPS.size} managed apps...")
 
-        for ((packageName, url) in MANAGED_APPS) {
+        for ((packageName, appInfo) in MANAGED_APPS) {
             try {
-                checkAndInstall(context, packageName, url)
+                checkAndInstall(context, packageName, appInfo.first, appInfo.second)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to process $packageName: ${e.message}")
             }
@@ -83,11 +83,18 @@ object ManagedAppsManager {
     /**
      * Check a single app and install/update if needed.
      */
-    private fun checkAndInstall(context: Context, packageName: String, url: String) {
+    private fun checkAndInstall(context: Context, packageName: String, url: String, expectedVersion: String) {
         val installedVersion = getInstalledVersion(context, packageName)
-        Log.d(TAG, "$packageName: installed version = ${installedVersion ?: "not installed"}")
+        Log.d(TAG, "$packageName: installed version = ${installedVersion ?: "not installed"}, expected = $expectedVersion")
 
-        // Download APK to temp file
+        // Compare versions BEFORE downloading
+        if (installedVersion != null && !isNewerVersion(expectedVersion, installedVersion)) {
+            Log.d(TAG, "$packageName: Already up to date (installed: $installedVersion, available: $expectedVersion)")
+            return
+        }
+
+        // Only download if update is needed
+        Log.i(TAG, "$packageName: Update needed from $installedVersion to $expectedVersion")
         val tempFile = File(context.cacheDir, "${packageName}.apk")
 
         try {
@@ -96,17 +103,8 @@ object ManagedAppsManager {
                 return
             }
 
-            // Get version from downloaded APK
-            val apkVersion = getApkVersion(context, tempFile)
-            Log.d(TAG, "$packageName: APK version = ${apkVersion ?: "unknown"}")
-
-            // Compare versions
-            if (installedVersion == null || (apkVersion != null && isNewerVersion(apkVersion, installedVersion))) {
-                Log.i(TAG, "$packageName: Installing/updating from $installedVersion to $apkVersion")
-                installApk(context, tempFile, packageName)
-            } else {
-                Log.d(TAG, "$packageName: Already up to date")
-            }
+            Log.i(TAG, "$packageName: Installing/updating to $expectedVersion")
+            installApk(context, tempFile, packageName)
         } finally {
             // Clean up temp file
             tempFile.delete()
@@ -121,19 +119,6 @@ object ManagedAppsManager {
             val info = context.packageManager.getPackageInfo(packageName, 0)
             info.versionName
         } catch (e: PackageManager.NameNotFoundException) {
-            null
-        }
-    }
-
-    /**
-     * Get version from an APK file.
-     */
-    private fun getApkVersion(context: Context, apkFile: File): String? {
-        return try {
-            val info = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
-            info?.versionName
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get APK version: ${e.message}")
             null
         }
     }
@@ -241,7 +226,7 @@ object ManagedAppsManager {
     /**
      * Get list of managed apps.
      */
-    fun getManagedApps(): Map<String, String> = MANAGED_APPS
+    fun getManagedApps(): Map<String, Pair<String, String>> = MANAGED_APPS
 
     /**
      * Force check and install all apps.

@@ -232,44 +232,28 @@ class NativeActivity : ComponentActivity() {
     }
 
     private fun launchSpotifyQuickly() {
-        // Launch in a coroutine to check API first
+        // Launch in a coroutine to check if Spotify needs to be started
         activityScope.launch {
             try {
-                // First check if Spotify has any active devices via API
-                val devicesResult = spotifyRepository.getDevices()
-                devicesResult.onSuccess { devices ->
-                    if (devices.isNotEmpty()) {
-                        Log.d(TAG, "Spotify already has ${devices.size} active device(s), skipping launch")
-                        spotifyLaunched = true
-                        return@launch
-                    }
-                }
+                Log.d(TAG, "Checking if Spotify needs to be launched on this device...")
 
-                // Also check current playback state
-                val playbackResult = spotifyRepository.getPlayback()
-                playbackResult.onSuccess { playback ->
-                    if (playback.device != null) {
-                        Log.d(TAG, "Spotify has active playback device: ${playback.device.name}, skipping launch")
-                        spotifyLaunched = true
-                        return@launch
-                    }
-                }
-
-                // Fallback: Check if Spotify process is running
+                // FIRST: Check if Spotify is running locally on THIS device
+                // This is the most reliable check - API calls show all devices, not just this one
                 if (isSpotifyRunning()) {
-                    Log.d(TAG, "Spotify process is already running, skipping launch")
+                    Log.d(TAG, "Spotify process is already running on this device, skipping launch")
                     spotifyLaunched = true
                     return@launch
                 }
 
+                // Spotify not running - launch it
                 val spotifyIntent = packageManager.getLaunchIntentForPackage(SPOTIFY_PACKAGE)
                 if (spotifyIntent == null) {
-                    Log.d(TAG, "Spotify not installed")
+                    Log.d(TAG, "Spotify not installed, cannot launch")
                     return@launch
                 }
 
                 spotifyLaunched = true
-                Log.d(TAG, "Launching Spotify in background")
+                Log.i(TAG, "Launching Spotify in background...")
 
                 // Launch Spotify with no animation
                 spotifyIntent.addFlags(
@@ -278,8 +262,9 @@ class NativeActivity : ComponentActivity() {
                 )
                 startActivity(spotifyIntent)
 
-                // Immediately bring our app back (50ms delay - just enough for Spotify to start)
+                // Bring our app back after a short delay (100ms to ensure Spotify starts)
                 Handler(Looper.getMainLooper()).postDelayed({
+                    Log.d(TAG, "Bringing HomeControl back to foreground")
                     val bringBackIntent = Intent(this@NativeActivity, NativeActivity::class.java)
                     bringBackIntent.addFlags(
                         Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
@@ -287,9 +272,9 @@ class NativeActivity : ComponentActivity() {
                     )
                     startActivity(bringBackIntent)
                     overridePendingTransition(0, 0)
-                }, 50)
+                }, 100)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to launch Spotify: ${e.message}")
+                Log.e(TAG, "Failed to launch Spotify: ${e.message}", e)
             }
         }
     }
