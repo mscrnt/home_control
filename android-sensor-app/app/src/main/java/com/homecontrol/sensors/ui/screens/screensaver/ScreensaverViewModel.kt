@@ -3,11 +3,14 @@ package com.homecontrol.sensors.ui.screens.screensaver
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.homecontrol.sensors.data.model.CalendarEvent
 import com.homecontrol.sensors.data.model.DrivePhoto
 import com.homecontrol.sensors.data.model.ScreensaverConfig
 import com.homecontrol.sensors.data.model.SpotifyPlayback
 import com.homecontrol.sensors.data.model.Weather
+import com.homecontrol.sensors.data.repository.CalendarRepository
 import com.homecontrol.sensors.data.repository.DriveRepository
+import com.homecontrol.sensors.data.repository.SettingsRepository
 import com.homecontrol.sensors.data.repository.SpotifyRepository
 import com.homecontrol.sensors.data.repository.WeatherRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,7 +40,9 @@ data class ScreensaverUiState(
     val currentDate: String = "",
     val isTransitioning: Boolean = false,
     val serverUrl: String = "",
-    val usingCachedPhotos: Boolean = false
+    val usingCachedPhotos: Boolean = false,
+    val todayEvents: List<CalendarEvent> = emptyList(),
+    val use24HourFormat: Boolean = false
 )
 
 @HiltViewModel
@@ -45,6 +50,8 @@ class ScreensaverViewModel @Inject constructor(
     private val driveRepository: DriveRepository,
     private val weatherRepository: WeatherRepository,
     private val spotifyRepository: SpotifyRepository,
+    private val calendarRepository: CalendarRepository,
+    private val settingsRepository: SettingsRepository,
     @com.homecontrol.sensors.di.ServerUrl private val serverUrl: String
 ) : ViewModel() {
 
@@ -55,14 +62,25 @@ class ScreensaverViewModel @Inject constructor(
     private var clockJob: Job? = null
     private var weatherJob: Job? = null
     private var spotifyJob: Job? = null
+    private var calendarJob: Job? = null
 
-    private val timeFormatter = DateTimeFormatter.ofPattern("h:mm")
+    private val timeFormatter12 = DateTimeFormatter.ofPattern("h:mm a")
+    private val timeFormatter24 = DateTimeFormatter.ofPattern("HH:mm")
     private val dateFormatter = DateTimeFormatter.ofPattern("EEEE, MMMM d")
 
     init {
+        observeSettings()
         loadInitialData()
         startClockUpdates()
         startSpotifyPolling()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                _uiState.update { it.copy(use24HourFormat = settings.use24HourFormat) }
+            }
+        }
     }
 
     private fun loadInitialData() {
@@ -99,6 +117,25 @@ class ScreensaverViewModel @Inject constructor(
 
             // Load weather
             loadWeather()
+
+            // Load today's events
+            loadTodayEvents()
+        }
+    }
+
+    private suspend fun loadTodayEvents() {
+        val today = java.time.LocalDate.now()
+        val todayStr = today.toString() // Format: YYYY-MM-DD
+        calendarRepository.getEvents("day", todayStr).onSuccess { events ->
+            // Filter to only events that start today, then sort by start time
+            val todayEvents = events.filter { event ->
+                event.start.startsWith(todayStr) ||
+                (event.allDay && event.start.substringBefore("T") == todayStr)
+            }.sortedBy { it.start }
+            _uiState.update { it.copy(todayEvents = todayEvents) }
+            Log.d(TAG, "Loaded ${todayEvents.size} events for today (filtered from ${events.size})")
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to load today's events: ${error.message}")
         }
     }
 
@@ -130,6 +167,8 @@ class ScreensaverViewModel @Inject constructor(
         clockJob = viewModelScope.launch {
             while (true) {
                 val now = LocalDateTime.now()
+                val use24Hour = _uiState.value.use24HourFormat
+                val timeFormatter = if (use24Hour) timeFormatter24 else timeFormatter12
                 _uiState.update {
                     it.copy(
                         currentTime = now.format(timeFormatter),
@@ -234,5 +273,6 @@ class ScreensaverViewModel @Inject constructor(
         clockJob?.cancel()
         weatherJob?.cancel()
         spotifyJob?.cancel()
+        calendarJob?.cancel()
     }
 }

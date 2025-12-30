@@ -39,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.homecontrol.sensors.data.model.CalendarEvent
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @Composable
@@ -80,6 +83,17 @@ fun ScreensaverScreen(
                     )
                 )
         )
+
+        // Events - top left
+        if (uiState.todayEvents.isNotEmpty()) {
+            EventsOverlay(
+                events = uiState.todayEvents,
+                use24HourFormat = uiState.use24HourFormat,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+            )
+        }
 
         // Weather - top right
         uiState.weather?.let { weather ->
@@ -352,6 +366,112 @@ private fun SpotifyOverlay(
                     modifier = Modifier.size(28.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EventsOverlay(
+    events: List<CalendarEvent>,
+    use24HourFormat: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val timeFormatter12 = remember { DateTimeFormatter.ofPattern("h:mm a") }
+    val timeFormatter24 = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    val isoParser = remember { DateTimeFormatter.ISO_DATE_TIME }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.5f))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "Today's Events",
+            style = TextStyle(
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                shadow = textOutlineShadow
+            )
+        )
+
+        events.take(5).forEach { event ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Time or "All Day"
+                val timeText = if (event.allDay) {
+                    "All Day"
+                } else {
+                    try {
+                        val startDateTime = LocalDateTime.parse(event.start, isoParser)
+                        val formatter = if (use24HourFormat) timeFormatter24 else timeFormatter12
+                        startDateTime.format(formatter)
+                    } catch (e: Exception) {
+                        event.start.substringAfter("T").substringBefore(":")
+                            .let { if (it.length <= 5) it else "" }
+                    }
+                }
+
+                Text(
+                    text = timeText,
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color.White.copy(alpha = 0.7f),
+                        shadow = textOutlineShadow
+                    ),
+                    modifier = Modifier.widthIn(min = 60.dp)
+                )
+
+                // Event title with optional color indicator
+                val eventColor = event.color?.let { colorHex ->
+                    try {
+                        Color(android.graphics.Color.parseColor(colorHex))
+                    } catch (e: Exception) { null }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Color dot if event has a color
+                    eventColor?.let { color ->
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(color, CircleShape)
+                        )
+                    }
+
+                    Text(
+                        text = event.title,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.White,
+                            shadow = textOutlineShadow
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        if (events.size > 5) {
+            Text(
+                text = "+${events.size - 5} more",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White.copy(alpha = 0.5f),
+                    shadow = textOutlineShadow
+                )
+            )
         }
     }
 }

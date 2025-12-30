@@ -673,7 +673,7 @@ private fun SmartHomeDrawerContent(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Smart Home",
+                    text = "Home Control",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
