@@ -4,7 +4,26 @@ All notable changes to the Android sensor app will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Screensaver Calendar Events** (`1123b18`)
+  - Today's events displayed in top left corner of screensaver
+  - Shows event time (or "All Day") with event title and color indicator
+  - Respects 12/24 hour time format setting
+  - Limited to 5 events with "+N more" indicator
+
+- **New App Icon** (`1123b18`)
+  - Custom launcher icon with warm orange/coral calendar design
+  - Home icon integrated into calendar grid
+  - Generated all mipmap sizes (mdpi through xxxhdpi)
+
 ### Changed
+- **UI Branding** (`1123b18`)
+  - Renamed "Smart Home" to "Home Control" in navigation drawer
+
+- **Screensaver Time Format** (`1123b18`)
+  - Clock now respects use24HourFormat setting
+  - 12-hour format shows AM/PM indicator
+
 - **Removed KioskActivity** (`d6c5cdf`)
   - Fully transitioned to NativeActivity as the primary UI
   - Removed WebView-based kiosk mode in favor of native Jetpack Compose UI
