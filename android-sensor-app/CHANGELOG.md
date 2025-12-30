@@ -4,11 +4,37 @@ All notable changes to the Android sensor app will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Removed KioskActivity** (`d6c5cdf`)
+  - Fully transitioned to NativeActivity as the primary UI
+  - Removed WebView-based kiosk mode in favor of native Jetpack Compose UI
+  - Moved broadcast constants (ACTION_PROXIMITY, EXTRA_NEAR) from KioskActivity to SensorService
+  - Updated CommandServer to return "not supported" for reload/exit_kiosk endpoints
+  - MainActivity now launches NativeActivity instead of KioskActivity
+
+- **Proximity Detection for Native UI** (`d6c5cdf`)
+  - Added BroadcastReceiver in NativeActivity to listen for proximity events
+  - Screensaver now dismisses when proximity sensor detects presence
+  - Added ProximityCallback interface for clean event propagation to Compose UI
+
+- **Keep Screen On Setting** (`d6c5cdf`)
+  - NativeActivity now observes keepScreenOn setting from preferences
+  - Applies FLAG_KEEP_SCREEN_ON dynamically based on user setting
+  - Disabled SensorService idle check to prevent conflict with FLAG_KEEP_SCREEN_ON
+
+- **WebSocket Connection** (`d6c5cdf`)
+  - WebSocketClient.connect() now called on app startup in HomeControlApp
+  - Ensures real-time events (doorbell, etc.) work immediately after app launch
+
 ### Fixed
 - **Spotify Launch Logic**
   - Changed `launchSpotifyQuickly()` to check local process FIRST instead of API
   - Prevents false positives from other devices showing as "active"
   - Only checks API for active devices after confirming Spotify isn't running locally
+
+### Removed
+- **KioskActivity** - Deleted KioskActivity.kt and activity_kiosk.xml
+- **WebView Mode** - No longer supported; all UI is now native Compose
 
 ## [1.3.0] - 2025-12-30
 
