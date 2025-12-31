@@ -154,6 +154,13 @@ type v2EntertainmentConfig struct {
 	} `json:"metadata"`
 	ConfigurationType string `json:"configuration_type"`
 	Type              string `json:"type"`
+	Channels          []struct {
+		ChannelID int `json:"channel_id"`
+		Members   []struct {
+			Service ResourceRef `json:"service"`
+		} `json:"members"`
+	} `json:"channels"`
+	LightServices []ResourceRef `json:"light_services"` // Direct light references
 }
 
 // V2 Device resource (needed to map devices to lights)
@@ -732,11 +739,26 @@ func (c *Client) GetGroups() ([]*Group, error) {
 	}
 
 	for _, e := range v2ents {
+		// Extract light IDs from light_services or channels
+		var lightIDs []string
+
+		// Try light_services first (direct light references)
+		for _, ls := range e.LightServices {
+			if ls.RType == "light" {
+				lightIDs = append(lightIDs, ls.RID)
+			}
+		}
+
+		// Also check channels for entertainment service references
+		// (entertainment services are linked to lights, but we'd need another API call)
+		// For now, light_services should be sufficient
+
 		group := &Group{
-			ID:    e.ID,
-			Name:  e.Metadata.Name,
-			Type:  "Entertainment",
-			Class: e.ConfigurationType,
+			ID:     e.ID,
+			Name:   e.Metadata.Name,
+			Type:   "Entertainment",
+			Class:  e.ConfigurationType,
+			Lights: lightIDs,
 			Stream: &EntertainmentStream{
 				Active: e.Status == "active",
 			},

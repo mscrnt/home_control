@@ -132,12 +132,20 @@ class HueViewModel @Inject constructor(
             // Load rooms
             hueRepository.getRooms()
                 .onSuccess { rooms ->
+                    // Find "Living Room" index for default tab selection
+                    val filteredRooms = rooms.filter { it.type == "Room" || it.type == "Zone" }
+                    val livingRoomIndex = filteredRooms.indexOfFirst {
+                        it.name.equals("Living Room", ignoreCase = true)
+                    }.takeIf { it >= 0 } ?: 0
+
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             isRefreshing = false,
                             rooms = rooms,
-                            error = null
+                            error = null,
+                            // Only set default tab on initial load (when we had no rooms before)
+                            selectedTabIndex = if (it.rooms.isEmpty()) livingRoomIndex else it.selectedTabIndex
                         )
                     }
                 }

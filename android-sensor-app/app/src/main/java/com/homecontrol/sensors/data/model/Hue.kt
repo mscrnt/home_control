@@ -13,7 +13,8 @@ data class HueRoom(
     @SerialName("class")
     val roomClass: String? = null,
     val lights: List<HueLight> = emptyList(),
-    val scenes: List<HueScene> = emptyList()
+    val scenes: List<HueScene> = emptyList(),
+    val streamingActive: Boolean = false  // For Entertainment areas
 ) {
     // Calculate average brightness from lights
     val brightness: Int

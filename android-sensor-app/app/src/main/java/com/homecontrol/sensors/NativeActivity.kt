@@ -507,9 +507,11 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
                     null -> ""
                 },
                 onClose = { activeModal = null },
-                titleContent = if (activeModal == SmartHomeModal.Music) {
-                    { SpotifyLogoTitle() }
-                } else null
+                titleContent = when (activeModal) {
+                    SmartHomeModal.Music -> { { SpotifyLogoTitle() } }
+                    SmartHomeModal.Lights -> { { PhilipsHueLogoTitle() } }
+                    else -> null
+                }
             ) {
                 when (activeModal) {
                     SmartHomeModal.Home -> HomeScreen()
@@ -644,6 +646,15 @@ private fun SpotifyLogoTitle() {
             color = SpotifyGreen
         )
     }
+}
+
+@Composable
+private fun PhilipsHueLogoTitle() {
+    Image(
+        painter = painterResource(id = R.drawable.ic_philipshue),
+        contentDescription = "Philips Hue",
+        modifier = Modifier.height(28.dp)
+    )
 }
 
 @Composable

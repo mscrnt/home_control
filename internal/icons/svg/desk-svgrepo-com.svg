@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+	 viewBox="0 0 490 490" xml:space="preserve">
+<g>
+	<g id="XMLID_36_">
+		<g>
+			<polygon style="fill:#E7ECED;" points="125,180 125,220 85,220 85,125 85,90 125,90 			"/>
+			<rect x="45" y="90" style="fill:#AFB6BB;" width="40" height="35"/>
+			<rect x="125" y="180" style="fill:#AFB6BB;" width="40" height="40"/>
+			<rect x="45" y="125" style="fill:#FFD248;" width="40" height="95"/>
+			<rect x="125" y="90" style="fill:#FFD248;" width="40" height="90"/>
+			<polygon style="fill:#AFB6BB;" points="480,220 480,260 460,260 425,260 220,260 35,260 10,260 10,220 45,220 85,220 125,220 
+				165,220 			"/>
+			<rect x="425" y="260" style="fill:#E7ECED;" width="35" height="230"/>
+			<polygon style="fill:#AFB6BB;" points="445,115 445,160 370,160 310,160 235,160 235,115 			"/>
+			<rect x="235" y="10" style="fill:#31C0D8;" width="210" height="105"/>
+			<rect x="310" y="160" style="fill:#E7ECED;" width="60" height="40"/>
+			<rect x="35" y="435" style="fill:#AFB6BB;" width="185" height="55"/>
+			<rect x="35" y="350" style="fill:#AFB6BB;" width="185" height="85"/>
+			<rect x="35" y="260" style="fill:#E7ECED;" width="185" height="90"/>
+		</g>
+		<g>
+			<path style="fill:#231F20;" d="M480,210h-85v-20h-15v-20h65c5.523,0,10-4.477,10-10V10c0-5.523-4.477-10-10-10H235
+				c-5.523,0-10,4.477-10,10v150c0,5.523,4.477,10,10,10h65v20h-15v20H175V90c0-5.522-4.477-10-10-10H45c-5.523,0-10,4.478-10,10
+				v120H10c-5.523,0-10,4.477-10,10v40c0,5.522,4.477,10,10,10h15v220h20v-45h165v45h20V270h185v220h20V270h15v220h20V270h10
+				c5.523,0,10-4.478,10-10v-40C490,214.477,485.523,210,480,210z M435,20v85H245V20H435z M245,125h190v25H245V125z M320,170h40v20
+				h-40V170z M135,190h20v20h-20V190z M155,100v70h-20v-70H155z M95,100h20v110H95V100z M75,210H55v-75h20V210z M75,100v15H55v-15
+				H75z M210,340H45v-70h165V340z M45,425v-65h165v65H45z M470,250H20v-20h450V250z"/>
+			<rect x="110" y="295" style="fill:#231F20;" width="35" height="20"/>
+			<rect x="110" y="385" style="fill:#231F20;" width="35" height="20"/>
+		</g>
+	</g>
+</g>
+</svg>
