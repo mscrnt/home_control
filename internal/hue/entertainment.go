@@ -72,11 +72,9 @@ func (e *EntertainmentStreamer) Deactivate() error {
 		return nil
 	}
 
-	// Deactivate via REST API
-	err := e.client.put("/groups/"+e.activeArea, map[string]interface{}{
-		"stream": map[string]interface{}{
-			"active": false,
-		},
+	// Deactivate via V2 REST API
+	err := e.client.doV2Put("entertainment_configuration", e.activeArea, map[string]interface{}{
+		"action": "stop",
 	})
 
 	log.Printf("Entertainment area %s deactivated", e.activeArea)
