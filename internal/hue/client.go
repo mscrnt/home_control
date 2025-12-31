@@ -246,6 +246,7 @@ type Scene struct {
 	Locked      bool     `json:"locked"`
 	Image       string   `json:"image,omitempty"`
 	LastUpdated string   `json:"lastupdated"`
+	Active      bool     `json:"active"` // V2: whether this scene is currently active
 }
 
 // Room is a convenience type for rooms/zones that includes lights
@@ -875,10 +876,11 @@ func (c *Client) GetScenes() ([]*Scene, error) {
 	scenes := make([]*Scene, 0, len(v2scenes))
 	for _, s := range v2scenes {
 		scene := &Scene{
-			ID:    s.ID,
-			Name:  s.Metadata.Name,
-			Type:  "GroupScene",
-			Group: s.Group.RID,
+			ID:     s.ID,
+			Name:   s.Metadata.Name,
+			Type:   "GroupScene",
+			Group:  s.Group.RID,
+			Active: s.Status.Active == "static" || s.Status.Active == "dynamic_palette",
 		}
 
 		// Extract light IDs from actions

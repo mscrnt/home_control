@@ -1,9 +1,14 @@
 package com.homecontrol.sensors.ui.screens.hue
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.homecontrol.sensors.data.api.HueEventClient
+import com.homecontrol.sensors.data.api.HueSSEEvent
+import com.homecontrol.sensors.data.api.HueSSEState
 import com.homecontrol.sensors.data.repository.HueRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,18 +19,113 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HueViewModel @Inject constructor(
-    private val hueRepository: HueRepository
+    private val hueRepository: HueRepository,
+    private val hueEventClient: HueEventClient
 ) : ViewModel() {
+
+    companion object {
+        private const val TAG = "HueViewModel"
+        private const val SSE_DEBOUNCE_MS = 1000L // Debounce SSE-triggered reloads
+    }
 
     private val _uiState = MutableStateFlow(HueUiState())
     val uiState: StateFlow<HueUiState> = _uiState.asStateFlow()
 
+    private var sseJob: Job? = null
+    private var fallbackPollingJob: Job? = null
+    private var pendingReloadJob: Job? = null
+    private var lastReloadTime = 0L
+
     init {
         loadData()
-        startPolling()
+        startSSE()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        hueEventClient.disconnect()
+    }
+
+    private fun startSSE() {
+        // Connect to SSE
+        hueEventClient.connect()
+
+        // Listen for events
+        sseJob = viewModelScope.launch {
+            hueEventClient.events.collect { event ->
+                Log.d(TAG, "SSE event received: $event")
+                when (event) {
+                    is HueSSEEvent.Connected -> {
+                        Log.d(TAG, "SSE connected, refreshing data")
+                        stopFallbackPolling()
+                        loadData()
+                    }
+                    is HueSSEEvent.Disconnected -> {
+                        Log.d(TAG, "SSE disconnected, starting fallback polling")
+                        startFallbackPolling()
+                    }
+                    is HueSSEEvent.LightUpdate,
+                    is HueSSEEvent.GroupUpdate,
+                    is HueSSEEvent.SceneUpdate,
+                    is HueSSEEvent.DataChanged -> {
+                        // Debounce SSE-triggered reloads to prevent API flooding
+                        debouncedReload()
+                    }
+                }
+            }
+        }
+
+        // Also monitor connection state
+        viewModelScope.launch {
+            hueEventClient.state.collect { state ->
+                Log.d(TAG, "SSE state: $state")
+                _uiState.update { it.copy(sseConnected = state == HueSSEState.CONNECTED) }
+            }
+        }
+    }
+
+    private fun startFallbackPolling() {
+        if (fallbackPollingJob?.isActive == true) return
+
+        Log.d(TAG, "Starting fallback polling")
+        fallbackPollingJob = viewModelScope.launch {
+            while (true) {
+                delay(5_000)
+                if (!_uiState.value.isLoading && !_uiState.value.isRefreshing) {
+                    loadData()
+                }
+            }
+        }
+    }
+
+    private fun stopFallbackPolling() {
+        fallbackPollingJob?.cancel()
+        fallbackPollingJob = null
+    }
+
+    private fun debouncedReload() {
+        val now = System.currentTimeMillis()
+
+        // Cancel any pending reload
+        pendingReloadJob?.cancel()
+
+        // If we recently loaded, schedule a delayed reload
+        val timeSinceLastReload = now - lastReloadTime
+        if (timeSinceLastReload < SSE_DEBOUNCE_MS) {
+            pendingReloadJob = viewModelScope.launch {
+                delay(SSE_DEBOUNCE_MS - timeSinceLastReload)
+                Log.d(TAG, "Debounced reload triggered")
+                loadData()
+            }
+        } else {
+            // Enough time has passed, reload immediately
+            Log.d(TAG, "Immediate SSE-triggered reload")
+            loadData()
+        }
     }
 
     fun loadData() {
+        lastReloadTime = System.currentTimeMillis()
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = it.rooms.isEmpty(), error = null) }
 
@@ -67,13 +167,13 @@ class HueViewModel @Inject constructor(
         viewModelScope.launch {
             hueRepository.getSyncBoxStatus(index)
                 .onSuccess { status ->
-                    android.util.Log.d("HueViewModel", "SyncBox $index status loaded: syncActive=${status.syncActive}, mode=${status.mode}")
+                    Log.d(TAG, "SyncBox $index status loaded: syncActive=${status.syncActive}, mode=${status.mode}")
                     _uiState.update {
                         it.copy(syncBoxStatuses = it.syncBoxStatuses + (index to status))
                     }
                 }
                 .onFailure { error ->
-                    android.util.Log.e("HueViewModel", "Failed to load SyncBox $index status: ${error.message}", error)
+                    Log.e(TAG, "Failed to load SyncBox $index status: ${error.message}", error)
                 }
         }
     }
@@ -86,11 +186,12 @@ class HueViewModel @Inject constructor(
     fun toggleRoom(roomId: String) {
         viewModelScope.launch {
             hueRepository.toggleGroup(roomId)
-                .onSuccess { loadData() }
+                .onSuccess { /* SSE will trigger refresh */ }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to toggle room: ${error.message}")
                     }
+                    loadData() // Fallback refresh on error
                 }
         }
     }
@@ -98,11 +199,12 @@ class HueViewModel @Inject constructor(
     fun toggleLight(lightId: String) {
         viewModelScope.launch {
             hueRepository.toggleLight(lightId)
-                .onSuccess { loadData() }
+                .onSuccess { /* SSE will trigger refresh */ }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to toggle light: ${error.message}")
                     }
+                    loadData()
                 }
         }
     }
@@ -110,11 +212,12 @@ class HueViewModel @Inject constructor(
     fun setLightBrightness(lightId: String, brightness: Int) {
         viewModelScope.launch {
             hueRepository.setLightBrightness(lightId, brightness)
-                .onSuccess { loadData() }
+                .onSuccess { /* SSE will trigger refresh */ }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to set brightness: ${error.message}")
                     }
+                    loadData()
                 }
         }
     }
@@ -122,11 +225,12 @@ class HueViewModel @Inject constructor(
     fun setRoomBrightness(roomId: String, brightness: Int) {
         viewModelScope.launch {
             hueRepository.setGroupBrightness(roomId, brightness)
-                .onSuccess { loadData() }
+                .onSuccess { /* SSE will trigger refresh */ }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to set brightness: ${error.message}")
                     }
+                    loadData()
                 }
         }
     }
@@ -134,11 +238,12 @@ class HueViewModel @Inject constructor(
     fun activateScene(sceneId: String) {
         viewModelScope.launch {
             hueRepository.activateScene(sceneId)
-                .onSuccess { loadData() }
+                .onSuccess { /* SSE will trigger refresh */ }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to activate scene: ${error.message}")
                     }
+                    loadData()
                 }
         }
     }
@@ -204,16 +309,5 @@ class HueViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    private fun startPolling() {
-        viewModelScope.launch {
-            while (true) {
-                delay(5_000) // Poll every 5 seconds
-                if (!_uiState.value.isLoading && !_uiState.value.isRefreshing) {
-                    loadData()
-                }
-            }
-        }
     }
 }

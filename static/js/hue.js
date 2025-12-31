@@ -15,6 +15,13 @@ const Hue = (function() {
     let currentBrightnessLightIsOn = false;
     let currentSceneRoomId = null;
 
+    // SSE state
+    let eventSource = null;
+    let sseConnected = false;
+    let lastReloadTime = 0;
+    let pendingReload = null;
+    const SSE_DEBOUNCE_MS = 1000;
+
     // Helper function (uses global escapeHtml)
     function escape(text) {
         return typeof escapeHtml === 'function' ? escapeHtml(text) : text;
@@ -22,6 +29,7 @@ const Hue = (function() {
 
     // ===== Room Data Loading =====
     async function loadRooms() {
+        lastReloadTime = Date.now();
         try {
             const resp = await fetch('/api/hue/rooms');
             if (!resp.ok) {
@@ -809,7 +817,8 @@ const Hue = (function() {
         if (room && room.scenes) {
             const scenesList = document.getElementById('sceneModalList');
             scenesList.innerHTML = room.scenes.map(scene => `
-                <button class="scene-modal-btn" onclick="Hue.activateScene('${scene.id}')">
+                <button class="scene-modal-btn ${scene.active ? 'active' : ''}" onclick="Hue.activateScene('${scene.id}')">
+                    ${scene.active ? '<span class="scene-active-icon">✓</span>' : ''}
                     ${escape(scene.name)}
                 </button>
             `).join('');
@@ -823,14 +832,81 @@ const Hue = (function() {
         currentSceneRoomId = null;
     }
 
+    // ===== SSE Connection =====
+    function connectSSE() {
+        if (eventSource) {
+            eventSource.close();
+        }
+
+        console.log('Connecting to Hue SSE...');
+        eventSource = new EventSource('/api/hue/events');
+
+        eventSource.onopen = function() {
+            console.log('Hue SSE connected');
+            sseConnected = true;
+            debouncedReload(); // Initial load on connect
+        };
+
+        eventSource.onmessage = function(e) {
+            try {
+                const event = JSON.parse(e.data);
+                console.log('Hue SSE event:', event.type);
+                // Debounced reload on any update
+                if (event.type !== 'connected') {
+                    debouncedReload();
+                }
+            } catch (err) {
+                console.log('SSE message:', e.data);
+            }
+        };
+
+        eventSource.onerror = function(err) {
+            console.log('Hue SSE error, will reconnect');
+            sseConnected = false;
+            eventSource.close();
+            // Reconnect after 5 seconds
+            setTimeout(connectSSE, 5000);
+        };
+    }
+
+    function debouncedReload() {
+        const now = Date.now();
+
+        // Cancel any pending reload
+        if (pendingReload) {
+            clearTimeout(pendingReload);
+            pendingReload = null;
+        }
+
+        // If we recently loaded, schedule a delayed reload
+        const timeSinceLastReload = now - lastReloadTime;
+        if (timeSinceLastReload < SSE_DEBOUNCE_MS) {
+            pendingReload = setTimeout(() => {
+                console.log('Debounced Hue reload');
+                loadRooms();
+            }, SSE_DEBOUNCE_MS - timeSinceLastReload);
+        } else {
+            // Enough time has passed, reload immediately
+            loadRooms();
+        }
+    }
+
     // ===== Initialization =====
     function init() {
         // Load initial data
         loadRooms();
         loadSyncBoxes();
 
-        // Refresh Hue state every second
-        setInterval(loadRooms, 1000);
+        // Connect to SSE for real-time updates
+        connectSSE();
+
+        // Fallback: refresh every 10 seconds if SSE is not connected
+        setInterval(() => {
+            if (!sseConnected) {
+                console.log('SSE not connected, polling fallback');
+                loadRooms();
+            }
+        }, 10000);
 
         // Refresh sync box status when entertainment tab is active
         setInterval(() => {

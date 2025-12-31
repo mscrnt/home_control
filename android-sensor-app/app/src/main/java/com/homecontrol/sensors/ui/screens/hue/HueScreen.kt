@@ -505,21 +505,39 @@ private fun ScenesSection(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 scenes.forEach { scene ->
+                    val isActive = scene.active
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { onSceneActivate(scene.id) },
                         shape = RoundedCornerShape(8.dp),
-                        color = HomeControlColors.cardBackground(),
-                        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
-                    ) {
-                        Text(
-                            text = scene.name,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        color = if (isActive) HueOrange.copy(alpha = 0.2f) else HomeControlColors.cardBackground(),
+                        border = BorderStroke(
+                            width = if (isActive) 2.dp else 1.dp,
+                            color = if (isActive) HueOrange else HomeControlColors.cardBorder()
                         )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (isActive) {
+                                Text(
+                                    text = "✓",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = HueOrange
+                                )
+                            }
+                            Text(
+                                text = scene.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isActive) HueOrange else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

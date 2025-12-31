@@ -74,7 +74,8 @@ data class HueLightCtRange(
 data class HueScene(
     val id: String,
     val name: String,
-    val group: String? = null
+    val group: String? = null,
+    val active: Boolean = false // V2: whether this scene is currently active
 )
 
 @Serializable
@@ -82,6 +83,17 @@ data class EntertainmentStatus(
     val active: Boolean,
     @SerialName("active_group")
     val activeGroup: String? = null
+)
+
+// SSE Event from Hue bridge
+@Serializable
+data class HueEvent(
+    val type: String,
+    val id: String,
+    @SerialName("id_v1")
+    val idV1: String? = null,
+    val data: Map<String, kotlinx.serialization.json.JsonElement>? = null,
+    val timestamp: String? = null
 )
 
 @Serializable

@@ -12,5 +12,6 @@ data class HueUiState(
     val expandedRoomId: String? = null,
     val syncBoxes: List<SyncBox> = emptyList(),
     val syncBoxStatuses: Map<Int, SyncBoxStatus> = emptyMap(),
-    val selectedTabIndex: Int = 0
+    val selectedTabIndex: Int = 0,
+    val sseConnected: Boolean = false // Real-time SSE connection status
 )

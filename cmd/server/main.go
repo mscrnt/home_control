@@ -204,6 +204,7 @@ type CalendarWithPrefs struct {
 var haClient *homeassistant.Client
 var hueClient *hue.Client
 var hueStreamer *hue.EntertainmentStreamer
+var hueEventStream *hue.EventStream
 var syncBoxClients []*syncbox.Client
 var calClient *calendar.Client
 var tasksClient *tasks.Client
@@ -370,6 +371,14 @@ func main() {
 		// Initialize entertainment streamer for area switching
 		hueStreamer = hue.NewEntertainmentStreamer(hueClient)
 		log.Println("Hue Entertainment area switching enabled")
+
+		// Initialize SSE event stream from Hue bridge
+		hueEventStream = hue.NewEventStream(hueClient)
+		if err := hueEventStream.Start(); err != nil {
+			log.Printf("Warning: Failed to start Hue event stream: %v", err)
+		} else {
+			log.Println("Hue SSE event stream connected")
+		}
 	} else {
 		log.Println("Info: Hue bridge not configured (optional)")
 	}
@@ -656,6 +665,7 @@ func main() {
 	r.Post("/api/hue/entertainment/{id}/activate", handleActivateEntertainment)
 	r.Post("/api/hue/entertainment/deactivate", handleDeactivateEntertainment)
 	r.Get("/api/hue/entertainment/status", handleGetEntertainmentStatus)
+	r.Get("/api/hue/events", handleHueSSE) // SSE endpoint for real-time updates
 
 	// Sync Box routes
 	r.Get("/api/syncbox", handleGetSyncBoxes)
@@ -3349,6 +3359,66 @@ func handleGetEntertainmentStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
+}
+
+// handleHueSSE handles Server-Sent Events for real-time Hue bridge updates
+func handleHueSSE(w http.ResponseWriter, r *http.Request) {
+	if hueEventStream == nil {
+		http.Error(w, "Hue event stream not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Get flusher
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	// Create channel for this client
+	eventChan := make(chan *hue.HueEvent, 100)
+	done := r.Context().Done()
+
+	// Subscribe to events
+	hueEventStream.Subscribe(func(event *hue.HueEvent) {
+		select {
+		case eventChan <- event:
+		default:
+			// Channel full, drop event
+		}
+	})
+
+	// Send initial connection event
+	fmt.Fprintf(w, "event: connected\ndata: {\"status\":\"connected\"}\n\n")
+	flusher.Flush()
+
+	// Keep-alive ticker
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case event := <-eventChan:
+			data, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
+			flusher.Flush()
+		case <-ticker.C:
+			// Send keep-alive comment
+			fmt.Fprintf(w, ": keepalive\n\n")
+			flusher.Flush()
+		}
+	}
 }
 
 // Sync Box handlers
