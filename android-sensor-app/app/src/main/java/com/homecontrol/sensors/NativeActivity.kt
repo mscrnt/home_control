@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.animation.ValueAnimator
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -15,6 +16,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -81,6 +83,7 @@ import com.homecontrol.sensors.data.repository.AppSettings
 import com.homecontrol.sensors.data.repository.SettingsRepository
 import com.homecontrol.sensors.data.repository.SpotifyRepository
 import com.homecontrol.sensors.data.repository.ThemeMode
+import com.homecontrol.sensors.service.SensorServiceBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -127,17 +130,34 @@ class NativeActivity : ComponentActivity() {
     @Inject
     lateinit var spotifyRepository: SpotifyRepository
 
+    @Inject
+    lateinit var sensorServiceBridge: SensorServiceBridge
+
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var brightnessAnimator: ValueAnimator? = null
 
     // Broadcast receiver for proximity events from SensorService
+    // Note: Proximity now only wakes the screen to screensaver, NOT to main UI
+    // Only touch dismisses the screensaver
     private val proximityReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == SensorService.ACTION_PROXIMITY) {
                 val isNear = intent.getBooleanExtra(SensorService.EXTRA_NEAR, false)
-                Log.d(TAG, "Proximity broadcast received: near=$isNear")
-                if (isNear) {
-                    // Dismiss screensaver via callback
-                    ProximityCallbackHolder.callback?.onProximityChanged(isNear)
+                Log.d(TAG, "Proximity broadcast received: near=$isNear (screen wake only, no screensaver dismiss)")
+                // Proximity events are handled by SensorService for screen wake
+                // We no longer dismiss screensaver on proximity - only touch does that
+            }
+        }
+    }
+
+    // Broadcast receiver for brightness changes from SensorService
+    private val brightnessReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == SensorService.ACTION_BRIGHTNESS_CHANGE) {
+                val brightness = intent.getFloatExtra(SensorService.EXTRA_BRIGHTNESS, -1f)
+                if (brightness in 0f..1f) {
+                    Log.d(TAG, "Brightness broadcast received: ${"%.0f".format(brightness * 100)}%")
+                    smoothlySetBrightness(brightness)
                 }
             }
         }
@@ -176,6 +196,19 @@ class NativeActivity : ComponentActivity() {
         }
         Log.d(TAG, "Proximity receiver registered")
 
+        // Register broadcast receiver for brightness changes
+        val brightnessFilter = IntentFilter(SensorService.ACTION_BRIGHTNESS_CHANGE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(brightnessReceiver, brightnessFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(brightnessReceiver, brightnessFilter)
+        }
+        Log.d(TAG, "Brightness receiver registered")
+
+        // Start the sensor service bridge to receive wake-to-screensaver events
+        sensorServiceBridge.start()
+        Log.d(TAG, "SensorServiceBridge started")
+
         // Launch Spotify quickly in background (only once per app session)
         if (!spotifyLaunched) {
             launchSpotifyQuickly()
@@ -195,37 +228,52 @@ class NativeActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> systemDarkTheme
             }
 
-            // Apply keep screen on setting
-            LaunchedEffect(settings.keepScreenOn) {
-                if (settings.keepScreenOn) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    Log.d(TAG, "Keep screen on: enabled")
-                } else {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    Log.d(TAG, "Keep screen on: disabled")
-                }
+            // Update SensorService with settings changes
+            LaunchedEffect(settings.proximityTimeoutMinutes) {
+                sensorServiceBridge.updateProximityTimeout(settings.proximityTimeoutMinutes)
+                Log.d(TAG, "Updated proximity timeout: ${settings.proximityTimeoutMinutes} minutes")
+            }
+
+            LaunchedEffect(settings.adaptiveBrightness) {
+                sensorServiceBridge.updateAdaptiveBrightness(settings.adaptiveBrightness)
+                Log.d(TAG, "Updated adaptive brightness: ${settings.adaptiveBrightness}")
             }
 
             HomeControlTheme(darkTheme = darkTheme) {
-                MainContent(idleTimeoutSeconds = settings.idleTimeout)
+                MainContent(
+                    idleTimeoutSeconds = settings.idleTimeout,
+                    wakeToScreensaver = sensorServiceBridge.wakeToScreensaver
+                )
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        brightnessAnimator?.cancel()
         try {
             unregisterReceiver(proximityReceiver)
             Log.d(TAG, "Proximity receiver unregistered")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to unregister proximity receiver: ${e.message}")
         }
+        try {
+            unregisterReceiver(brightnessReceiver)
+            Log.d(TAG, "Brightness receiver unregistered")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister brightness receiver: ${e.message}")
+        }
+        sensorServiceBridge.stop()
+        Log.d(TAG, "SensorServiceBridge stopped")
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
-        // Reset idle timer on any touch
+        // Reset timers on any touch
         if (ev?.action == MotionEvent.ACTION_DOWN) {
+            // Reset idle timer (for screensaver)
             TouchCallbackHolder.callback?.onUserInteraction()
+            // Also reset proximity timer (to prevent screen from turning off)
+            sensorServiceBridge.resetProximityTimer()
         }
         return super.dispatchTouchEvent(ev)
     }
@@ -292,6 +340,33 @@ class NativeActivity : ComponentActivity() {
             Log.d(TAG, "Adjusted display density to $targetDpi dpi (scale factor: $scaleFactor)")
         } else {
             Log.d(TAG, "Display density already at ${displayMetrics.densityDpi} dpi, no adjustment needed")
+        }
+    }
+
+    /**
+     * Smoothly animate screen brightness to target value over 500ms.
+     * Uses ValueAnimator for smooth fade transitions.
+     */
+    private fun smoothlySetBrightness(target: Float) {
+        // Get current brightness (-1 means system default)
+        val current = window.attributes.screenBrightness.let {
+            if (it < 0) 0.5f else it  // Default to 50% if using system brightness
+        }
+
+        // Cancel any ongoing animation
+        brightnessAnimator?.cancel()
+
+        // Animate brightness change
+        brightnessAnimator = ValueAnimator.ofFloat(current, target).apply {
+            duration = 500  // 500ms smooth transition
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animator ->
+                val brightness = animator.animatedValue as Float
+                val params = window.attributes
+                params.screenBrightness = brightness
+                window.attributes = params
+            }
+            start()
         }
     }
 
@@ -401,7 +476,10 @@ val smartHomeNavItems = listOf(
 )
 
 @Composable
-fun MainContent(idleTimeoutSeconds: Int = 60) {
+fun MainContent(
+    idleTimeoutSeconds: Int = 60,
+    wakeToScreensaver: kotlinx.coroutines.flow.SharedFlow<Unit>? = null
+) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -411,6 +489,14 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
     // Screensaver state
     var showScreensaver by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    // Listen for wake-to-screensaver events from SensorService
+    LaunchedEffect(wakeToScreensaver) {
+        wakeToScreensaver?.collect {
+            Log.d("MainContent", "Wake to screensaver event received - showing screensaver")
+            showScreensaver = true
+        }
+    }
 
     // Register touch callback to reset idle timer
     DisposableEffect(Unit) {
@@ -424,15 +510,12 @@ fun MainContent(idleTimeoutSeconds: Int = 60) {
         }
         TouchCallbackHolder.callback = touchCallback
 
-        // Register proximity callback to dismiss screensaver when someone approaches
+        // Proximity callback no longer dismisses screensaver - only touch does that
+        // Proximity is handled by SensorService for screen wake only
         val proximityCallback = object : ProximityCallback {
             override fun onProximityChanged(isNear: Boolean) {
-                if (isNear) {
-                    lastInteractionTime = System.currentTimeMillis()
-                    if (showScreensaver) {
-                        showScreensaver = false
-                    }
-                }
+                // Intentionally empty - screensaver is only dismissed by touch
+                // Screen wake is handled by SensorService
             }
         }
         ProximityCallbackHolder.callback = proximityCallback

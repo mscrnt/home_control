@@ -55,12 +55,19 @@ class SensorService : Service(), SensorEventListener {
 
     private var serverUrl: String = ""
     private var idleTimeout: Long = 180000 // 180 seconds (3 minutes) default
+    private var proximityTimeoutMs: Long = 5 * 60 * 1000L // 5 minutes default
+    private var adaptiveBrightnessEnabled: Boolean = true
+
+    // Proximity timeout tracking
+    private var lastProximityNearTime: Long = System.currentTimeMillis()
+    private var proximityTimeoutJob: Job? = null
 
     private var lastProximityNear: Boolean = false
     private var lastLightBasedNear: Boolean = false  // Separate flag for light-based presence
     private var lastLightPresenceTime: Long = 0L     // When light-based presence was last detected
     private var lastLightLevel: Float = -1f
     private var lastReportedLightLevel: Float = -1f
+    private var lastBroadcastBrightness: Float = -1f
     // Sliding window for light level averaging (detect rapid drops)
     private val lightHistory = ArrayDeque<Float>(LIGHT_HISTORY_SIZE)
     private var lightHistorySum: Float = 0f
@@ -84,6 +91,19 @@ class SensorService : Service(), SensorEventListener {
                 ACTION_WAKE_SCREEN -> {
                     Log.d(TAG, "Bridge: Wake screen request")
                     wakeScreen()
+                }
+                ACTION_UPDATE_PROXIMITY_TIMEOUT -> {
+                    val minutes = intent.getIntExtra(EXTRA_TIMEOUT_MINUTES, 5)
+                    proximityTimeoutMs = minutes * 60 * 1000L
+                    Log.d(TAG, "Bridge: Updated proximity timeout to $minutes minutes")
+                }
+                ACTION_UPDATE_ADAPTIVE_BRIGHTNESS -> {
+                    adaptiveBrightnessEnabled = intent.getBooleanExtra(EXTRA_ENABLED, true)
+                    Log.d(TAG, "Bridge: Updated adaptive brightness to $adaptiveBrightnessEnabled")
+                }
+                ACTION_RESET_PROXIMITY_TIMER -> {
+                    lastProximityNearTime = System.currentTimeMillis()
+                    Log.d(TAG, "Bridge: Reset proximity timer")
                 }
             }
         }
@@ -128,6 +148,20 @@ class SensorService : Service(), SensorEventListener {
         // Broadcast actions for proximity events
         const val ACTION_PROXIMITY = "com.homecontrol.sensors.PROXIMITY_CHANGED"
         const val EXTRA_NEAR = "near"
+
+        // Broadcast action for brightness changes (sent to NativeActivity)
+        const val ACTION_BRIGHTNESS_CHANGE = "com.homecontrol.sensors.BRIGHTNESS_CHANGE"
+        const val EXTRA_BRIGHTNESS = "brightness"
+
+        // Settings update actions (received from NativeActivity)
+        const val ACTION_UPDATE_PROXIMITY_TIMEOUT = "com.homecontrol.sensors.UPDATE_PROXIMITY_TIMEOUT"
+        const val ACTION_UPDATE_ADAPTIVE_BRIGHTNESS = "com.homecontrol.sensors.UPDATE_ADAPTIVE_BRIGHTNESS"
+        const val ACTION_RESET_PROXIMITY_TIMER = "com.homecontrol.sensors.RESET_PROXIMITY_TIMER"
+        const val EXTRA_TIMEOUT_MINUTES = "timeout_minutes"
+        const val EXTRA_ENABLED = "enabled"
+
+        // Wake to screensaver action (sent to NativeActivity when waking from proximity)
+        const val ACTION_WAKE_TO_SCREENSAVER = "com.homecontrol.sensors.WAKE_TO_SCREENSAVER"
     }
 
     override fun onCreate() {
@@ -178,6 +212,7 @@ class SensorService : Service(), SensorEventListener {
         // startIdleCheck()
         startHeartbeat()
         startAdbCheck()
+        startProximityTimeoutCheck()
 
         // Start the HTTP command server for remote shell execution
         startCommandServer()
@@ -186,6 +221,9 @@ class SensorService : Service(), SensorEventListener {
         val bridgeFilter = android.content.IntentFilter().apply {
             addAction(ACTION_RESET_ACTIVITY)
             addAction(ACTION_WAKE_SCREEN)
+            addAction(ACTION_UPDATE_PROXIMITY_TIMEOUT)
+            addAction(ACTION_UPDATE_ADAPTIVE_BRIGHTNESS)
+            addAction(ACTION_RESET_PROXIMITY_TIMER)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(bridgeReceiver, bridgeFilter, Context.RECEIVER_NOT_EXPORTED)
@@ -217,6 +255,7 @@ class SensorService : Service(), SensorEventListener {
         idleCheckJob?.cancel()
         heartbeatJob?.cancel()
         adbCheckJob?.cancel()
+        proximityTimeoutJob?.cancel()
         scope.cancel()
         stopCommandServer()
         releaseWakeLocks()
@@ -311,12 +350,17 @@ class SensorService : Service(), SensorEventListener {
         // Always log proximity events for debugging (on-change sensor may fire rarely)
         Log.d(TAG, "Proximity event: distance=$distance, max=$maxRange, isNear=$isNear, lastNear=$lastProximityNear")
 
+        if (isNear) {
+            // Reset proximity timeout whenever someone is detected
+            lastProximityNearTime = System.currentTimeMillis()
+        }
+
         if (lastProximityNear != isNear) {
             Log.d(TAG, "Proximity CHANGED: near=$isNear (distance=$distance, max=$maxRange)")
             lastProximityNear = isNear
 
             if (isNear) {
-                // Someone approached - wake screen and reset activity timer
+                // Someone approached - wake screen (to screensaver, not main UI) and reset activity timer
                 lastActivityTime = System.currentTimeMillis()
                 if (!screenOn) {
                     wakeScreen()
@@ -338,6 +382,16 @@ class SensorService : Service(), SensorEventListener {
         } else if (kotlin.math.abs(lux - lastReportedLightLevel) / (lastReportedLightLevel + 1) > LIGHT_REPORT_THRESHOLD) {
             lastReportedLightLevel = lux
             reportLight(lux)
+        }
+
+        // Adaptive brightness: Calculate and broadcast screen brightness
+        if (adaptiveBrightnessEnabled) {
+            val brightness = calculateBrightness(lux)
+            // Only broadcast if brightness changed significantly (>2%)
+            if (lastBroadcastBrightness < 0 || kotlin.math.abs(brightness - lastBroadcastBrightness) > 0.02f) {
+                lastBroadcastBrightness = brightness
+                broadcastBrightness(brightness)
+            }
         }
 
         // Maintain sliding window of recent light readings
@@ -395,6 +449,40 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
+    /**
+     * Calculate screen brightness based on ambient light level.
+     * Uses a logarithmic curve for natural perception.
+     * @param lux The ambient light level in lux
+     * @return Brightness value from 0.0 to 1.0
+     */
+    private fun calculateBrightness(lux: Float): Float {
+        val minBrightness = 0.10f  // 10% minimum
+        val maxBrightness = 1.00f  // 100% maximum
+
+        // Logarithmic mapping for natural perception
+        // Typical indoor: 100-500 lux, outdoor: 1000-100000+ lux
+        val normalized = when {
+            lux < 1f -> 0f
+            lux > 10000f -> 1f
+            else -> (kotlin.math.ln(lux) / kotlin.math.ln(10000f)).toFloat()
+        }
+
+        return (minBrightness + normalized * (maxBrightness - minBrightness))
+            .coerceIn(minBrightness, maxBrightness)
+    }
+
+    /**
+     * Broadcast brightness change to NativeActivity for smooth transition.
+     */
+    private fun broadcastBrightness(brightness: Float) {
+        val intent = Intent(ACTION_BRIGHTNESS_CHANGE).apply {
+            putExtra(EXTRA_BRIGHTNESS, brightness)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+        Log.d(TAG, "Broadcast brightness: ${"%.2f".format(brightness * 100)}%")
+    }
+
     private fun startIdleCheck() {
         idleCheckJob?.cancel()
         idleCheckJob = scope.launch {
@@ -428,6 +516,21 @@ class SensorService : Service(), SensorEventListener {
                 Log.d(TAG, "Periodic ADB check running...")
                 checkAndEnableAdb()
                 delay(60000) // Check every 1 minute to keep wireless debugging alive
+            }
+        }
+    }
+
+    private fun startProximityTimeoutCheck() {
+        proximityTimeoutJob?.cancel()
+        proximityTimeoutJob = scope.launch {
+            while (isActive) {
+                delay(10000) // Check every 10 seconds
+
+                val elapsed = System.currentTimeMillis() - lastProximityNearTime
+                if (elapsed > proximityTimeoutMs && screenOn) {
+                    Log.d(TAG, "Proximity timeout reached (${elapsed / 1000}s > ${proximityTimeoutMs / 1000}s), turning off screen")
+                    sleepScreen()
+                }
             }
         }
     }
@@ -893,6 +996,10 @@ class SensorService : Service(), SensorEventListener {
     @Suppress("DEPRECATION")
     private fun wakeScreen() {
         try {
+            // Reset proximity timer so screen doesn't immediately go back to sleep
+            lastProximityNearTime = System.currentTimeMillis()
+            Log.d(TAG, "Reset proximity timer on wake")
+
             // Use FULL_WAKE_LOCK with ACQUIRE_CAUSES_WAKEUP to wake the screen
             screenWakeLock?.release()
             screenWakeLock = powerManager.newWakeLock(
@@ -905,6 +1012,13 @@ class SensorService : Service(), SensorEventListener {
             }
             screenOn = true
             Log.d(TAG, "Screen woken via wake lock")
+
+            // Broadcast to NativeActivity to show screensaver
+            val intent = Intent(ACTION_WAKE_TO_SCREENSAVER).apply {
+                setPackage(packageName)
+            }
+            sendBroadcast(intent)
+            Log.d(TAG, "Broadcast wake-to-screensaver")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to wake screen: ${e.message}")
             // Fallback: try via server

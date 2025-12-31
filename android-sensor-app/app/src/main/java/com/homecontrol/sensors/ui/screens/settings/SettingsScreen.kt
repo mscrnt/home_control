@@ -25,7 +25,8 @@ import androidx.compose.material.icons.filled.ScreenshotMonitor
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.WbAuto
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -194,15 +195,58 @@ fun SettingsScreen(
 
         // Display Settings
         SettingsSection(title = "Display", icon = Icons.Default.ScreenshotMonitor) {
-            // Keep Screen On
+            // Display Off Timeout (proximity-based)
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.PowerSettingsNew,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Display Off Timeout",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Turn off screen when no one is nearby",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val timeoutOptions = listOf(1, 5, 10, 15, 30, 60, 120)
+                    timeoutOptions.forEach { minutes ->
+                        val label = when {
+                            minutes >= 60 -> "${minutes / 60}hr"
+                            else -> "${minutes}m"
+                        }
+                        FilterChip(
+                            selected = uiState.settings.proximityTimeoutMinutes == minutes,
+                            onClick = { viewModel.setProximityTimeoutMinutes(minutes) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Adaptive Brightness
             SettingsRow(
-                title = "Keep Screen On",
-                subtitle = "Prevent display from sleeping",
-                icon = Icons.Default.Visibility
+                title = "Adaptive Brightness",
+                subtitle = "Adjust brightness based on ambient light",
+                icon = Icons.Default.WbAuto
             ) {
                 Switch(
-                    checked = uiState.settings.keepScreenOn,
-                    onCheckedChange = { viewModel.setKeepScreenOn(it) },
+                    checked = uiState.settings.adaptiveBrightness,
+                    onCheckedChange = { viewModel.setAdaptiveBrightness(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = MaterialTheme.colorScheme.primary,
                         checkedTrackColor = MaterialTheme.colorScheme.primaryContainer

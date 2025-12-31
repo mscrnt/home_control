@@ -94,9 +94,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setKeepScreenOn(enabled: Boolean) {
+    fun setProximityTimeoutMinutes(minutes: Int) {
         viewModelScope.launch {
-            settingsRepository.setKeepScreenOn(enabled)
+            settingsRepository.setProximityTimeoutMinutes(minutes)
+        }
+    }
+
+    fun setAdaptiveBrightness(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAdaptiveBrightness(enabled)
         }
     }
 

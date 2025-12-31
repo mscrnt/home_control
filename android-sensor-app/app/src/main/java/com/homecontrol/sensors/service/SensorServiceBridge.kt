@@ -9,8 +9,11 @@ import android.os.PowerManager
 import android.util.Log
 import com.homecontrol.sensors.SensorService
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,11 +25,23 @@ interface SensorServiceBridge {
     /** Current proximity state - true when something is near the sensor */
     val proximityNear: StateFlow<Boolean>
 
+    /** Emits when the screen should wake to screensaver (from proximity detection) */
+    val wakeToScreensaver: SharedFlow<Unit>
+
     /** Wake the screen */
     fun wakeScreen()
 
     /** Reset the activity timer to prevent screensaver */
     fun resetActivityTimer()
+
+    /** Reset the proximity timer to prevent screen from turning off */
+    fun resetProximityTimer()
+
+    /** Update the proximity timeout setting */
+    fun updateProximityTimeout(minutes: Int)
+
+    /** Update the adaptive brightness setting */
+    fun updateAdaptiveBrightness(enabled: Boolean)
 
     /** Start listening for sensor events */
     fun start()
@@ -51,6 +66,9 @@ class SensorServiceBridgeImpl @Inject constructor(
     private val _proximityNear = MutableStateFlow(false)
     override val proximityNear: StateFlow<Boolean> = _proximityNear.asStateFlow()
 
+    private val _wakeToScreensaver = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    override val wakeToScreensaver: SharedFlow<Unit> = _wakeToScreensaver.asSharedFlow()
+
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
     private var isStarted = false
@@ -65,17 +83,29 @@ class SensorServiceBridgeImpl @Inject constructor(
         }
     }
 
+    private val wakeToScreensaverReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == SensorService.ACTION_WAKE_TO_SCREENSAVER) {
+                Log.d(TAG, "Wake to screensaver broadcast received")
+                _wakeToScreensaver.tryEmit(Unit)
+            }
+        }
+    }
+
     override fun start() {
         if (isStarted) return
         isStarted = true
 
-        val filter = IntentFilter(SensorService.ACTION_PROXIMITY)
+        val proximityFilter = IntentFilter(SensorService.ACTION_PROXIMITY)
+        val wakeFilter = IntentFilter(SensorService.ACTION_WAKE_TO_SCREENSAVER)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(proximityReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(proximityReceiver, proximityFilter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(wakeToScreensaverReceiver, wakeFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            context.registerReceiver(proximityReceiver, filter)
+            context.registerReceiver(proximityReceiver, proximityFilter)
+            context.registerReceiver(wakeToScreensaverReceiver, wakeFilter)
         }
-        Log.d(TAG, "Started listening for proximity events")
+        Log.d(TAG, "Started listening for proximity and wake-to-screensaver events")
     }
 
     override fun stop() {
@@ -85,9 +115,14 @@ class SensorServiceBridgeImpl @Inject constructor(
         try {
             context.unregisterReceiver(proximityReceiver)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to unregister receiver: ${e.message}")
+            Log.w(TAG, "Failed to unregister proximity receiver: ${e.message}")
         }
-        Log.d(TAG, "Stopped listening for proximity events")
+        try {
+            context.unregisterReceiver(wakeToScreensaverReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister wake-to-screensaver receiver: ${e.message}")
+        }
+        Log.d(TAG, "Stopped listening for events")
     }
 
     override fun wakeScreen() {
@@ -120,6 +155,36 @@ class SensorServiceBridgeImpl @Inject constructor(
 
         // Send broadcast to SensorService to reset activity timer
         val intent = Intent(SensorService.ACTION_RESET_ACTIVITY).apply {
+            setPackage(context.packageName)
+        }
+        context.sendBroadcast(intent)
+    }
+
+    override fun resetProximityTimer() {
+        Log.d(TAG, "Resetting proximity timer")
+
+        // Send broadcast to SensorService to reset proximity timer
+        val intent = Intent(SensorService.ACTION_RESET_PROXIMITY_TIMER).apply {
+            setPackage(context.packageName)
+        }
+        context.sendBroadcast(intent)
+    }
+
+    override fun updateProximityTimeout(minutes: Int) {
+        Log.d(TAG, "Updating proximity timeout to $minutes minutes")
+
+        val intent = Intent(SensorService.ACTION_UPDATE_PROXIMITY_TIMEOUT).apply {
+            putExtra(SensorService.EXTRA_TIMEOUT_MINUTES, minutes)
+            setPackage(context.packageName)
+        }
+        context.sendBroadcast(intent)
+    }
+
+    override fun updateAdaptiveBrightness(enabled: Boolean) {
+        Log.d(TAG, "Updating adaptive brightness to $enabled")
+
+        val intent = Intent(SensorService.ACTION_UPDATE_ADAPTIVE_BRIGHTNESS).apply {
+            putExtra(SensorService.EXTRA_ENABLED, enabled)
             setPackage(context.packageName)
         }
         context.sendBroadcast(intent)
