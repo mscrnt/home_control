@@ -69,6 +69,34 @@ All notable changes to the Home Control project will be documented in this file.
 ### Android App
 
 #### Added
+- **Adaptive Brightness** (`2b2cea3`)
+  - Automatic screen brightness based on ambient light sensor
+  - Logarithmic curve for natural perception (10% min to 100% max)
+  - Smooth 500ms fade transitions using ValueAnimator
+  - Toggle in Settings > Display > Adaptive Brightness
+  - Broadcasts brightness changes to NativeActivity for smooth application
+
+- **Proximity-Based Display Timeout** (`2b2cea3`)
+  - Configurable timeout: 1, 5, 10, 15, 30 min, 1hr, 2hr
+  - Screen turns off when no one is detected nearby
+  - Touch resets the proximity timer
+  - Proximity wakes screen to screensaver (not main UI)
+  - Only touch dismisses screensaver
+
+- **Display Settings UI** (`2b2cea3`)
+  - New "Display" section in Settings screen
+  - Display Off Timeout picker with chip-based selection
+  - Adaptive Brightness toggle
+  - Removed deprecated "Keep Screen On" setting
+
+- **OTA Update System**
+  - Automatic update checks every 15 minutes via WorkManager
+  - Manual update check in Settings > About & Updates
+  - Downloads APK from MDM server and installs silently
+  - Version comparison using semantic versioning
+  - Progress indicator during download
+  - Uses JSON manifest at `https://mdm.mscrnt.com/files/homecontrol-latest.json`
+
 - **Spotify Queue View** (`98d00b2`)
   - View current playback queue from Now Playing panel
   - Add tracks to queue from track lists
@@ -130,6 +158,22 @@ All notable changes to the Home Control project will be documented in this file.
   - `active` field added to `HueScene` model
 
 #### Changed
+- **App Name** (`5145223`)
+  - Renamed app from "HCC" to "Home Control"
+
+- **ADB Monitoring Simplified** (`5145223`)
+  - Changed from active reconfiguration to passive monitoring
+  - Checks if port 5555 is listening every 5 minutes
+  - Logs warning when ADB stops working instead of attempting to fix
+  - Removed non-functional shell commands (setprop, stop/start adbd)
+  - Note: Run `adb tcpip 5555` externally to enable ADB over WiFi
+
+- **Screen Wake Behavior** (`2b2cea3`)
+  - Proximity now wakes screen to screensaver, not main UI
+  - Only touch dismisses the screensaver
+  - Touch resets both idle timer and proximity timer
+  - Wake-to-screensaver broadcast from SensorService to NativeActivity
+
 - **HueScreen UI Improvements** (`8eea0a4`)
   - Lights grid changed from adaptive width to fixed 3 columns
   - Orange border outline on lights that are on (but not syncing)

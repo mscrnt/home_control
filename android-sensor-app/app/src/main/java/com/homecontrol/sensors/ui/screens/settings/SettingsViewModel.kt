@@ -6,6 +6,8 @@ import com.homecontrol.sensors.data.repository.AppMode
 import com.homecontrol.sensors.data.repository.AppSettings
 import com.homecontrol.sensors.data.repository.SettingsRepository
 import com.homecontrol.sensors.data.repository.ThemeMode
+import com.homecontrol.sensors.data.repository.UpdateRepository
+import com.homecontrol.sensors.data.repository.UpdateManifest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,19 +21,30 @@ data class SettingsUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val serverUrlInput: String = "",
-    val showRestartRequired: Boolean = false
+    val showRestartRequired: Boolean = false,
+    // Update state
+    val currentVersion: String = "",
+    val isCheckingForUpdate: Boolean = false,
+    val isDownloadingUpdate: Boolean = false,
+    val downloadProgress: Float = 0f,
+    val availableUpdate: UpdateManifest? = null,
+    val updateError: String? = null
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val updateRepository: UpdateRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
+    private val _uiState = MutableStateFlow(SettingsUiState(
+        currentVersion = updateRepository.getCurrentVersion()
+    ))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {
         loadSettings()
+        observeUpdateState()
     }
 
     private fun loadSettings() {
@@ -46,6 +59,39 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun observeUpdateState() {
+        viewModelScope.launch {
+            updateRepository.updateState.collect { updateState ->
+                _uiState.update {
+                    it.copy(
+                        isCheckingForUpdate = updateState.isChecking,
+                        isDownloadingUpdate = updateState.isDownloading,
+                        downloadProgress = updateState.downloadProgress,
+                        availableUpdate = updateState.availableUpdate,
+                        updateError = updateState.error
+                    )
+                }
+            }
+        }
+    }
+
+    fun checkForUpdate() {
+        viewModelScope.launch {
+            updateRepository.checkForUpdate()
+        }
+    }
+
+    fun installUpdate() {
+        val update = _uiState.value.availableUpdate ?: return
+        viewModelScope.launch {
+            updateRepository.downloadAndInstall(update)
+        }
+    }
+
+    fun clearUpdateError() {
+        updateRepository.clearError()
     }
 
     fun updateServerUrl(url: String) {

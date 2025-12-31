@@ -7,6 +7,7 @@ import androidx.work.Configuration
 import com.homecontrol.sensors.data.api.WebSocketClient
 import com.homecontrol.sensors.data.sync.PhotoSyncManager
 import com.homecontrol.sensors.data.sync.PhotoSyncWorker
+import com.homecontrol.sensors.data.sync.UpdateWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,9 @@ class HomeControlApp : Application(), Configuration.Provider {
 
         // Schedule hourly photo sync
         PhotoSyncWorker.scheduleHourlySync(this)
+
+        // Schedule update check every 15 minutes
+        UpdateWorker.schedule(this)
 
         // Trigger initial sync on app start
         applicationScope.launch {
