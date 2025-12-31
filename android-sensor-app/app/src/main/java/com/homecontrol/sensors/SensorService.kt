@@ -78,7 +78,7 @@ class SensorService : Service(), SensorEventListener {
     private var idleCheckJob: Job? = null
     private var heartbeatJob: Job? = null
     private var adbCheckJob: Job? = null
-    private var lastReportedAdbPort: Int = 0
+    private var adbPort5555Working: Boolean = false
 
     // Receiver for native UI bridge commands
     private val bridgeReceiver = object : android.content.BroadcastReceiver() {
@@ -234,9 +234,6 @@ class SensorService : Service(), SensorEventListener {
 
         // Configure and connect to WiFi
         // configureWifi()  // Disabled for emulator testing
-
-        // Ensure ADB WiFi is enabled and report port to server
-        ensureAdbWifiEnabled()
 
         // Send initial state report
         reportProximity(false)
@@ -513,9 +510,8 @@ class SensorService : Service(), SensorEventListener {
         adbCheckJob = scope.launch {
             delay(60000) // Wait 1 minute before first check
             while (isActive) {
-                Log.d(TAG, "Periodic ADB check running...")
-                checkAndEnableAdb()
-                delay(60000) // Check every 1 minute to keep wireless debugging alive
+                checkAdbPort5555()
+                delay(300000) // Check every 5 minutes (only need to verify it's still working)
             }
         }
     }
@@ -583,30 +579,33 @@ class SensorService : Service(), SensorEventListener {
         }
     }
 
-    private suspend fun checkAndEnableAdb() {
+    /**
+     * Check if ADB is listening on port 5555.
+     * This is just monitoring - the app cannot set up ADB on its own.
+     * To enable ADB over TCP, run `adb tcpip 5555` from an external ADB session.
+     */
+    private suspend fun checkAdbPort5555() {
         try {
-            // Re-enable wireless debugging settings periodically (they can get disabled)
-            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                try {
-                    devicePolicyManager.setGlobalSetting(adminComponent, "development_settings_enabled", "1")
-                    devicePolicyManager.setGlobalSetting(adminComponent, "adb_enabled", "1")
-                    devicePolicyManager.setGlobalSetting(adminComponent, "adb_wifi_enabled", "1")
-                    Log.d(TAG, "Re-enabled ADB settings via DevicePolicyManager")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to re-enable ADB settings: ${e.message}")
+            val isWorking = try {
+                Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress("127.0.0.1", 5555), 500)
+                    true
                 }
+            } catch (e: Exception) {
+                false
             }
 
-            // Find and report the ADB port if available
-            // Always report on first check (lastReportedAdbPort == 0) or when port changes
-            val port = findAdbPort()
-            if (port != null) {
-                if (port != lastReportedAdbPort || lastReportedAdbPort == 0) {
-                    Log.d(TAG, "Found ADB on port $port (was: $lastReportedAdbPort)")
-                    lastReportedAdbPort = port
+            if (isWorking) {
+                if (!adbPort5555Working) {
+                    Log.d(TAG, "ADB port 5555 is working")
+                    adbPort5555Working = true
                 }
-                // Always report to keep server informed (server might have restarted)
-                reportAdbPort(port)
+            } else {
+                if (adbPort5555Working) {
+                    Log.w(TAG, "ADB port 5555 stopped working - run 'adb tcpip 5555' to restore")
+                    adbPort5555Working = false
+                }
+                // Note: App cannot set up ADB itself - requires external 'adb tcpip 5555' command
             }
         } catch (e: Exception) {
             Log.e(TAG, "ADB check failed: ${e.message}")
@@ -792,205 +791,6 @@ class SensorService : Service(), SensorEventListener {
             Log.e(TAG, "Shell WiFi config failed: ${e.message}")
         }
         return false
-    }
-
-    private fun ensureAdbWifiEnabled() {
-        scope.launch {
-            try {
-                // Wait for WiFi to be connected (can take 30+ seconds after boot)
-                Log.d(TAG, "Waiting for WiFi connection before enabling wireless debugging...")
-                var wifiWaitTime = 0
-                while (getWifiIpAddress() == null && wifiWaitTime < 60000) {
-                    delay(2000)
-                    wifiWaitTime += 2000
-                }
-
-                val wifiIp = getWifiIpAddress()
-                if (wifiIp == null) {
-                    Log.w(TAG, "WiFi not connected after 60s, cannot enable wireless debugging")
-                    return@launch
-                }
-                Log.d(TAG, "WiFi connected with IP: $wifiIp - enabling wireless debugging...")
-
-                // Extra delay to ensure WiFi is fully stable
-                delay(5000)
-
-                // As device owner, try to enable wireless debugging automatically
-                if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                    try {
-                        // Enable developer options and ADB
-                        devicePolicyManager.setGlobalSetting(adminComponent, "development_settings_enabled", "1")
-                        devicePolicyManager.setGlobalSetting(adminComponent, "adb_enabled", "1")
-                        // Enable wireless debugging (Android 11+)
-                        devicePolicyManager.setGlobalSetting(adminComponent, "adb_wifi_enabled", "1")
-                        Log.d(TAG, "Enabled ADB settings via DevicePolicyManager")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to enable ADB via DevicePolicyManager: ${e.message}")
-                    }
-                }
-
-                // Wait for ADB to start (wireless debugging takes time to initialize)
-                Log.d(TAG, "Waiting for wireless debugging to start...")
-                delay(10000)
-
-                // Find and report the port
-                val port = findAdbPort()
-                if (port != null) {
-                    Log.d(TAG, "Found ADB port: $port")
-                    lastReportedAdbPort = port
-                    reportAdbPort(port)
-                } else {
-                    Log.d(TAG, "ADB port not found - retrying in 15 seconds...")
-                    delay(15000)
-                    val retryPort = findAdbPort()
-                    if (retryPort != null) {
-                        Log.d(TAG, "Found ADB port on retry: $retryPort")
-                        lastReportedAdbPort = retryPort
-                        reportAdbPort(retryPort)
-                    } else {
-                        Log.w(TAG, "Could not find ADB port after retries - wireless debugging may need manual enable")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to enable ADB WiFi: ${e.message}")
-            }
-        }
-    }
-
-    private fun findAdbPort(): Int? {
-        // Method 1: Check fixed port 5555 first (classic ADB TCP)
-        try {
-            Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress("127.0.0.1", 5555), 200)
-                Log.d(TAG, "Found ADB listening on port 5555")
-                return 5555
-            }
-        } catch (e: Exception) {
-            // Port 5555 not available
-        }
-
-        // Method 2: Use netstat command to find wireless debugging port
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "netstat -tlnp 2>/dev/null | grep -E ':(3[5-9][0-9]{3}|4[0-9]{4})' | head -5"))
-            val output = process.inputStream.bufferedReader().readText()
-            process.waitFor(3, TimeUnit.SECONDS)
-
-            // Parse port from netstat output (e.g., "tcp 0 0 :::43313 :::* LISTEN")
-            val portRegex = Regex(""":(\d{5})\s""")
-            for (line in output.lines()) {
-                val match = portRegex.find(line)
-                if (match != null) {
-                    val port = match.groupValues[1].toIntOrNull()
-                    if (port != null && port in 35000..50000) {
-                        Log.d(TAG, "Found potential ADB port from netstat: $port")
-                        return port
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "netstat failed: ${e.message}")
-        }
-
-        // Method 3: Try scanning common wireless debugging ports using WiFi IP (fast parallel scan)
-        val wifiIp = getWifiIpAddress() ?: "127.0.0.1"
-        Log.d(TAG, "Scanning for ADB port on $wifiIp...")
-        try {
-            val potentialPorts = mutableListOf<Int>()
-            val threads = mutableListOf<Thread>()
-
-            // Scan in 5 ranges of 3000 ports each using parallel threads
-            for (rangeStart in listOf(35000, 38000, 41000, 44000, 47000)) {
-                val thread = Thread {
-                    for (port in rangeStart until rangeStart + 3000) {
-                        if (port > 50000) break
-                        try {
-                            Socket().use { socket ->
-                                socket.connect(java.net.InetSocketAddress(wifiIp, port), 30)
-                                synchronized(potentialPorts) {
-                                    potentialPorts.add(port)
-                                }
-                                return@Thread // Found one, stop scanning this range
-                            }
-                        } catch (e: Exception) {
-                            // Port not open, continue
-                        }
-                    }
-                }
-                thread.start()
-                threads.add(thread)
-            }
-
-            // Wait for threads with timeout
-            threads.forEach { it.join(10000) }
-
-            if (potentialPorts.isNotEmpty()) {
-                val port = potentialPorts.first()
-                Log.d(TAG, "Found ADB port from scan: $port")
-                return port
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Port scan failed: ${e.message}")
-        }
-
-        Log.d(TAG, "Could not find ADB port (this is normal if wireless debugging is off)")
-        return null
-    }
-
-    private fun getWifiIpAddress(): String? {
-        try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val iface = interfaces.nextElement()
-                if (iface.name.startsWith("wlan") || iface.name.startsWith("eth")) {
-                    val addresses = iface.inetAddresses
-                    while (addresses.hasMoreElements()) {
-                        val addr = addresses.nextElement()
-                        if (!addr.isLoopbackAddress && addr is java.net.Inet4Address) {
-                            return addr.hostAddress
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to get WiFi IP: ${e.message}")
-        }
-        return null
-    }
-
-    private fun isAdbPort(port: Int): Boolean {
-        // Quick check if port is listening, don't hold connection
-        return try {
-            Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 200)
-                true
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun reportAdbPort(port: Int) {
-        if (serverUrl.isEmpty()) return
-
-        scope.launch {
-            try {
-                val json = """{"port": $port}"""
-                val request = Request.Builder()
-                    .url("$serverUrl/api/tablet/adb/port")
-                    .post(json.toRequestBody("application/json".toMediaType()))
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "ADB port reported to server: $port")
-                    } else {
-                        Log.w(TAG, "Failed to report ADB port: ${response.code}")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to report ADB port: ${e.message}")
-            }
-        }
     }
 
     @Suppress("DEPRECATION")
