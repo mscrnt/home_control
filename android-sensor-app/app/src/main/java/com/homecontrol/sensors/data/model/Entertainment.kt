@@ -135,7 +135,7 @@ data class ScreensaverConfig(
     @SerialName("idle_timeout")
     val idleTimeout: Int = 300,
     @SerialName("slide_interval")
-    val slideInterval: Int = 30,
+    val slideInterval: Int = 90,
     @SerialName("show_clock")
     val showClock: Boolean = true,
     @SerialName("show_weather")

@@ -96,6 +96,10 @@ All notable changes to the Home Control project will be documented in this file.
   - Version comparison using semantic versioning
   - Progress indicator during download
   - Uses JSON manifest at `https://mdm.mscrnt.com/files/homecontrol-latest.json`
+  - Auto-restart app after OTA update via MY_PACKAGE_REPLACED receiver
+
+#### Changed
+- Increased screensaver slide interval from 30 to 90 seconds
 
 - **Spotify Queue View** (`98d00b2`)
   - View current playback queue from Now Playing panel
