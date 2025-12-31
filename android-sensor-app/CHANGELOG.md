@@ -11,18 +11,42 @@ All notable changes to the Android sensor app will be documented in this file.
   - Respects 12/24 hour time format setting
   - Limited to 5 events with "+N more" indicator
 
-- **New App Icon** (`1123b18`)
+- **New App Icon** (`1123b18`, `50ff262`)
   - Custom launcher icon with warm orange/coral calendar design
   - Home icon integrated into calendar grid
   - Generated all mipmap sizes (mdpi through xxxhdpi)
+  - Adaptive icon foreground properly sized for Android's safe zone
+
+- **Navigation Drawer Icons** (`857f297`)
+  - Added Philips Hue lightbulb icon (red) for Hue screen
+  - Added Amcrest camera icon for Cameras screen
+  - Added photo-film-music icon (purple) for Entertainment screen
+  - Added house-signal icon for Home screen
 
 ### Changed
+- **HueScreen Tab Navigation** (`397c309`)
+  - Refactored to use horizontal tab bar for room navigation
+  - Each room displayed as a tab at the top of the screen
+  - Entertainment Areas tab added when sync boxes are configured
+  - Improved room content layout with power button, brightness control, and scenes
+  - Better organization of sync box controls with mode, brightness, and HDMI input selectors
+
+- **Removed Pull-to-Refresh**
+  - Removed PullToRefreshContainer from HueScreen and HomeScreen
+  - Auto-polling (5 second interval) provides automatic data refresh
+  - Eliminates visual glitch with persistent refresh indicator circle
+
 - **UI Branding** (`1123b18`)
   - Renamed "Smart Home" to "Home Control" in navigation drawer
+  - "Media" renamed to "Entertainment" with new icon
 
 - **Screensaver Time Format** (`1123b18`)
   - Clock now respects use24HourFormat setting
   - 12-hour format shows AM/PM indicator
+
+- **Weather Overlay** (`857f297`)
+  - Improved weather overlay layout in screensaver
+  - Better icon display for weather conditions
 
 - **Removed KioskActivity** (`d6c5cdf`)
   - Fully transitioned to NativeActivity as the primary UI
