@@ -250,33 +250,39 @@ func (c *Client) GetHDMI() (*HDMIState, error) {
 	return &hdmi, nil
 }
 
+// FullStatus represents the complete API response from /api/v1
+type FullStatus struct {
+	Device    *DeviceInfo `json:"device,omitempty"`
+	Execution *Execution  `json:"execution,omitempty"`
+	Hue       *HueState   `json:"hue,omitempty"`
+	HDMI      *HDMIState  `json:"hdmi,omitempty"`
+}
+
 // GetStatus returns combined device, execution, hue, and hdmi state
+// Uses a single API call to /api/v1 for efficiency (as recommended by Philips docs)
 func (c *Client) GetStatus() (*Status, error) {
-	status := &Status{}
-
-	// Get device info (ignore error - may not have access to all endpoints)
-	device, _ := c.GetDevice()
-	status.Device = device
-
-	// Get execution state
-	exec, err := c.GetExecution()
+	// Single request to get all state at once
+	body, err := c.doRequest("GET", "", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get execution state: %w", err)
+		return nil, fmt.Errorf("failed to get sync box status: %w", err)
 	}
-	status.Execution = exec
 
-	// Get hue state
-	hue, err := c.GetHue()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get hue state: %w", err)
+	var fullStatus FullStatus
+	if err := json.Unmarshal(body, &fullStatus); err != nil {
+		return nil, fmt.Errorf("failed to parse sync box status: %w", err)
 	}
-	status.Hue = hue
 
-	// Get HDMI state (ignore error - optional)
-	hdmi, _ := c.GetHDMI()
-	status.HDMI = hdmi
+	// Add IP address to device info
+	if fullStatus.Device != nil {
+		fullStatus.Device.IPAddress = c.ip
+	}
 
-	return status, nil
+	return &Status{
+		Device:    fullStatus.Device,
+		Execution: fullStatus.Execution,
+		Hue:       fullStatus.Hue,
+		HDMI:      fullStatus.HDMI,
+	}, nil
 }
 
 // SetSyncActive starts or stops sync

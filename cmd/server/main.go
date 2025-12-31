@@ -248,8 +248,21 @@ var calendarCache struct {
 	CacheDuration    time.Duration
 }
 
+// Sync box status cache to reduce API calls and improve responsiveness
+var syncBoxCache struct {
+	sync.RWMutex
+	Statuses      map[int]*syncbox.Status
+	UpdatedAt     map[int]time.Time
+	LastError     map[int]time.Time // Track when last error occurred to reduce log spam
+	CacheDuration time.Duration
+}
+
 func init() {
 	calendarCache.CacheDuration = 30 * time.Second // Refresh cache every 30 seconds
+	syncBoxCache.Statuses = make(map[int]*syncbox.Status)
+	syncBoxCache.UpdatedAt = make(map[int]time.Time)
+	syncBoxCache.LastError = make(map[int]time.Time)
+	syncBoxCache.CacheDuration = 5 * time.Second // Cache sync box status for 5 seconds
 }
 
 func main() {
@@ -3370,24 +3383,77 @@ func getSyncBoxClient(r *http.Request) (*syncbox.Client, error) {
 }
 
 func handleGetSyncBoxStatus(w http.ResponseWriter, r *http.Request) {
-	client, err := getSyncBoxClient(r)
+	indexStr := chi.URLParam(r, "index")
+	index, err := strconv.Atoi(indexStr)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid sync box index", http.StatusBadRequest)
 		return
 	}
 
+	if index < 0 || index >= len(syncBoxClients) {
+		http.Error(w, "Sync box index out of range", http.StatusBadRequest)
+		return
+	}
+
+	client := syncBoxClients[index]
+
+	// Check cache first
+	syncBoxCache.RLock()
+	cachedStatus := syncBoxCache.Statuses[index]
+	updatedAt := syncBoxCache.UpdatedAt[index]
+	syncBoxCache.RUnlock()
+
+	// If cache is fresh, return it immediately
+	if cachedStatus != nil && time.Since(updatedAt) < syncBoxCache.CacheDuration {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cachedStatus)
+		return
+	}
+
+	// Fetch fresh status
 	status, err := client.GetStatus()
 	if err != nil {
-		log.Printf("Error getting sync box status: %v", err)
+		// Only log errors once per minute to reduce spam
+		syncBoxCache.Lock()
+		lastErr := syncBoxCache.LastError[index]
+		if time.Since(lastErr) > time.Minute {
+			log.Printf("Error getting sync box %d status: %v", index, err)
+			syncBoxCache.LastError[index] = time.Now()
+		}
+		syncBoxCache.Unlock()
+
+		// Return cached status if available (even if stale)
+		if cachedStatus != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(cachedStatus)
+			return
+		}
+
 		http.Error(w, "Failed to get sync box status: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Update cache
+	syncBoxCache.Lock()
+	syncBoxCache.Statuses[index] = status
+	syncBoxCache.UpdatedAt[index] = time.Now()
+	syncBoxCache.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
 
+// invalidateSyncBoxCache clears the cache for a sync box so the next request fetches fresh data
+func invalidateSyncBoxCache(index int) {
+	syncBoxCache.Lock()
+	delete(syncBoxCache.UpdatedAt, index)
+	syncBoxCache.Unlock()
+}
+
 func handleSetSyncBoxSync(w http.ResponseWriter, r *http.Request) {
+	indexStr := chi.URLParam(r, "index")
+	index, _ := strconv.Atoi(indexStr)
+
 	client, err := getSyncBoxClient(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3408,11 +3474,16 @@ func handleSetSyncBoxSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateSyncBoxCache(index)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"active": req.Active})
 }
 
 func handleSetSyncBoxArea(w http.ResponseWriter, r *http.Request) {
+	indexStr := chi.URLParam(r, "index")
+	index, _ := strconv.Atoi(indexStr)
+
 	client, err := getSyncBoxClient(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3433,11 +3504,16 @@ func handleSetSyncBoxArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateSyncBoxCache(index)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"groupId": req.GroupID})
 }
 
 func handleSetSyncBoxMode(w http.ResponseWriter, r *http.Request) {
+	indexStr := chi.URLParam(r, "index")
+	index, _ := strconv.Atoi(indexStr)
+
 	client, err := getSyncBoxClient(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3458,11 +3534,16 @@ func handleSetSyncBoxMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateSyncBoxCache(index)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"mode": req.Mode})
 }
 
 func handleSetSyncBoxBrightness(w http.ResponseWriter, r *http.Request) {
+	indexStr := chi.URLParam(r, "index")
+	index, _ := strconv.Atoi(indexStr)
+
 	client, err := getSyncBoxClient(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3483,11 +3564,16 @@ func handleSetSyncBoxBrightness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateSyncBoxCache(index)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]int{"brightness": req.Brightness})
 }
 
 func handleSetSyncBoxInput(w http.ResponseWriter, r *http.Request) {
+	indexStr := chi.URLParam(r, "index")
+	index, _ := strconv.Atoi(indexStr)
+
 	client, err := getSyncBoxClient(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3507,6 +3593,8 @@ func handleSetSyncBoxInput(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to set HDMI source: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	invalidateSyncBoxCache(index)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"hdmiSource": req.HDMISource})
