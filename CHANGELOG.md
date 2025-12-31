@@ -6,6 +6,24 @@ All notable changes to the Home Control project will be documented in this file.
 
 ### Server/Backend
 
+#### Added
+- **Hue SSE Event Stream** (`bba5244`)
+  - Real-time event stream from Hue bridge via `/eventstream/clip/v2`
+  - New `EventStream` client in `internal/hue/eventstream.go`
+  - SSE endpoint `/api/hue/events` for clients to receive live updates
+  - Exponential backoff reconnection (5s to 60s max)
+  - Eliminates need for polling when SSE is connected
+
+- **Active Scene Indicator** (`bba5244`)
+  - Scene `Active` field populated from V2 `status.active`
+  - Active when status is `static` or `dynamic_palette`
+
+- **Web Frontend SSE Integration** (`bba5244`)
+  - Replaced 1-second polling with SSE connection in `static/js/hue.js`
+  - Debounced reloads (1s) to prevent API flooding
+  - Fallback to 10-second polling when SSE disconnects
+  - Active scene highlighting in scene modal with orange border and checkmark
+
 #### Changed
 - **Hue Bridge V2 API Migration** (`35c1e44`)
   - Complete rewrite of Hue client to use V2 API (`/clip/v2/resource/`)
@@ -43,6 +61,18 @@ All notable changes to the Home Control project will be documented in this file.
   - Added Amcrest camera icon for Cameras screen
   - Added photo-film-music icon (purple) for Entertainment screen
   - Added house-signal icon for Home screen
+
+- **Hue SSE Real-time Updates** (`bba5244`)
+  - New `HueEventClient` for SSE connection to server
+  - Uses OkHttp SSE library (`okhttp-sse:4.12.0`)
+  - Auto-reconnect with exponential backoff (1s to 30s max)
+  - Event types: `LightUpdate`, `GroupUpdate`, `SceneUpdate`, `DataChanged`
+  - Falls back to polling when SSE disconnects
+
+- **Active Scene Indicator** (`bba5244`)
+  - Scenes section highlights currently active scene
+  - Orange border and checkmark on active scene
+  - `active` field added to `HueScene` model
 
 #### Changed
 - **HueScreen Tab Navigation** (`397c309`)
