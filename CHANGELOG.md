@@ -7,6 +7,11 @@ All notable changes to the Home Control project will be documented in this file.
 ### Server/Backend
 
 #### Added
+- **Entertainment Room Light Population** (`8eea0a4`)
+  - Added `Channels` and `LightServices` fields to `v2EntertainmentConfig` struct
+  - Entertainment areas now correctly report their associated lights
+  - Enables sync detection by checking which lights are in streaming entertainment areas
+
 - **Hue SSE Event Stream** (`bba5244`)
   - Real-time event stream from Hue bridge via `/eventstream/clip/v2`
   - New `EventStream` client in `internal/hue/eventstream.go`
@@ -44,6 +49,20 @@ All notable changes to the Home Control project will be documented in this file.
 ### Android App
 
 #### Added
+- **New Room Icons** (`8eea0a4`)
+  - Custom vector drawable icons for room types: patio (garden bench), bar, desk
+  - Lightbulb on/off icons for individual light state indication
+  - Color palette icon for creative spaces
+  - Icons auto-selected based on room class or name matching
+
+- **Hue Sync Detection & Warning Banner** (`8eea0a4`)
+  - Added `streamingActive` field to `HueRoom` model
+  - Detects syncing lights by checking Entertainment areas with active streaming
+  - Purple sync warning banner appears when room lights are syncing
+  - "Stop Sync" button to deactivate all active sync boxes
+  - Syncing lights show movie 🎬 icon instead of lightbulb
+  - Purple styling for syncing lights vs orange for regular on lights
+
 - **Screensaver Calendar Events** (`1123b18`)
   - Today's events displayed in top left corner of screensaver
   - Shows event time (or "All Day") with event title and color indicator
@@ -75,6 +94,13 @@ All notable changes to the Home Control project will be documented in this file.
   - `active` field added to `HueScene` model
 
 #### Changed
+- **HueScreen UI Improvements** (`8eea0a4`)
+  - Lights grid changed from adaptive width to fixed 3 columns
+  - Orange border outline on lights that are on (but not syncing)
+  - Smaller dropdowns for HDMI Input and Entertainment Area selectors
+  - Reduced spacing between power button and brightness slider
+  - Large room icons (120dp) displayed above room name
+
 - **HueScreen Tab Navigation** (`397c309`)
   - Refactored to use horizontal tab bar for room navigation
   - Each room displayed as a tab at the top of the screen
