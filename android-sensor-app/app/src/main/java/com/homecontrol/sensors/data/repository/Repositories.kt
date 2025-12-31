@@ -188,6 +188,18 @@ interface SpotifyRepository {
     suspend fun getLibraryAlbums(): Result<SpotifyAlbumsResponse>
     suspend fun getLibraryArtists(): Result<SpotifyArtistsResponse>
     suspend fun getLibraryTracks(): Result<SpotifyTracksResponse>
+    // New features
+    suspend fun getQueue(): Result<SpotifyQueue>
+    suspend fun addToQueue(uri: String, deviceId: String? = null): Result<Unit>
+    suspend fun getNewReleases(): Result<SpotifyNewReleasesResponse>
+    suspend fun getFeaturedPlaylists(): Result<SpotifyFeaturedPlaylistsResponse>
+    suspend fun getCategories(): Result<SpotifyCategoriesResponse>
+    suspend fun getCategoryPlaylists(categoryId: String): Result<SpotifyPlaylistsResponse>
+    suspend fun getRecommendations(seedArtists: List<String>? = null, seedGenres: List<String>? = null, seedTracks: List<String>? = null): Result<SpotifyRecommendationsResponse>
+    suspend fun saveTrack(id: String): Result<Unit>
+    suspend fun removeTrack(id: String): Result<Unit>
+    suspend fun isTrackSaved(id: String): Result<Boolean>
+    suspend fun areTracksSaved(ids: List<String>): Result<Map<String, Boolean>>
 }
 
 class SpotifyRepositoryImpl @Inject constructor(
@@ -415,6 +427,103 @@ class SpotifyRepositoryImpl @Inject constructor(
         val response = api.getSpotifyLibraryTracks()
         if (response.isSuccessful) {
             response.body() ?: SpotifyTracksResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getQueue(): Result<SpotifyQueue> = runCatching {
+        val response = api.getSpotifyQueue()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyQueue()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun addToQueue(uri: String, deviceId: String?): Result<Unit> = runCatching {
+        val response = api.addToSpotifyQueue(AddToQueueRequest(uri, deviceId))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun getNewReleases(): Result<SpotifyNewReleasesResponse> = runCatching {
+        val response = api.getSpotifyNewReleases()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyNewReleasesResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getFeaturedPlaylists(): Result<SpotifyFeaturedPlaylistsResponse> = runCatching {
+        val response = api.getSpotifyFeaturedPlaylists()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyFeaturedPlaylistsResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getCategories(): Result<SpotifyCategoriesResponse> = runCatching {
+        val response = api.getSpotifyCategories()
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyCategoriesResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getCategoryPlaylists(categoryId: String): Result<SpotifyPlaylistsResponse> = runCatching {
+        val response = api.getSpotifyCategoryPlaylists(categoryId)
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyPlaylistsResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getRecommendations(
+        seedArtists: List<String>?,
+        seedGenres: List<String>?,
+        seedTracks: List<String>?
+    ): Result<SpotifyRecommendationsResponse> = runCatching {
+        val response = api.getSpotifyRecommendations(
+            seedArtists = seedArtists?.joinToString(","),
+            seedGenres = seedGenres?.joinToString(","),
+            seedTracks = seedTracks?.joinToString(",")
+        )
+        if (response.isSuccessful) {
+            response.body() ?: SpotifyRecommendationsResponse()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun saveTrack(id: String): Result<Unit> = runCatching {
+        val response = api.saveSpotifyTrack(id)
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun removeTrack(id: String): Result<Unit> = runCatching {
+        val response = api.removeSpotifyTrack(id)
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun isTrackSaved(id: String): Result<Boolean> = runCatching {
+        val response = api.isSpotifyTrackSaved(id)
+        if (response.isSuccessful) {
+            response.body()?.saved ?: false
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun areTracksSaved(ids: List<String>): Result<Map<String, Boolean>> = runCatching {
+        if (ids.isEmpty()) return@runCatching emptyMap()
+        val idsParam = ids.joinToString(",")
+        val response = api.areSpotifyTracksSaved(idsParam)
+        if (response.isSuccessful) {
+            response.body() ?: emptyMap()
         } else {
             throw Exception("API error: ${response.code()}")
         }

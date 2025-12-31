@@ -717,6 +717,18 @@ func main() {
 	r.Get("/api/spotify/library/artists", handleSpotifyLibraryArtists)
 	r.Get("/api/spotify/library/tracks", handleSpotifyLibraryTracks)
 	r.Get("/api/spotify/library/shows", handleSpotifyLibraryShows)
+	// Queue
+	r.Get("/api/spotify/queue", handleSpotifyQueue)
+	r.Post("/api/spotify/queue", handleSpotifyAddToQueue)
+	// Browse
+	r.Get("/api/spotify/browse/new-releases", handleSpotifyNewReleases)
+	// Note: featured, categories, category playlists, and recommendations endpoints
+	// were deprecated by Spotify in November 2024 and have been removed
+	// Track operations
+	r.Put("/api/spotify/track/{id}/save", handleSpotifyTrackSave)
+	r.Delete("/api/spotify/track/{id}/save", handleSpotifyTrackRemove)
+	r.Get("/api/spotify/track/{id}/saved", handleSpotifyTrackSaved)
+	r.Get("/api/spotify/tracks/saved", handleSpotifyTracksSaved) // Batch check
 
 	// Entertainment device routes
 	r.Get("/api/entertainment/devices", handleGetEntertainmentDevices)
@@ -4621,6 +4633,184 @@ func handleSpotifyLibraryShows(w http.ResponseWriter, r *http.Request) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+func handleSpotifyQueue(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	queue, err := spotifyClient.GetQueue(r.Context())
+	if err != nil {
+		log.Printf("Error getting queue: %v", err)
+		http.Error(w, "Failed to get queue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(queue)
+}
+
+func handleSpotifyAddToQueue(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		URI      string `json:"uri"`
+		DeviceID string `json:"device_id,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.URI == "" {
+		http.Error(w, "URI is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.AddToQueue(r.Context(), req.URI, req.DeviceID); err != nil {
+		log.Printf("Error adding to queue: %v", err)
+		http.Error(w, "Failed to add to queue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyNewReleases(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	limit := 20
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	albums, total, err := spotifyClient.GetNewReleases(r.Context(), limit, offset)
+	if err != nil {
+		log.Printf("Error getting new releases: %v", err)
+		http.Error(w, "Failed to get new releases: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": albums,
+		"total": total,
+	})
+}
+
+// Note: handleSpotifyFeaturedPlaylists, handleSpotifyCategories,
+// handleSpotifyCategoryPlaylists, and handleSpotifyRecommendations were removed
+// because Spotify deprecated these endpoints in November 2024.
+
+func handleSpotifyTrackSave(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	trackID := chi.URLParam(r, "id")
+	if trackID == "" {
+		http.Error(w, "Track ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.SaveTrack(r.Context(), trackID); err != nil {
+		log.Printf("Error saving track: %v", err)
+		http.Error(w, "Failed to save track: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyTrackRemove(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	trackID := chi.URLParam(r, "id")
+	if trackID == "" {
+		http.Error(w, "Track ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := spotifyClient.RemoveTrack(r.Context(), trackID); err != nil {
+		log.Printf("Error removing track: %v", err)
+		http.Error(w, "Failed to remove track: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSpotifyTrackSaved(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	trackID := chi.URLParam(r, "id")
+	if trackID == "" {
+		http.Error(w, "Track ID is required", http.StatusBadRequest)
+		return
+	}
+
+	saved, err := spotifyClient.CheckTrackSaved(r.Context(), trackID)
+	if err != nil {
+		log.Printf("Error checking track saved: %v", err)
+		http.Error(w, "Failed to check track saved: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"saved": saved})
+}
+
+func handleSpotifyTracksSaved(w http.ResponseWriter, r *http.Request) {
+	if spotifyClient == nil || !spotifyClient.IsAuthenticated() {
+		http.Error(w, "Spotify not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	idsParam := r.URL.Query().Get("ids")
+	if idsParam == "" {
+		http.Error(w, "ids parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	trackIDs := strings.Split(idsParam, ",")
+	if len(trackIDs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{})
+		return
+	}
+
+	savedMap, err := spotifyClient.CheckTracksSaved(r.Context(), trackIDs)
+	if err != nil {
+		log.Printf("Error checking tracks saved: %v", err)
+		http.Error(w, "Failed to check tracks saved: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(savedMap)
 }
 
 // loadCalendarPrefs loads calendar preferences from disk

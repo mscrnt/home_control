@@ -18,6 +18,10 @@ data class SpotifyUiState(
     val topTracks: List<SpotifyTrack> = emptyList(),
     val playlists: List<SpotifyPlaylist> = emptyList(),
 
+    // New features
+    val queue: List<SpotifyTrack> = emptyList(),
+    val newReleases: List<SpotifyAlbum> = emptyList(),
+
     // Library content
     val libraryAlbums: List<SpotifyAlbum> = emptyList(),
     val libraryArtists: List<SpotifyArtist> = emptyList(),
@@ -39,9 +43,21 @@ data class SpotifyUiState(
     val isFollowingArtist: Boolean = false,
     val playlistTracks: List<SpotifyTrack> = emptyList(),
 
+    // Saved tracks state (track ID -> saved status)
+    val savedTracks: Map<String, Boolean> = emptyMap(),
+
     // Dialogs
     val showDevicePicker: Boolean = false
-)
+) {
+    /**
+     * Get unique albums from recently played tracks.
+     * Preserves order (most recent first) and removes duplicates.
+     */
+    val recentlyPlayedAlbums: List<SpotifyAlbumSimple>
+        get() = recentlyPlayed
+            .map { it.track.album }
+            .distinctBy { it.id }
+}
 
 enum class SpotifyTab {
     HOME,
@@ -61,6 +77,7 @@ sealed class DetailView {
     data class Artist(val id: String) : DetailView()
     data class Playlist(val id: String, val name: String) : DetailView()
     object LikedSongs : DetailView()
+    object Queue : DetailView()
     data class Section(val title: String, val sectionType: SectionType) : DetailView()
 }
 
@@ -68,5 +85,6 @@ enum class SectionType {
     RECENTLY_PLAYED,
     TOP_ARTISTS,
     YOUR_PLAYLISTS,
-    JUMP_BACK_IN
+    JUMP_BACK_IN,
+    NEW_RELEASES
 }

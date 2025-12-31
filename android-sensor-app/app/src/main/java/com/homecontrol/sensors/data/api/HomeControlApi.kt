@@ -195,6 +195,61 @@ interface HomeControlApi {
     @GET("api/spotify/library/tracks")
     suspend fun getSpotifyLibraryTracks(): Response<SpotifyTracksResponse>
 
+    // Queue
+    @GET("api/spotify/queue")
+    suspend fun getSpotifyQueue(): Response<SpotifyQueue>
+
+    @POST("api/spotify/queue")
+    suspend fun addToSpotifyQueue(@Body request: AddToQueueRequest): Response<Unit>
+
+    // Browse
+    @GET("api/spotify/browse/new-releases")
+    suspend fun getSpotifyNewReleases(
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
+    ): Response<SpotifyNewReleasesResponse>
+
+    @GET("api/spotify/browse/featured")
+    suspend fun getSpotifyFeaturedPlaylists(
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
+    ): Response<SpotifyFeaturedPlaylistsResponse>
+
+    @GET("api/spotify/browse/categories")
+    suspend fun getSpotifyCategories(
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
+    ): Response<SpotifyCategoriesResponse>
+
+    @GET("api/spotify/browse/categories/{id}/playlists")
+    suspend fun getSpotifyCategoryPlaylists(
+        @Path("id") categoryId: String,
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
+    ): Response<SpotifyPlaylistsResponse>
+
+    // Recommendations
+    @GET("api/spotify/recommendations")
+    suspend fun getSpotifyRecommendations(
+        @Query("seed_artists") seedArtists: String? = null,
+        @Query("seed_genres") seedGenres: String? = null,
+        @Query("seed_tracks") seedTracks: String? = null,
+        @Query("limit") limit: Int = 20
+    ): Response<SpotifyRecommendationsResponse>
+
+    // Track operations
+    @PUT("api/spotify/track/{id}/save")
+    suspend fun saveSpotifyTrack(@Path("id") trackId: String): Response<Unit>
+
+    @DELETE("api/spotify/track/{id}/save")
+    suspend fun removeSpotifyTrack(@Path("id") trackId: String): Response<Unit>
+
+    @GET("api/spotify/track/{id}/saved")
+    suspend fun isSpotifyTrackSaved(@Path("id") trackId: String): Response<SavedResponse>
+
+    @GET("api/spotify/tracks/saved")
+    suspend fun areSpotifyTracksSaved(@Query("ids") ids: String): Response<Map<String, Boolean>>
+
     // ============ Calendar ============
 
     @GET("api/calendar/events")

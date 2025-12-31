@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,15 +54,23 @@ type Client struct {
 	httpClient   *http.Client
 	mu           sync.RWMutex
 	onTokenSave  func(*Token) error
+
+	// Rate limiting and caching
+	playbackCache     *PlaybackState
+	playbackCacheTime time.Time
+	playbackCacheTTL  time.Duration
+	rateLimitUntil    time.Time
+	cacheMu           sync.RWMutex
 }
 
 // NewClient creates a new Spotify client
 func NewClient(clientID, clientSecret, redirectURI string) *Client {
 	return &Client{
-		clientID:     clientID,
-		clientSecret: clientSecret,
-		redirectURI:  redirectURI,
-		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		clientID:         clientID,
+		clientSecret:     clientSecret,
+		redirectURI:      redirectURI,
+		httpClient:       &http.Client{Timeout: 10 * time.Second},
+		playbackCacheTTL: 3 * time.Second, // Cache playback state for 3 seconds
 	}
 }
 
@@ -236,6 +245,15 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 
 // doRequest makes an authenticated API request
 func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io.Reader) (*http.Response, error) {
+	// Check if we're currently rate limited
+	c.cacheMu.RLock()
+	rateLimitUntil := c.rateLimitUntil
+	c.cacheMu.RUnlock()
+
+	if time.Now().Before(rateLimitUntil) {
+		return nil, fmt.Errorf("rate limited, retry after %v", time.Until(rateLimitUntil).Round(time.Second))
+	}
+
 	if err := c.ensureValidToken(ctx); err != nil {
 		return nil, err
 	}
@@ -253,7 +271,31 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle 429 Too Many Requests - respect Retry-After header
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := resp.Header.Get("Retry-After")
+		waitDuration := 30 * time.Second // Default to 30 seconds
+
+		if retryAfter != "" {
+			if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+				waitDuration = time.Duration(seconds) * time.Second
+			}
+		}
+
+		c.cacheMu.Lock()
+		c.rateLimitUntil = time.Now().Add(waitDuration)
+		c.cacheMu.Unlock()
+
+		resp.Body.Close()
+		return nil, fmt.Errorf("rate limited by Spotify, retry after %v", waitDuration)
+	}
+
+	return resp, nil
 }
 
 // Player types
@@ -362,19 +404,52 @@ type SearchResults struct {
 	} `json:"playlists"`
 }
 
-// GetPlaybackState returns the current playback state
+// GetPlaybackState returns the current playback state with caching
+// to reduce API calls and avoid rate limiting.
+// Uses market=from_token to get content available in user's country.
+// Supports both tracks and episodes via additional_types parameter.
 func (c *Client) GetPlaybackState(ctx context.Context) (*PlaybackState, error) {
-	resp, err := c.doRequest(ctx, "GET", "/me/player", nil)
+	// Check cache first - return cached data if still valid
+	c.cacheMu.RLock()
+	if c.playbackCache != nil && time.Since(c.playbackCacheTime) < c.playbackCacheTTL {
+		cached := c.playbackCache
+		c.cacheMu.RUnlock()
+		return cached, nil
+	}
+	c.cacheMu.RUnlock()
+
+	// Include market and additional_types for better content availability
+	// market=from_token uses the user's account country
+	resp, err := c.doRequest(ctx, "GET", "/me/player?market=from_token&additional_types=track,episode", nil)
 	if err != nil {
+		// On rate limit or network error, return cached data if available
+		c.cacheMu.RLock()
+		if c.playbackCache != nil {
+			cached := c.playbackCache
+			c.cacheMu.RUnlock()
+			return cached, nil
+		}
+		c.cacheMu.RUnlock()
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	// 204 means no active device
+	// 204 means no active playback/device
 	if resp.StatusCode == http.StatusNoContent {
+		c.cacheMu.Lock()
+		c.playbackCache = nil
+		c.playbackCacheTime = time.Now()
+		c.cacheMu.Unlock()
 		return nil, nil
 	}
 
+	// Handle other error codes
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("unauthorized: invalid or expired access token")
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("forbidden: insufficient permissions (requires user-read-playback-state scope)")
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("get playback state failed: %s - %s", resp.Status, string(body))
@@ -385,7 +460,20 @@ func (c *Client) GetPlaybackState(ctx context.Context) (*PlaybackState, error) {
 		return nil, err
 	}
 
+	// Update cache
+	c.cacheMu.Lock()
+	c.playbackCache = &state
+	c.playbackCacheTime = time.Now()
+	c.cacheMu.Unlock()
+
 	return &state, nil
+}
+
+// InvalidatePlaybackCache clears the playback cache, useful after control actions
+func (c *Client) InvalidatePlaybackCache() {
+	c.cacheMu.Lock()
+	c.playbackCacheTime = time.Time{} // Set to zero time to force refresh
+	c.cacheMu.Unlock()
 }
 
 // GetDevices returns available playback devices
@@ -429,6 +517,7 @@ func (c *Client) Play(ctx context.Context, deviceID string) error {
 		return fmt.Errorf("play failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -463,6 +552,7 @@ func (c *Client) PlayURI(ctx context.Context, deviceID string, uri string, posit
 		return fmt.Errorf("play URI failed: %s - %s", resp.Status, string(respBody))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -484,6 +574,7 @@ func (c *Client) Pause(ctx context.Context, deviceID string) error {
 		return fmt.Errorf("pause failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -505,6 +596,7 @@ func (c *Client) Next(ctx context.Context, deviceID string) error {
 		return fmt.Errorf("next failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -526,6 +618,7 @@ func (c *Client) Previous(ctx context.Context, deviceID string) error {
 		return fmt.Errorf("previous failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -547,6 +640,7 @@ func (c *Client) SetVolume(ctx context.Context, deviceID string, volumePercent i
 		return fmt.Errorf("set volume failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -565,6 +659,7 @@ func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play boo
 		return fmt.Errorf("transfer playback failed: %s - %s", resp.Status, string(respBody))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -586,6 +681,7 @@ func (c *Client) Seek(ctx context.Context, deviceID string, positionMS int) erro
 		return fmt.Errorf("seek failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -607,6 +703,7 @@ func (c *Client) SetShuffle(ctx context.Context, deviceID string, state bool) er
 		return fmt.Errorf("set shuffle failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -628,6 +725,7 @@ func (c *Client) SetRepeat(ctx context.Context, deviceID string, state string) e
 		return fmt.Errorf("set repeat failed: %s - %s", resp.Status, string(body))
 	}
 
+	c.InvalidatePlaybackCache()
 	return nil
 }
 
@@ -1178,4 +1276,637 @@ func (c *Client) GetSavedShows(ctx context.Context, limit, offset int) ([]SavedS
 	}
 
 	return result.Items, result.Total, nil
+}
+
+// ===== Queue Operations =====
+
+// QueueItem represents an item in the playback queue
+type QueueItem struct {
+	Track
+	Type string `json:"type"` // "track" or "episode"
+}
+
+// Queue represents the user's playback queue
+type Queue struct {
+	CurrentlyPlaying *Track      `json:"currently_playing"`
+	Queue            []QueueItem `json:"queue"`
+}
+
+// GetQueue returns the user's current playback queue
+func (c *Client) GetQueue(ctx context.Context) (*Queue, error) {
+	resp, err := c.doRequest(ctx, "GET", "/me/player/queue", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		return &Queue{}, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get queue failed: %s - %s", resp.Status, string(body))
+	}
+
+	var queue Queue
+	if err := json.NewDecoder(resp.Body).Decode(&queue); err != nil {
+		return nil, err
+	}
+
+	return &queue, nil
+}
+
+// AddToQueue adds a track or episode to the playback queue
+func (c *Client) AddToQueue(ctx context.Context, uri string, deviceID string) error {
+	endpoint := fmt.Sprintf("/me/player/queue?uri=%s", url.QueryEscape(uri))
+	if deviceID != "" {
+		endpoint += "&device_id=" + deviceID
+	}
+
+	resp, err := c.doRequest(ctx, "POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("add to queue failed: %s - %s", resp.Status, string(body))
+	}
+
+	c.InvalidatePlaybackCache()
+	return nil
+}
+
+// ===== Recommendations =====
+
+// RecommendationSeed represents seeds for getting recommendations
+type RecommendationSeed struct {
+	SeedArtists []string // Spotify artist IDs
+	SeedGenres  []string // Genre names
+	SeedTracks  []string // Spotify track IDs
+}
+
+// GetRecommendations returns track recommendations based on seeds
+// Limit can be 1-100 (default 20)
+func (c *Client) GetRecommendations(ctx context.Context, seeds RecommendationSeed, limit int) ([]Track, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	params := url.Values{}
+	params.Set("limit", strconv.Itoa(limit))
+	params.Set("market", "from_token")
+
+	if len(seeds.SeedArtists) > 0 {
+		params.Set("seed_artists", strings.Join(seeds.SeedArtists, ","))
+	}
+	if len(seeds.SeedGenres) > 0 {
+		params.Set("seed_genres", strings.Join(seeds.SeedGenres, ","))
+	}
+	if len(seeds.SeedTracks) > 0 {
+		params.Set("seed_tracks", strings.Join(seeds.SeedTracks, ","))
+	}
+
+	// Must have at least one seed
+	if len(seeds.SeedArtists)+len(seeds.SeedGenres)+len(seeds.SeedTracks) == 0 {
+		return nil, fmt.Errorf("at least one seed (artist, genre, or track) is required")
+	}
+
+	resp, err := c.doRequest(ctx, "GET", "/recommendations?"+params.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get recommendations failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Tracks []Track `json:"tracks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Tracks, nil
+}
+
+// ===== Browse =====
+
+// GetNewReleases returns new album releases
+func (c *Client) GetNewReleases(ctx context.Context, limit, offset int) ([]Album, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	endpoint := fmt.Sprintf("/browse/new-releases?limit=%d&offset=%d", limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("get new releases failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Albums struct {
+			Items []Album `json:"items"`
+			Total int     `json:"total"`
+		} `json:"albums"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, err
+	}
+
+	return result.Albums.Items, result.Albums.Total, nil
+}
+
+// Category represents a Spotify category
+type Category struct {
+	ID    string  `json:"id"`
+	Name  string  `json:"name"`
+	Icons []Image `json:"icons"`
+}
+
+// GetCategories returns browse categories
+func (c *Client) GetCategories(ctx context.Context, limit, offset int) ([]Category, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	endpoint := fmt.Sprintf("/browse/categories?limit=%d&offset=%d", limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("get categories failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Categories struct {
+			Items []Category `json:"items"`
+			Total int        `json:"total"`
+		} `json:"categories"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, err
+	}
+
+	return result.Categories.Items, result.Categories.Total, nil
+}
+
+// GetCategoryPlaylists returns playlists for a category
+func (c *Client) GetCategoryPlaylists(ctx context.Context, categoryID string, limit, offset int) ([]Playlist, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	endpoint := fmt.Sprintf("/browse/categories/%s/playlists?limit=%d&offset=%d", categoryID, limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("get category playlists failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Playlists struct {
+			Items []Playlist `json:"items"`
+			Total int        `json:"total"`
+		} `json:"playlists"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, err
+	}
+
+	return result.Playlists.Items, result.Playlists.Total, nil
+}
+
+// GetFeaturedPlaylists returns Spotify's featured playlists
+func (c *Client) GetFeaturedPlaylists(ctx context.Context, limit, offset int) ([]Playlist, string, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	endpoint := fmt.Sprintf("/browse/featured-playlists?limit=%d&offset=%d", limit, offset)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, "", fmt.Errorf("get featured playlists failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Message   string `json:"message"`
+		Playlists struct {
+			Items []Playlist `json:"items"`
+		} `json:"playlists"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, "", err
+	}
+
+	return result.Playlists.Items, result.Message, nil
+}
+
+// ===== Track Operations =====
+
+// SaveTrack saves a track to the user's library (like a song)
+func (c *Client) SaveTrack(ctx context.Context, trackID string) error {
+	endpoint := fmt.Sprintf("/me/tracks?ids=%s", trackID)
+
+	resp, err := c.doRequest(ctx, "PUT", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("save track failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// RemoveTrack removes a track from the user's library
+func (c *Client) RemoveTrack(ctx context.Context, trackID string) error {
+	endpoint := fmt.Sprintf("/me/tracks?ids=%s", trackID)
+
+	resp, err := c.doRequest(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("remove track failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// CheckTrackSaved checks if a track is saved in the user's library
+func (c *Client) CheckTrackSaved(ctx context.Context, trackID string) (bool, error) {
+	endpoint := fmt.Sprintf("/me/tracks/contains?ids=%s", trackID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("check track saved failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result []bool
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, err
+	}
+
+	if len(result) > 0 {
+		return result[0], nil
+	}
+	return false, nil
+}
+
+// CheckTracksSaved checks if multiple tracks are saved in the user's library (max 50 IDs)
+func (c *Client) CheckTracksSaved(ctx context.Context, trackIDs []string) (map[string]bool, error) {
+	if len(trackIDs) == 0 {
+		return make(map[string]bool), nil
+	}
+
+	// Spotify API supports max 50 IDs per request
+	if len(trackIDs) > 50 {
+		trackIDs = trackIDs[:50]
+	}
+
+	endpoint := fmt.Sprintf("/me/tracks/contains?ids=%s", strings.Join(trackIDs, ","))
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("check tracks saved failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result []bool
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	// Create a map of trackID -> saved status
+	savedMap := make(map[string]bool)
+	for i, id := range trackIDs {
+		if i < len(result) {
+			savedMap[id] = result[i]
+		}
+	}
+
+	return savedMap, nil
+}
+
+// ===== Available Genre Seeds =====
+
+// GetAvailableGenreSeeds returns all available genre seeds for recommendations
+func (c *Client) GetAvailableGenreSeeds(ctx context.Context) ([]string, error) {
+	resp, err := c.doRequest(ctx, "GET", "/recommendations/available-genre-seeds", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get genre seeds failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Genres []string `json:"genres"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Genres, nil
+}
+
+// ===== Batch Operations (Reduces API calls) =====
+
+// GetTracks returns multiple tracks in a single API call (max 50 IDs)
+func (c *Client) GetTracks(ctx context.Context, trackIDs []string) ([]Track, error) {
+	if len(trackIDs) == 0 {
+		return nil, nil
+	}
+	if len(trackIDs) > 50 {
+		trackIDs = trackIDs[:50]
+	}
+
+	endpoint := fmt.Sprintf("/tracks?ids=%s&market=from_token", strings.Join(trackIDs, ","))
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get tracks failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Tracks []Track `json:"tracks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Tracks, nil
+}
+
+// GetTrack returns a single track by ID
+func (c *Client) GetTrack(ctx context.Context, trackID string) (*Track, error) {
+	endpoint := fmt.Sprintf("/tracks/%s?market=from_token", trackID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get track failed: %s - %s", resp.Status, string(body))
+	}
+
+	var track Track
+	if err := json.NewDecoder(resp.Body).Decode(&track); err != nil {
+		return nil, err
+	}
+
+	return &track, nil
+}
+
+// GetAlbums returns multiple albums in a single API call (max 20 IDs)
+func (c *Client) GetAlbums(ctx context.Context, albumIDs []string) ([]AlbumFull, error) {
+	if len(albumIDs) == 0 {
+		return nil, nil
+	}
+	if len(albumIDs) > 20 {
+		albumIDs = albumIDs[:20]
+	}
+
+	endpoint := fmt.Sprintf("/albums?ids=%s&market=from_token", strings.Join(albumIDs, ","))
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get albums failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Albums []AlbumFull `json:"albums"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Albums, nil
+}
+
+// GetArtists returns multiple artists in a single API call (max 50 IDs)
+func (c *Client) GetArtists(ctx context.Context, artistIDs []string) ([]ArtistFull, error) {
+	if len(artistIDs) == 0 {
+		return nil, nil
+	}
+	if len(artistIDs) > 50 {
+		artistIDs = artistIDs[:50]
+	}
+
+	endpoint := fmt.Sprintf("/artists?ids=%s", strings.Join(artistIDs, ","))
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get artists failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Artists []ArtistFull `json:"artists"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Artists, nil
+}
+
+// ===== Player Operations =====
+
+// CurrentlyPlaying represents what's currently playing
+type CurrentlyPlaying struct {
+	Device       *Device `json:"device"`
+	ShuffleState bool    `json:"shuffle_state"`
+	RepeatState  string  `json:"repeat_state"`
+	Timestamp    int64   `json:"timestamp"`
+	ProgressMS   int     `json:"progress_ms"`
+	IsPlaying    bool    `json:"is_playing"`
+	Item         *Track  `json:"item"`
+	CurrentlyPlayingType string `json:"currently_playing_type"` // "track", "episode", "ad", "unknown"
+}
+
+// GetCurrentlyPlaying returns what's currently playing (lighter than GetPlaybackState)
+func (c *Client) GetCurrentlyPlaying(ctx context.Context) (*CurrentlyPlaying, error) {
+	resp, err := c.doRequest(ctx, "GET", "/me/player/currently-playing?market=from_token&additional_types=track,episode", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get currently playing failed: %s - %s", resp.Status, string(body))
+	}
+
+	var current CurrentlyPlaying
+	if err := json.NewDecoder(resp.Body).Decode(&current); err != nil {
+		return nil, err
+	}
+
+	return &current, nil
+}
+
+// ===== Playlist Details =====
+
+// PlaylistFull represents a full playlist with snapshot_id for efficient caching
+type PlaylistFull struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	URI         string  `json:"uri"`
+	Images      []Image `json:"images"`
+	SnapshotID  string  `json:"snapshot_id"` // Use to check if playlist changed
+	Owner       struct {
+		DisplayName string `json:"display_name"`
+		ID          string `json:"id"`
+	} `json:"owner"`
+	Tracks struct {
+		Total int             `json:"total"`
+		Items []PlaylistTrack `json:"items"`
+	} `json:"tracks"`
+	Followers struct {
+		Total int `json:"total"`
+	} `json:"followers"`
+	Public       bool `json:"public"`
+	Collaborative bool `json:"collaborative"`
+}
+
+// GetPlaylist returns full playlist details including snapshot_id
+func (c *Client) GetPlaylist(ctx context.Context, playlistID string) (*PlaylistFull, error) {
+	endpoint := fmt.Sprintf("/playlists/%s?market=from_token", playlistID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get playlist failed: %s - %s", resp.Status, string(body))
+	}
+
+	var playlist PlaylistFull
+	if err := json.NewDecoder(resp.Body).Decode(&playlist); err != nil {
+		return nil, err
+	}
+
+	return &playlist, nil
+}
+
+// ===== Related Artists =====
+
+// GetRelatedArtists returns artists similar to a given artist
+func (c *Client) GetRelatedArtists(ctx context.Context, artistID string) ([]Artist, error) {
+	endpoint := fmt.Sprintf("/artists/%s/related-artists", artistID)
+
+	resp, err := c.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get related artists failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Artists []Artist `json:"artists"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Artists, nil
 }

@@ -90,7 +90,7 @@ data class SpotifyContext(
 
 @Serializable
 data class SpotifyPlaylistsResponse(
-    val items: List<SpotifyPlaylist>,
+    val items: List<SpotifyPlaylist> = emptyList(),
     val total: Int = 0,
     val limit: Int = 50,
     val offset: Int = 0
@@ -260,4 +260,51 @@ data class RepeatRequest(
 data class TransferRequest(
     @SerialName("device_id")
     val deviceId: String
+)
+
+// Queue models
+@Serializable
+data class SpotifyQueue(
+    @SerialName("currently_playing")
+    val currentlyPlaying: SpotifyTrack? = null,
+    val queue: List<SpotifyTrack> = emptyList()
+)
+
+@Serializable
+data class AddToQueueRequest(
+    val uri: String,
+    @SerialName("device_id")
+    val deviceId: String? = null
+)
+
+// Browse models
+@Serializable
+data class SpotifyNewReleasesResponse(
+    val items: List<SpotifyAlbum> = emptyList(),
+    val total: Int = 0
+)
+
+@Serializable
+data class SpotifyFeaturedPlaylistsResponse(
+    val items: List<SpotifyPlaylist> = emptyList(),
+    val message: String? = null
+)
+
+@Serializable
+data class SpotifyCategory(
+    val id: String,
+    val name: String,
+    val icons: List<SpotifyImage> = emptyList()
+)
+
+@Serializable
+data class SpotifyCategoriesResponse(
+    val items: List<SpotifyCategory> = emptyList(),
+    val total: Int = 0
+)
+
+// Recommendations
+@Serializable
+data class SpotifyRecommendationsResponse(
+    val tracks: List<SpotifyTrack> = emptyList()
 )

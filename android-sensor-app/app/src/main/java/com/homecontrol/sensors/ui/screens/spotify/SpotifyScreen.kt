@@ -85,6 +85,7 @@ fun SpotifyScreen(
                     onShuffleToggle = viewModel::toggleShuffle,
                     onRepeatCycle = viewModel::cycleRepeat,
                     onDeviceClick = viewModel::showDevicePicker,
+                    onQueueClick = viewModel::openQueue,
                     onAlbumClick = { uiState.playback?.item?.album?.id?.let { viewModel.openAlbumDetail(it) } },
                     onArtistClick = { uiState.playback?.item?.artists?.firstOrNull()?.id?.let { viewModel.openArtistDetail(it) } },
                     modifier = Modifier
@@ -133,6 +134,8 @@ fun SpotifyScreen(
                     onPlaylistClick = viewModel::openPlaylistDetail,
                     onToggleAlbumSaved = viewModel::toggleAlbumSaved,
                     onToggleFollowArtist = viewModel::toggleFollowArtist,
+                    onSaveTrack = viewModel::toggleTrackSaved,
+                    onRemoveTrack = viewModel::removeTrack,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -161,6 +164,7 @@ private fun NowPlayingPanel(
     onShuffleToggle: () -> Unit,
     onRepeatCycle: () -> Unit,
     onDeviceClick: () -> Unit,
+    onQueueClick: () -> Unit,
     onAlbumClick: () -> Unit,
     onArtistClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -313,6 +317,19 @@ private fun NowPlayingPanel(
             }
 
             Spacer(modifier = Modifier.width(16.dp))
+
+            // Queue button
+            IconButton(
+                onClick = onQueueClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = "Queue",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
             // Device picker button
             Row(
@@ -527,10 +544,11 @@ private fun BrowsePanel(
 
             when (uiState.activeTab) {
                 SpotifyTab.HOME -> HomeContent(
-                    recentlyPlayed = uiState.recentlyPlayed,
+                    recentlyPlayedAlbums = uiState.recentlyPlayedAlbums,
                     topArtists = uiState.topArtists,
                     playlists = uiState.playlists,
                     topTracks = uiState.topTracks,
+                    newReleases = uiState.newReleases,
                     onPlayTrack = { onPlayTrack(it, null) },
                     onAlbumClick = onAlbumClick,
                     onArtistClick = onArtistClick,
@@ -674,10 +692,11 @@ private fun TabChip(
 
 @Composable
 private fun HomeContent(
-    recentlyPlayed: List<SpotifyPlayHistoryItem>,
+    recentlyPlayedAlbums: List<SpotifyAlbumSimple>,
     topArtists: List<SpotifyArtist>,
     playlists: List<SpotifyPlaylist>,
     topTracks: List<SpotifyTrack>,
+    newReleases: List<SpotifyAlbum>,
     onPlayTrack: (SpotifyTrack) -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
@@ -687,24 +706,24 @@ private fun HomeContent(
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Recently Played
-        if (recentlyPlayed.isNotEmpty()) {
+        // Recently Played Albums (deduplicated)
+        if (recentlyPlayedAlbums.isNotEmpty()) {
             item {
                 SectionHeader(
                     text = "Recently Played",
-                    showAll = recentlyPlayed.size > 10,
+                    showAll = recentlyPlayedAlbums.size > 10,
                     onShowAllClick = { onSectionClick(SectionType.RECENTLY_PLAYED) }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(recentlyPlayed.take(10)) { item ->
+                    items(recentlyPlayedAlbums.take(10)) { album ->
                         AlbumCard(
-                            imageUrl = item.track.album.images.firstOrNull()?.url,
-                            title = item.track.name,
-                            subtitle = item.track.artists.joinToString(", ") { it.name },
-                            onClick = { onAlbumClick(item.track.album.id) }
+                            imageUrl = album.images.firstOrNull()?.url,
+                            title = album.name,
+                            subtitle = album.releaseDate?.take(4) ?: "",
+                            onClick = { onAlbumClick(album.id) }
                         )
                     }
                 }
@@ -775,6 +794,30 @@ private fun HomeContent(
                             title = track.name,
                             subtitle = track.artists.joinToString(", ") { it.name },
                             onClick = { onPlayTrack(track) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // New Releases
+        if (newReleases.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    text = "New Releases",
+                    showAll = newReleases.size > 10,
+                    onShowAllClick = { onSectionClick(SectionType.NEW_RELEASES) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(newReleases.take(10)) { album ->
+                        AlbumCard(
+                            imageUrl = album.images.firstOrNull()?.url,
+                            title = album.name,
+                            subtitle = album.artists.joinToString(", ") { it.name },
+                            onClick = { onAlbumClick(album.id) }
                         )
                     }
                 }
@@ -1524,6 +1567,9 @@ private fun LikedSongsCard(
 private fun TrackListItem(
     track: SpotifyTrack,
     isPlaying: Boolean = false,
+    showHeartButton: Boolean = false,
+    isSaved: Boolean = false,
+    onHeartClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -1597,7 +1643,22 @@ private fun TrackListItem(
             )
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        // Heart button for save/unsave
+        if (showHeartButton && onHeartClick != null) {
+            IconButton(
+                onClick = onHeartClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSaved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isSaved) "Remove from library" else "Save to library",
+                    tint = if (isSaved) SpotifyGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         Text(
             text = formatDuration(track.durationMs),
@@ -1621,6 +1682,8 @@ private fun DetailViewContent(
     onPlaylistClick: (String, String) -> Unit,
     onToggleAlbumSaved: () -> Unit,
     onToggleFollowArtist: () -> Unit,
+    onSaveTrack: (String) -> Unit,
+    onRemoveTrack: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -1631,13 +1694,15 @@ private fun DetailViewContent(
             is DetailView.Album -> AlbumDetailView(
                 album = uiState.detailAlbum,
                 isSaved = uiState.isAlbumSaved,
+                savedTracks = uiState.savedTracks,
                 currentlyPlayingTrackId = uiState.playback?.item?.id,
                 onBack = onBack,
                 onPlayTrack = { track -> onPlayTrack(track, uiState.detailAlbum?.uri) },
                 onPlayAlbum = { onPlayAlbum(view.id, null) },
                 onShuffleAlbum = { uiState.detailAlbum?.uri?.let { uri -> onShuffleContext(uri) } },
                 onArtistClick = onArtistClick,
-                onToggleSaved = onToggleAlbumSaved
+                onToggleSaved = onToggleAlbumSaved,
+                onSaveTrack = onSaveTrack
             )
 
             is DetailView.Artist -> ArtistDetailView(
@@ -1645,25 +1710,37 @@ private fun DetailViewContent(
                 albums = uiState.detailArtistAlbums,
                 topTracks = uiState.detailArtistTopTracks,
                 isFollowing = uiState.isFollowingArtist,
+                savedTracks = uiState.savedTracks,
                 currentlyPlayingTrackId = uiState.playback?.item?.id,
                 onBack = onBack,
                 onPlayTrack = { track -> onPlayTrack(track, null) },
                 onPlayArtist = { uiState.detailArtist?.uri?.let { uri -> onPlayContext(uri) } },
                 onShuffleArtist = { uiState.detailArtist?.uri?.let { uri -> onShuffleContext(uri) } },
                 onAlbumClick = onAlbumClick,
-                onToggleFollow = onToggleFollowArtist
+                onToggleFollow = onToggleFollowArtist,
+                onSaveTrack = onSaveTrack
             )
 
             is DetailView.Playlist -> PlaylistDetailView(
                 name = view.name,
                 tracks = uiState.playlistTracks,
+                savedTracks = uiState.savedTracks,
                 onBack = onBack,
                 onPlayTrack = { track -> onPlayTrack(track, "spotify:playlist:${view.id}") },
-                onPlayAll = { onPlayPlaylist(view.id, null) }
+                onPlayAll = { onPlayPlaylist(view.id, null) },
+                onSaveTrack = onSaveTrack
             )
 
             DetailView.LikedSongs -> LikedSongsDetailView(
                 tracks = uiState.libraryTracks,
+                onBack = onBack,
+                onPlayTrack = { track -> onPlayTrack(track, null) },
+                onRemoveTrack = onRemoveTrack
+            )
+
+            DetailView.Queue -> QueueDetailView(
+                queue = uiState.queue,
+                currentlyPlayingTrackId = uiState.playback?.item?.id,
                 onBack = onBack,
                 onPlayTrack = { track -> onPlayTrack(track, null) }
             )
@@ -1671,10 +1748,11 @@ private fun DetailViewContent(
             is DetailView.Section -> SectionDetailView(
                 title = view.title,
                 sectionType = view.sectionType,
-                recentlyPlayed = uiState.recentlyPlayed,
+                recentlyPlayedAlbums = uiState.recentlyPlayedAlbums,
                 topArtists = uiState.topArtists,
                 playlists = uiState.playlists,
                 topTracks = uiState.topTracks,
+                newReleases = uiState.newReleases,
                 onBack = onBack,
                 onPlayTrack = { track -> onPlayTrack(track, null) },
                 onAlbumClick = onAlbumClick,
@@ -1691,13 +1769,15 @@ private fun DetailViewContent(
 private fun AlbumDetailView(
     album: SpotifyAlbum?,
     isSaved: Boolean,
+    savedTracks: Map<String, Boolean>,
     currentlyPlayingTrackId: String?,
     onBack: () -> Unit,
     onPlayTrack: (SpotifyTrack) -> Unit,
     onPlayAlbum: () -> Unit,
     onShuffleAlbum: () -> Unit,
     onArtistClick: (String) -> Unit,
-    onToggleSaved: () -> Unit
+    onToggleSaved: () -> Unit,
+    onSaveTrack: (String) -> Unit
 ) {
     if (album == null) {
         Box(
@@ -1879,6 +1959,8 @@ private fun AlbumDetailView(
                             trackNumber = index + 1,
                             track = track,
                             isPlaying = track.id == currentlyPlayingTrackId,
+                            isSaved = savedTracks[track.id] == true,
+                            onHeartClick = { onSaveTrack(track.id) },
                             onClick = { onPlayTrack(track) }
                         )
                     }
@@ -1893,6 +1975,8 @@ private fun AlbumTrackItem(
     trackNumber: Int,
     track: SpotifyTrack,
     isPlaying: Boolean,
+    isSaved: Boolean = false,
+    onHeartClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -1933,7 +2017,22 @@ private fun AlbumTrackItem(
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.width(16.dp))
+        // Heart button
+        if (onHeartClick != null) {
+            IconButton(
+                onClick = onHeartClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSaved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isSaved) "Remove from library" else "Save track",
+                    tint = if (isSaved) SpotifyGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         // Duration
         Text(
@@ -1950,13 +2049,15 @@ private fun ArtistDetailView(
     albums: List<SpotifyAlbum>,
     topTracks: List<SpotifyTrack>,
     isFollowing: Boolean,
+    savedTracks: Map<String, Boolean>,
     currentlyPlayingTrackId: String?,
     onBack: () -> Unit,
     onPlayTrack: (SpotifyTrack) -> Unit,
     onPlayArtist: () -> Unit,
     onShuffleArtist: () -> Unit,
     onAlbumClick: (String) -> Unit,
-    onToggleFollow: () -> Unit
+    onToggleFollow: () -> Unit,
+    onSaveTrack: (String) -> Unit
 ) {
     if (artist == null) {
         Box(
@@ -2145,6 +2246,8 @@ private fun ArtistDetailView(
                             trackNumber = index + 1,
                             track = track,
                             isPlaying = track.id == currentlyPlayingTrackId,
+                            isSaved = savedTracks[track.id] == true,
+                            onHeartClick = { onSaveTrack(track.id) },
                             onClick = { onPlayTrack(track) }
                         )
                     }
@@ -2193,6 +2296,8 @@ private fun ArtistTrackItem(
     trackNumber: Int,
     track: SpotifyTrack,
     isPlaying: Boolean,
+    isSaved: Boolean = false,
+    onHeartClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -2257,7 +2362,22 @@ private fun ArtistTrackItem(
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.width(16.dp))
+        // Heart button
+        if (onHeartClick != null) {
+            IconButton(
+                onClick = onHeartClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSaved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isSaved) "Remove from library" else "Save track",
+                    tint = if (isSaved) SpotifyGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.width(16.dp))
+        }
 
         // Duration
         Text(
@@ -2272,9 +2392,11 @@ private fun ArtistTrackItem(
 private fun PlaylistDetailView(
     name: String,
     tracks: List<SpotifyTrack>,
+    savedTracks: Map<String, Boolean>,
     onBack: () -> Unit,
     onPlayTrack: (SpotifyTrack) -> Unit,
-    onPlayAll: () -> Unit
+    onPlayAll: () -> Unit,
+    onSaveTrack: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Header
@@ -2329,8 +2451,12 @@ private fun PlaylistDetailView(
                 contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
                 items(tracks) { track ->
+                    val isSaved = savedTracks[track.id] == true
                     TrackListItem(
                         track = track,
+                        showHeartButton = true,
+                        isSaved = isSaved,
+                        onHeartClick = { onSaveTrack(track.id) },
                         onClick = { onPlayTrack(track) }
                     )
                 }
@@ -2343,7 +2469,8 @@ private fun PlaylistDetailView(
 private fun LikedSongsDetailView(
     tracks: List<SpotifyTrack>,
     onBack: () -> Unit,
-    onPlayTrack: (SpotifyTrack) -> Unit
+    onPlayTrack: (SpotifyTrack) -> Unit,
+    onRemoveTrack: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Header
@@ -2385,8 +2512,147 @@ private fun LikedSongsDetailView(
                 items(tracks) { track ->
                     TrackListItem(
                         track = track,
+                        showHeartButton = true,
+                        isSaved = true,
+                        onHeartClick = { onRemoveTrack(track.id) },
                         onClick = { onPlayTrack(track) }
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueDetailView(
+    queue: List<SpotifyTrack>,
+    currentlyPlayingTrackId: String?,
+    onBack: () -> Unit,
+    onPlayTrack: (SpotifyTrack) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                contentDescription = null,
+                tint = SpotifyGreen,
+                modifier = Modifier.size(28.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = "Queue",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        if (queue.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Queue is empty",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Next up",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                itemsIndexed(queue) { index, track ->
+                    val isCurrentTrack = track.id == currentlyPlayingTrackId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isCurrentTrack) SpotifyGreen.copy(alpha = 0.1f) else Color.Transparent
+                            )
+                            .clickable { onPlayTrack(track) }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isCurrentTrack) SpotifyGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(32.dp)
+                        )
+
+                        AsyncImage(
+                            model = track.album.images.firstOrNull()?.url,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isCurrentTrack) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isCurrentTrack) SpotifyGreen else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = track.artists.joinToString(", ") { it.name },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = formatDuration(track.durationMs),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -2397,10 +2663,11 @@ private fun LikedSongsDetailView(
 private fun SectionDetailView(
     title: String,
     sectionType: SectionType,
-    recentlyPlayed: List<SpotifyPlayHistoryItem>,
+    recentlyPlayedAlbums: List<SpotifyAlbumSimple>,
     topArtists: List<SpotifyArtist>,
     playlists: List<SpotifyPlaylist>,
     topTracks: List<SpotifyTrack>,
+    newReleases: List<SpotifyAlbum>,
     onBack: () -> Unit,
     onPlayTrack: (SpotifyTrack) -> Unit,
     onAlbumClick: (String) -> Unit,
@@ -2442,12 +2709,12 @@ private fun SectionDetailView(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp)
                 ) {
-                    items(recentlyPlayed) { item ->
+                    items(recentlyPlayedAlbums) { album ->
                         AlbumCard(
-                            imageUrl = item.track.album.images.firstOrNull()?.url,
-                            title = item.track.name,
-                            subtitle = item.track.artists.joinToString(", ") { it.name },
-                            onClick = { onAlbumClick(item.track.album.id) }
+                            imageUrl = album.images.firstOrNull()?.url,
+                            title = album.name,
+                            subtitle = album.releaseDate?.take(4) ?: "",
+                            onClick = { onAlbumClick(album.id) }
                         )
                     }
                 }
@@ -2500,6 +2767,24 @@ private fun SectionDetailView(
                             title = track.name,
                             subtitle = track.artists.joinToString(", ") { it.name },
                             onClick = { onPlayTrack(track) }
+                        )
+                    }
+                }
+            }
+
+            SectionType.NEW_RELEASES -> {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 140.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    items(newReleases) { album ->
+                        AlbumCard(
+                            imageUrl = album.images.firstOrNull()?.url,
+                            title = album.name,
+                            subtitle = album.artists.joinToString(", ") { it.name },
+                            onClick = { onAlbumClick(album.id) }
                         )
                     }
                 }

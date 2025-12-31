@@ -92,6 +92,16 @@ class SpotifyViewModel @Inject constructor(
                     _uiState.update { it.copy(playlists = response.items) }
                 }
         }
+
+        // Load new releases
+        viewModelScope.launch {
+            repository.getNewReleases()
+                .onSuccess { response ->
+                    _uiState.update { it.copy(newReleases = response.items) }
+                }
+        }
+        // Note: Featured playlists and recommendations endpoints were deprecated
+        // by Spotify in November 2024 and have been removed
     }
 
     fun loadLibraryContent() {
@@ -131,8 +141,13 @@ class SpotifyViewModel @Inject constructor(
     // Tab navigation
     fun setActiveTab(tab: SpotifyTab) {
         _uiState.update { it.copy(activeTab = tab) }
-        if (tab == SpotifyTab.LIBRARY && _uiState.value.libraryAlbums.isEmpty()) {
-            loadLibraryContent()
+        when (tab) {
+            SpotifyTab.LIBRARY -> {
+                if (_uiState.value.libraryAlbums.isEmpty()) {
+                    loadLibraryContent()
+                }
+            }
+            else -> {}
         }
     }
 
@@ -189,6 +204,10 @@ class SpotifyViewModel @Inject constructor(
             repository.getAlbum(albumId)
                 .onSuccess { album ->
                     _uiState.update { it.copy(detailAlbum = album) }
+                    // Check saved status for all tracks in the album
+                    album.tracks?.items?.map { it.id }?.let { trackIds ->
+                        checkTracksSaved(trackIds)
+                    }
                 }
 
             repository.isAlbumSaved(albumId)
@@ -231,6 +250,8 @@ class SpotifyViewModel @Inject constructor(
             repository.getArtistTopTracks(artistId)
                 .onSuccess { response ->
                     _uiState.update { it.copy(detailArtistTopTracks = response.tracks) }
+                    // Check saved status for artist's top tracks
+                    checkTracksSaved(response.tracks.map { it.id })
                 }
         }
     }
@@ -248,6 +269,8 @@ class SpotifyViewModel @Inject constructor(
                 .onSuccess { response ->
                     val tracks = response.items.mapNotNull { it.track }
                     _uiState.update { it.copy(playlistTracks = tracks) }
+                    // Check saved status for playlist tracks
+                    checkTracksSaved(tracks.map { it.id })
                 }
         }
     }
@@ -272,8 +295,75 @@ class SpotifyViewModel @Inject constructor(
             SectionType.TOP_ARTISTS -> "Top Artists"
             SectionType.YOUR_PLAYLISTS -> "Your Playlists"
             SectionType.JUMP_BACK_IN -> "Jump Back In"
+            SectionType.NEW_RELEASES -> "New Releases"
         }
         _uiState.update { it.copy(detailView = DetailView.Section(title, sectionType)) }
+    }
+
+    fun openQueue() {
+        _uiState.update { it.copy(detailView = DetailView.Queue) }
+        loadQueue()
+    }
+
+    private fun loadQueue() {
+        viewModelScope.launch {
+            repository.getQueue()
+                .onSuccess { queue ->
+                    _uiState.update { it.copy(queue = queue.queue) }
+                }
+        }
+    }
+
+    fun addToQueue(uri: String) {
+        viewModelScope.launch {
+            repository.addToQueue(uri)
+                .onSuccess {
+                    loadQueue()
+                }
+        }
+    }
+
+    fun saveTrack(trackId: String) {
+        viewModelScope.launch {
+            repository.saveTrack(trackId)
+                .onSuccess {
+                    _uiState.update { state ->
+                        state.copy(savedTracks = state.savedTracks + (trackId to true))
+                    }
+                }
+        }
+    }
+
+    fun removeTrack(trackId: String) {
+        viewModelScope.launch {
+            repository.removeTrack(trackId)
+                .onSuccess {
+                    _uiState.update { state ->
+                        state.copy(savedTracks = state.savedTracks + (trackId to false))
+                    }
+                }
+        }
+    }
+
+    fun toggleTrackSaved(trackId: String) {
+        val isSaved = _uiState.value.savedTracks[trackId] == true
+        if (isSaved) {
+            removeTrack(trackId)
+        } else {
+            saveTrack(trackId)
+        }
+    }
+
+    private fun checkTracksSaved(trackIds: List<String>) {
+        if (trackIds.isEmpty()) return
+        viewModelScope.launch {
+            repository.areTracksSaved(trackIds)
+                .onSuccess { savedMap ->
+                    _uiState.update { state ->
+                        state.copy(savedTracks = state.savedTracks + savedMap)
+                    }
+                }
+        }
     }
 
     fun closeDetailView() {
