@@ -7,6 +7,18 @@ All notable changes to the Home Control project will be documented in this file.
 ### Server/Backend
 
 #### Added
+- **Spotify Queue Endpoint** (`98d00b2`)
+  - GET `/api/spotify/queue` - Retrieve user's playback queue
+  - POST `/api/spotify/queue` - Add track to queue
+
+- **Spotify New Releases Endpoint** (`98d00b2`)
+  - GET `/api/spotify/browse/new-releases` - Browse new album releases
+
+- **Spotify Track Save Status Endpoint** (`98d00b2`)
+  - GET `/api/spotify/tracks/saved?ids=...` - Batch check if tracks are saved
+  - PUT `/api/spotify/track/{id}/save` - Save track to library
+  - DELETE `/api/spotify/track/{id}/save` - Remove track from library
+
 - **Entertainment Room Light Population** (`8eea0a4`)
   - Added `Channels` and `LightServices` fields to `v2EntertainmentConfig` struct
   - Entertainment areas now correctly report their associated lights
@@ -46,9 +58,33 @@ All notable changes to the Home Control project will be documented in this file.
   - Reduces API calls from 4 to 1 per status check
   - Added `FullStatus` struct for combined response parsing
 
+#### Removed
+- **Deprecated Spotify Endpoints** (Spotify API deprecation November 2024)
+  - Removed `/api/spotify/recommendations` endpoint
+  - Removed `/api/spotify/browse/featured` endpoint
+  - Removed `/api/spotify/browse/categories` endpoint
+  - Removed `/api/spotify/browse/categories/{id}/playlists` endpoint
+  - These endpoints now return 404 from Spotify's API
+
 ### Android App
 
 #### Added
+- **Spotify Queue View** (`98d00b2`)
+  - View current playback queue from Now Playing panel
+  - Add tracks to queue from track lists
+  - Queue accessible via queue icon in playback controls
+
+- **New Releases Section** (`98d00b2`)
+  - Browse new album releases on Spotify Home tab
+  - Displayed as horizontal scrollable section with album art
+  - "Show all" expands to full grid view
+
+- **Track Save/Remove Functionality** (`98d00b2`)
+  - Heart button on tracks to save/remove from library
+  - Batch check for saved status when viewing track lists
+  - `savedTracks: Map<String, Boolean>` tracks UI state
+  - Works in album detail, artist detail, playlist detail, and liked songs views
+
 - **New Room Icons** (`8eea0a4`)
   - Custom vector drawable icons for room types: patio (garden bench), bar, desk
   - Lightbulb on/off icons for individual light state indication
@@ -155,6 +191,12 @@ All notable changes to the Home Control project will be documented in this file.
 #### Removed
 - **KioskActivity** - Deleted KioskActivity.kt and activity_kiosk.xml
 - **WebView Mode** - No longer supported; all UI is now native Compose
+- **Browse Tab** - Removed from Spotify screen (now Home and Library tabs only)
+- **Deprecated Spotify UI Sections** (Spotify API deprecation November 2024)
+  - Removed "Made For You (Recommendations)" section
+  - Removed "Featured Playlists" section
+  - Removed `FEATURED_PLAYLISTS` and `RECOMMENDATIONS` from `SectionType` enum
+  - Removed `featuredPlaylists` and `recommendations` fields from `SpotifyUiState`
 
 ---
 
