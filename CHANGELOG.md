@@ -1,10 +1,31 @@
 # Changelog
 
-All notable changes to the Android sensor app will be documented in this file.
+All notable changes to the Home Control project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
+### Server/Backend
+
+#### Changed
+- **Hue Bridge V2 API Migration** (`35c1e44`)
+  - Complete rewrite of Hue client to use V2 API (`/clip/v2/resource/`)
+  - Authentication moved from URL path to `hue-application-key` header
+  - Resources now use UUIDs instead of numeric IDs
+  - Brightness values normalized to 0-100% (V1 used 1-254)
+  - Room control via `grouped_light` resources instead of `/groups/{id}`
+  - Scene activation via PUT to `/scene/{uuid}` with `{"recall": {"action": "active"}}`
+  - New V2 data types: `v2Light`, `v2Room`, `v2Zone`, `v2GroupedLight`, `v2Scene`, `v2Device`
+  - Entertainment deactivation updated to use V2 API endpoint
+
+- **Sync Box Single API Call Optimization** (`2671d25`)
+  - New `GetStatus()` method retrieves device, execution, hue, and HDMI state in one request
+  - Uses `/api/v1` endpoint to fetch all state at once (as recommended by Philips docs)
+  - Reduces API calls from 4 to 1 per status check
+  - Added `FullStatus` struct for combined response parsing
+
+### Android App
+
+#### Added
 - **Screensaver Calendar Events** (`1123b18`)
   - Today's events displayed in top left corner of screensaver
   - Shows event time (or "All Day") with event title and color indicator
@@ -23,7 +44,7 @@ All notable changes to the Android sensor app will be documented in this file.
   - Added photo-film-music icon (purple) for Entertainment screen
   - Added house-signal icon for Home screen
 
-### Changed
+#### Changed
 - **HueScreen Tab Navigation** (`397c309`)
   - Refactored to use horizontal tab bar for room navigation
   - Each room displayed as a tab at the top of the screen
@@ -69,19 +90,34 @@ All notable changes to the Android sensor app will be documented in this file.
   - WebSocketClient.connect() now called on app startup in HomeControlApp
   - Ensures real-time events (doorbell, etc.) work immediately after app launch
 
-### Fixed
+#### Fixed
 - **Spotify Launch Logic**
   - Changed `launchSpotifyQuickly()` to check local process FIRST instead of API
   - Prevents false positives from other devices showing as "active"
   - Only checks API for active devices after confirming Spotify isn't running locally
 
-### Removed
+#### Removed
 - **KioskActivity** - Deleted KioskActivity.kt and activity_kiosk.xml
 - **WebView Mode** - No longer supported; all UI is now native Compose
 
+---
+
 ## [1.3.0] - 2025-12-30
 
-### Added
+### Server/Backend
+
+#### Added
+- Google Weather API migration with tiered caching
+- Screensaver photo slideshow integration
+- Enhanced calendar event modal
+
+#### Changed
+- Spotify launch logic prioritizes local process check
+- ManagedAppsManager version comparison improvements
+
+### Android App
+
+#### Added
 - **Screensaver Screen** (`f9b0e18`)
   - Photo slideshow with Google Drive integration
   - Background music via Spotify integration
@@ -100,7 +136,7 @@ All notable changes to the Android sensor app will be documented in this file.
   - Improved weather widget with better layout and styling
   - Enhanced hourly and daily forecast display
 
-### Changed
+#### Changed
 - **Google Weather API Migration** (`af48079`)
   - Migrated from OpenWeatherMap to Google Weather API
   - Tiered caching strategy to stay within 1000 free calls/month:
@@ -119,7 +155,7 @@ All notable changes to the Android sensor app will be documented in this file.
   - Enhanced WeekView with visual distinction for today and holidays
   - Separate date and time fields for all-day event handling
 
-### Fixed
+#### Fixed
 - **ManagedAppsManager** (`2d8b94b`)
   - Now compares versions BEFORE downloading APKs (was downloading unnecessarily)
   - Fixed expected version handling with explicit version strings in config
@@ -134,9 +170,20 @@ All notable changes to the Android sensor app will be documented in this file.
   - Improved layout to prevent accidental dismissals
   - Better error handling for photo loading
 
+---
+
 ## [1.2.0] - 2025-12-28
 
-### Added
+### Server/Backend
+
+#### Added
+- Spotify OAuth integration with full playback control API
+- Google Calendar and Tasks API endpoints
+- Google Drive photos API for screensaver backgrounds
+
+### Android App
+
+#### Added
 - **Phase 6 Spotify Screen** (`57a9d0b`)
   - Full Spotify playback control UI with two-column layout
   - Now Playing panel with album art, track info, progress bar
@@ -171,13 +218,28 @@ All notable changes to the Android sensor app will be documented in this file.
   - Current time indicator in day view
   - Event color coding from Google Calendar
 
-### Fixed
+#### Fixed
 - Weather model updated to match actual API response format
 - Icon mapping for weather conditions (sun, moon, clouds, etc.)
 
+---
+
 ## [1.1.0] - 2025-12-27
 
-### Added
+### Server/Backend
+
+#### Added
+- Philips Hue bridge control (lights, rooms, scenes)
+- Hue Sync Box entertainment control
+- Home Assistant REST API integration
+- Camera snapshots and Frigate integration
+- MQTT client for doorbell events
+- WebSocket hub for real-time broadcasts
+- OpenWeatherMap API client
+
+### Android App
+
+#### Added
 - **Phase 1 Foundation** (`457f2a2`)
   - Jetpack Compose UI framework
   - Hilt dependency injection
@@ -206,28 +268,41 @@ All notable changes to the Android sensor app will be documented in this file.
   - Glassmorphism theme matching web UI (dark navy, tan text, accent colors)
   - Fixed JSON parsing for Entity, HueRoom, HueLight, SyncBoxStatus models
 
-### Changed
+#### Changed
 - Upgraded to Android 15 (API 35)
 - Upgraded AGP from 8.2.0 to 8.10.1
 - Upgraded Kotlin from 1.9.20 to 2.0.21
 - Upgraded Hilt from 2.48 to 2.56.2
 - Upgraded KSP from 1.9.20-1.0.14 to 2.0.21-1.0.28
 
-### Fixed
+#### Fixed
 - KioskActivity: Replaced deprecated `onBackPressed()` with `OnBackPressedCallback`
 - Theme: Added API level check for deprecated `statusBarColor`/`navigationBarColor`
 - InstallResultReceiver: Added API 33+ version of `getParcelableExtra`
 - CommandServer: Fixed deprecated `parms` to `parameters`
 - Removed deprecated `databaseEnabled` WebView setting
 
-### Known Issues
+#### Known Issues
 - Hilt generates code using deprecated `applicationContextModule()` API
   - Tracked in [#8](https://github.com/mscrnt/home_control/issues/8)
   - Upstream fix merged, awaiting next Dagger release
 
+---
+
 ## [1.0.0] - Initial Release
 
-### Added
+### Server/Backend
+
+#### Added
+- Go server with chi router
+- HTML templates with glass-morphism UI
+- Home Assistant entity control
+- Google OAuth flow with token persistence
+- Environment-based configuration
+
+### Android App
+
+#### Added
 - Kiosk mode with WebView
 - Sensor service (proximity, light)
 - Command server (HTTP API)
