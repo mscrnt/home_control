@@ -103,6 +103,7 @@ private val activities = listOf(
     Activity("Airplay", ActivityIcon.Vector(Icons.Default.Airplay), Color(0xFF007AFF)),
     Activity("Spotify", ActivityIcon.Drawable(R.drawable.ic_spotify), Color(0xFF1DB954)),
     Activity("YouTube", ActivityIcon.Drawable(R.drawable.ic_youtube), Color(0xFFFF0000)),
+    Activity("Twitch", ActivityIcon.Drawable(R.drawable.ic_twitch), Color(0xFF9146FF)),
     Activity("HBO", ActivityIcon.Drawable(R.drawable.ic_hbo), Color(0xFF991EEB)),
     Activity("Plex", ActivityIcon.Drawable(R.drawable.ic_plex), Color(0xFFE5A00D)),
     Activity("Crunchyroll", ActivityIcon.Drawable(R.drawable.ic_crunchyroll), Color(0xFFF47521))
@@ -182,19 +183,29 @@ private fun EntertainmentContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Activity cards in scrollable column
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            // Activity cards in matching card container
+            Card(
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = HomeControlColors.cardBackground()
+                ),
+                border = BorderStroke(1.dp, HomeControlColors.cardBorder())
             ) {
-                activities.forEach { activity ->
-                    ActivityCard(
-                        activity = activity,
-                        onClick = { /* TODO: Implement activity launch */ }
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    activities.forEach { activity ->
+                        ActivityCard(
+                            activity = activity,
+                            onClick = { /* TODO: Implement activity launch */ }
+                        )
+                    }
                 }
             }
         }
@@ -944,12 +955,59 @@ private fun ShieldTab(
     )
 }
 
+// Curated list of apps to show on Shield (package names) - sorted alphabetically
+private val curatedShieldApps = setOf(
+    "com.apple.atve.androidtv.appletv",     // Apple TV
+    "com.crunchyroll.crunchyroid",          // Crunchyroll
+    "com.hbo.hbomax",                       // HBO Max
+    "com.hbo.hbonow",                       // HBO Now
+    "com.hulu.livingroomplus",              // Hulu
+    "com.netflix.ninja",                    // Netflix
+    "net.openvpn.openvpn",                  // OpenVPN
+    "com.peacocktv.peacockandroid",         // Peacock
+    "com.plexapp.android",                  // Plex
+    "com.amazon.amazonvideo.livingroom",    // Prime Video
+    "com.retroarch",                        // RetroArch
+    "com.spotify.tv.android",               // Spotify
+    "com.valvesoftware.steamlink",          // Steam Link
+    "tv.twitch.android.app",                // Twitch
+    "com.gamepass",                         // Xbox Game Pass
+    "com.microsoft.xcloud",                 // Xbox Cloud Gaming (alt package)
+    "com.google.android.youtube.tv",        // YouTube
+    "com.google.android.youtube.tvunplugged" // YouTube TV
+)
+
+// Map package names to drawable resource IDs - sorted alphabetically
+private val shieldAppDrawables: Map<String, Int> = mapOf(
+    "com.apple.atve.androidtv.appletv" to R.drawable.ic_apple_tv,
+    "com.crunchyroll.crunchyroid" to R.drawable.ic_crunchyroll,
+    "com.hbo.hbomax" to R.drawable.ic_hbo,
+    "com.hbo.hbonow" to R.drawable.ic_hbo,
+    "com.hulu.livingroomplus" to R.drawable.ic_hulu,
+    "com.netflix.ninja" to R.drawable.ic_netflix,
+    "net.openvpn.openvpn" to R.drawable.ic_openvpn,
+    "com.peacocktv.peacockandroid" to R.drawable.ic_peacock,
+    "com.plexapp.android" to R.drawable.ic_plex,
+    "com.amazon.amazonvideo.livingroom" to R.drawable.ic_prime_video,
+    "com.retroarch" to R.drawable.ic_retroarch,
+    "com.spotify.tv.android" to R.drawable.ic_spotify,
+    "com.valvesoftware.steamlink" to R.drawable.ic_steam,
+    "tv.twitch.android.app" to R.drawable.ic_twitch,
+    "com.gamepass" to R.drawable.ic_xbox_game_pass,
+    "com.microsoft.xcloud" to R.drawable.ic_xbox_game_pass,
+    "com.google.android.youtube.tv" to R.drawable.ic_youtube,
+    "com.google.android.youtube.tvunplugged" to R.drawable.ic_youtube_tv
+)
+
 @Composable
 private fun ShieldRightPanel(
     shieldState: com.homecontrol.sensors.data.model.ShieldState?,
     shieldApps: List<com.homecontrol.sensors.data.model.ShieldApp>,
     onAppClick: (com.homecontrol.sensors.data.model.ShieldApp) -> Unit
 ) {
+    // Filter to only show curated apps
+    val filteredApps = shieldApps.filter { it.packageName in curatedShieldApps }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1044,16 +1102,16 @@ private fun ShieldRightPanel(
         }
 
         // Apps section
-        if (shieldApps.isNotEmpty()) {
+        if (filteredApps.isNotEmpty()) {
             Text(
-                text = "Installed Apps",
+                text = "Apps",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Apps grid - 3 columns
-            val chunkedApps = shieldApps.chunked(3)
+            // Apps grid - 4 columns
+            val chunkedApps = filteredApps.chunked(4)
             chunkedApps.forEach { rowApps ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1067,12 +1125,12 @@ private fun ShieldRightPanel(
                         )
                     }
                     // Fill empty slots if row is not complete
-                    repeat(3 - rowApps.size) {
+                    repeat(4 - rowApps.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
-        } else {
+        } else if (shieldApps.isEmpty()) {
             Text(
                 text = "Loading apps...",
                 style = MaterialTheme.typography.bodyMedium,
@@ -1089,6 +1147,8 @@ private fun ShieldAppCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val drawableResId = shieldAppDrawables[app.packageName]
+
     Card(
         modifier = modifier
             .clickable(onClick = onClick),
@@ -1103,7 +1163,7 @@ private fun ShieldAppCard(
                 .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App icon placeholder (using first letter)
+            // App icon: drawable resource or first letter fallback
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -1111,14 +1171,23 @@ private fun ShieldAppCard(
                     .background(ShieldColor.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = (app.name ?: app.packageName.substringAfterLast("."))
-                        .take(1)
-                        .uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = ShieldColor
-                )
+                if (drawableResId != null) {
+                    Icon(
+                        painter = painterResource(id = drawableResId),
+                        contentDescription = app.name,
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Unspecified
+                    )
+                } else {
+                    Text(
+                        text = (app.name ?: app.packageName.substringAfterLast("."))
+                            .take(1)
+                            .uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ShieldColor
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
