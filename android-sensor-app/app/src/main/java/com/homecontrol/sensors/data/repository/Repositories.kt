@@ -749,7 +749,7 @@ class EntertainmentRepositoryImpl @Inject constructor(
     }
 
     override suspend fun shieldLaunchApp(name: String, app: String): Result<Unit> = runCatching {
-        val response = api.shieldLaunchApp(name, AppRequest(app))
+        val response = api.shieldLaunchApp(name, AppRequest(packageName = app))
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 

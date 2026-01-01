@@ -1,5 +1,7 @@
 package com.homecontrol.sensors.data.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -145,9 +147,13 @@ data class MuteRequest(
     val mute: Boolean
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class AppRequest(
-    val app: String
+    @EncodeDefault
+    val action: String = "launch",
+    @SerialName("package")
+    val packageName: String
 )
 
 // Camera models

@@ -2814,18 +2814,24 @@ func handleShieldApp(w http.ResponseWriter, r *http.Request) {
 		Package string `json:"package"` // App name or package
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Shield app request decode error: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	log.Printf("Shield app request: action=%q, package=%q", req.Action, req.Package)
+
 	var err error
 	switch req.Action {
 	case "launch":
+		log.Printf("Launching app %s on Shield %s", req.Package, name)
 		err = device.LaunchApp(req.Package)
 	case "stop":
+		log.Printf("Stopping app %s on Shield %s", req.Package, name)
 		err = device.ForceStopApp(req.Package)
 	default:
-		http.Error(w, "Invalid action", http.StatusBadRequest)
+		log.Printf("Invalid action: %q", req.Action)
+		http.Error(w, "Invalid action: "+req.Action, http.StatusBadRequest)
 		return
 	}
 

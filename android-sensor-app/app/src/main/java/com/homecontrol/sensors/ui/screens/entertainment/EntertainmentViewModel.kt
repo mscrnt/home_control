@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homecontrol.sensors.data.repository.EntertainmentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,6 +21,8 @@ class EntertainmentViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(EntertainmentUiState())
     val uiState: StateFlow<EntertainmentUiState> = _uiState.asStateFlow()
+
+    private var shieldPollingJob: Job? = null
 
     init {
         loadDevices()
@@ -128,14 +133,43 @@ class EntertainmentViewModel @Inject constructor(
     }
 
     fun toggleExpanded(type: DeviceType, name: String) {
+        val current = _uiState.value.expandedDevice
+        val isCollapsing = current?.first == type && current.second == name
+
         _uiState.update {
-            val current = it.expandedDevice
-            if (current?.first == type && current.second == name) {
+            if (isCollapsing) {
                 it.copy(expandedDevice = null)
             } else {
                 it.copy(expandedDevice = type to name)
             }
         }
+
+        // Manage Shield polling
+        if (type == DeviceType.SHIELD) {
+            if (isCollapsing) {
+                stopShieldPolling()
+            } else {
+                startShieldPolling(name)
+            }
+        } else {
+            // Stop Shield polling when switching to another device type
+            stopShieldPolling()
+        }
+    }
+
+    private fun startShieldPolling(name: String) {
+        shieldPollingJob?.cancel()
+        shieldPollingJob = viewModelScope.launch {
+            while (isActive) {
+                delay(5000)
+                loadShieldState(name)
+            }
+        }
+    }
+
+    private fun stopShieldPolling() {
+        shieldPollingJob?.cancel()
+        shieldPollingJob = null
     }
 
     fun toggleSonyPower(name: String) {
@@ -265,7 +299,8 @@ class EntertainmentViewModel @Inject constructor(
         viewModelScope.launch {
             entertainmentRepository.shieldLaunchApp(name, app)
                 .onSuccess {
-                    // Refresh state after launching app
+                    // Wait for app to launch before refreshing state
+                    delay(1500)
                     loadShieldState(name)
                 }
                 .onFailure { error ->
