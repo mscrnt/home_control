@@ -654,6 +654,10 @@ interface EntertainmentRepository {
     suspend fun getSonyState(name: String): Result<SonyState>
     suspend fun sonyPower(name: String, power: Boolean): Result<Unit>
     suspend fun sonyVolume(name: String, volume: Int): Result<Unit>
+    suspend fun sonyMute(name: String, mute: Boolean): Result<Unit>
+    suspend fun sonyInput(name: String, input: String): Result<Unit>
+    suspend fun getSonySoundSettings(name: String): Result<List<SonySoundSetting>>
+    suspend fun setSonySoundSetting(name: String, target: String, value: String): Result<Unit>
     suspend fun getShieldState(name: String): Result<ShieldState>
     suspend fun shieldPower(name: String, power: Boolean): Result<Unit>
     suspend fun getXboxState(name: String): Result<XboxState>
@@ -691,6 +695,30 @@ class EntertainmentRepositoryImpl @Inject constructor(
 
     override suspend fun sonyVolume(name: String, volume: Int): Result<Unit> = runCatching {
         val response = api.sonyVolume(name, VolumeRequest(volume))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun sonyMute(name: String, mute: Boolean): Result<Unit> = runCatching {
+        val response = api.sonyMute(name, MuteRequest(mute))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun sonyInput(name: String, input: String): Result<Unit> = runCatching {
+        val response = api.sonyInput(name, InputRequest(input))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun getSonySoundSettings(name: String): Result<List<SonySoundSetting>> = runCatching {
+        val response = api.getSonySoundSettings(name)
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun setSonySoundSetting(name: String, target: String, value: String): Result<Unit> = runCatching {
+        val response = api.setSonySoundSetting(name, SoundSettingRequest(target, value))
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 

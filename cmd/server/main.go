@@ -745,6 +745,8 @@ func main() {
 	r.Post("/api/entertainment/sony/{name}/volume", handleSonyVolume)
 	r.Post("/api/entertainment/sony/{name}/mute", handleSonyMute)
 	r.Post("/api/entertainment/sony/{name}/input", handleSonyInput)
+	r.Get("/api/entertainment/sony/{name}/soundsettings", handleGetSonySoundSettings)
+	r.Post("/api/entertainment/sony/{name}/soundsettings", handleSetSonySoundSetting)
 	// Shield
 	r.Get("/api/entertainment/shield", handleGetShieldDevices)
 	r.Get("/api/entertainment/shield/{name}/state", handleGetShieldState)
@@ -2460,6 +2462,61 @@ func handleSonyInput(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleGetSonySoundSettings(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	settings, err := device.GetSoundSettings()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(settings)
+}
+
+func handleSetSonySoundSetting(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Target string `json:"target"` // e.g., "soundField", "subwooferLevel", "nightMode"
+		Value  string `json:"value"`  // e.g., "movie2", "5", "on"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Target == "" {
+		http.Error(w, "target is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := device.SetSoundSetting(req.Target, req.Value); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

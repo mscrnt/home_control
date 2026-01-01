@@ -76,6 +76,17 @@ class EntertainmentViewModel @Inject constructor(
                     it.copy(sonyStates = it.sonyStates + (name to state))
                 }
             }
+        // Also load sound settings for Sony devices
+        loadSonySoundSettings(name)
+    }
+
+    private suspend fun loadSonySoundSettings(name: String) {
+        entertainmentRepository.getSonySoundSettings(name)
+            .onSuccess { settings ->
+                _uiState.update {
+                    it.copy(sonySoundSettings = it.sonySoundSettings + (name to settings))
+                }
+            }
     }
 
     private suspend fun loadShieldState(name: String) {
@@ -151,6 +162,71 @@ class EntertainmentViewModel @Inject constructor(
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to set volume: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun toggleSonyMute(name: String) {
+        viewModelScope.launch {
+            val currentState = _uiState.value.sonyStates[name] ?: return@launch
+            val newMute = !currentState.muted
+
+            entertainmentRepository.sonyMute(name, newMute)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            sonyStates = it.sonyStates + (name to currentState.copy(muted = newMute))
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to toggle mute: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun setSonyInput(name: String, input: String) {
+        viewModelScope.launch {
+            entertainmentRepository.sonyInput(name, input)
+                .onSuccess {
+                    val currentState = _uiState.value.sonyStates[name] ?: return@onSuccess
+                    _uiState.update {
+                        it.copy(
+                            sonyStates = it.sonyStates + (name to currentState.copy(input = input))
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to set input: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun setSonySoundSetting(name: String, target: String, value: String) {
+        viewModelScope.launch {
+            entertainmentRepository.setSonySoundSetting(name, target, value)
+                .onSuccess {
+                    // Update the local state
+                    val currentSettings = _uiState.value.sonySoundSettings[name] ?: return@onSuccess
+                    val updatedSettings = currentSettings.map { setting ->
+                        if (setting.target == target) {
+                            setting.copy(currentValue = value)
+                        } else {
+                            setting
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(sonySoundSettings = it.sonySoundSettings + (name to updatedSettings))
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to set sound setting: ${error.message}")
                     }
                 }
         }

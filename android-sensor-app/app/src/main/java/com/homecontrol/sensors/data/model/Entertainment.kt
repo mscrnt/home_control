@@ -34,6 +34,32 @@ data class SonyInput(
     val label: String? = null
 )
 
+@Serializable
+data class SonySoundSetting(
+    val target: String,
+    val currentValue: String,
+    val title: String? = null,
+    val type: String? = null,
+    val isAvailable: Boolean = true,
+    val candidate: List<SonySoundSettingCandidate> = emptyList()
+)
+
+@Serializable
+data class SonySoundSettingCandidate(
+    val value: String,
+    val title: String,
+    val isAvailable: Boolean = true,
+    val min: Int? = null,
+    val max: Int? = null,
+    val step: Int? = null
+)
+
+@Serializable
+data class SoundSettingRequest(
+    val target: String,
+    val value: String
+)
+
 // Nvidia Shield
 @Serializable
 data class ShieldDevice(

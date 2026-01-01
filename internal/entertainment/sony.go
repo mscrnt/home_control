@@ -54,10 +54,24 @@ type PowerStatus struct {
 	Status string `json:"status"` // "active", "standby"
 }
 
+// Sound setting candidate option
+type SoundSettingCandidate struct {
+	Value       string `json:"value"`
+	Title       string `json:"title"`
+	IsAvailable bool   `json:"isAvailable"`
+	Min         int    `json:"min,omitempty"`
+	Max         int    `json:"max,omitempty"`
+	Step        int    `json:"step,omitempty"`
+}
+
 // Sound setting
 type SoundSetting struct {
-	Target      string `json:"target"`
-	CurrentValue string `json:"currentValue"`
+	Target       string                  `json:"target"`
+	CurrentValue string                  `json:"currentValue"`
+	Title        string                  `json:"title,omitempty"`
+	Type         string                  `json:"type,omitempty"`
+	IsAvailable  bool                    `json:"isAvailable,omitempty"`
+	Candidate    []SoundSettingCandidate `json:"candidate,omitempty"`
 }
 
 // Input source
@@ -413,12 +427,17 @@ func (d *SonyDevice) GetSoundSettings() ([]SoundSetting, error) {
 
 // SetSoundField sets the sound field/mode (e.g., "clearAudio", "movie", "music")
 func (d *SonyDevice) SetSoundField(mode string) error {
+	return d.SetSoundSetting("soundField", mode)
+}
+
+// SetSoundSetting sets any sound setting by target and value
+func (d *SonyDevice) SetSoundSetting(target, value string) error {
 	params := []interface{}{
 		map[string]interface{}{
 			"settings": []map[string]interface{}{
 				{
-					"target": "soundField",
-					"value":  mode,
+					"target": target,
+					"value":  value,
 				},
 			},
 		},

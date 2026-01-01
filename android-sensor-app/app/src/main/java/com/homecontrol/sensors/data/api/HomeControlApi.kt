@@ -368,6 +368,15 @@ interface HomeControlApi {
         @Body request: InputRequest
     ): Response<Unit>
 
+    @GET("api/entertainment/sony/{name}/soundsettings")
+    suspend fun getSonySoundSettings(@Path("name") name: String): Response<List<SonySoundSetting>>
+
+    @POST("api/entertainment/sony/{name}/soundsettings")
+    suspend fun setSonySoundSetting(
+        @Path("name") name: String,
+        @Body request: SoundSettingRequest
+    ): Response<Unit>
+
     // Shield
     @GET("api/entertainment/shield")
     suspend fun getShieldDevices(): Response<List<ShieldDevice>>
