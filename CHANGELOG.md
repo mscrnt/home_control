@@ -248,6 +248,24 @@ All notable changes to the Home Control project will be documented in this file.
 
 ---
 
+## [1.6.1] - 2025-01-01
+
+### Android App
+
+#### Fixed
+- **Weather 10-Day Forecast** - Filter stale data showing previous day
+- **Weather Modal Refresh** - Fetch fresh data when opening weather modal
+- **Version Display** - Nav drawer now shows correct app version dynamically
+
+#### Changed
+- **OTA Manifest URL** - Now fetches from GitHub instead of MDM server
+- **Screensaver Interval** - Increased slide interval from 30 to 90 seconds
+
+#### Added
+- **Auto-Restart After OTA** - App automatically restarts via MY_PACKAGE_REPLACED receiver
+
+---
+
 ## [1.3.0] - 2025-12-30
 
 ### Server/Backend
