@@ -93,6 +93,8 @@ import com.homecontrol.sensors.ui.screens.home.HomeScreen
 import com.homecontrol.sensors.ui.screens.hue.HueScreen
 import com.homecontrol.sensors.ui.screens.calendar.CalendarScreen
 import com.homecontrol.sensors.ui.screens.screensaver.ScreensaverScreen
+import com.homecontrol.sensors.ui.screens.cameras.CamerasScreen
+import com.homecontrol.sensors.ui.screens.entertainment.EntertainmentScreen
 import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
 import com.homecontrol.sensors.ui.screens.spotify.SpotifyScreen
 import com.homecontrol.sensors.ui.theme.HomeControlColors
@@ -601,8 +603,8 @@ fun MainContent(
                     SmartHomeModal.Home -> HomeScreen()
                     SmartHomeModal.Lights -> HueScreen()
                     SmartHomeModal.Music -> SpotifyScreen()
-                    SmartHomeModal.Cameras -> PlaceholderContent("Cameras")
-                    SmartHomeModal.Media -> PlaceholderContent("Media")
+                    SmartHomeModal.Cameras -> CamerasScreen()
+                    SmartHomeModal.Media -> EntertainmentScreen()
                     SmartHomeModal.Settings -> SettingsScreen()
                     null -> {}
                 }
@@ -669,16 +671,10 @@ private fun FullScreenModal(
                 }
 
                 // Close button
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier.size(48.dp)
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onClose
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(28.dp)
-                    )
+                    Text(text = "Close")
                 }
             }
 
@@ -691,20 +687,6 @@ private fun FullScreenModal(
                 content()
             }
         }
-    }
-}
-
-@Composable
-private fun PlaceholderContent(title: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 

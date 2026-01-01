@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.ScreenshotMonitor
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Schedule
@@ -30,7 +29,6 @@ import androidx.compose.material.icons.filled.WbAuto
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -64,7 +62,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.homecontrol.sensors.data.repository.AppMode
 import com.homecontrol.sensors.data.repository.ThemeMode
 import com.homecontrol.sensors.ui.components.LoadingIndicator
 import com.homecontrol.sensors.ui.theme.HomeControlColors
@@ -166,36 +163,6 @@ fun SettingsScreen(
                         }
                     )
                 }
-            }
-        }
-
-        // App Mode
-        SettingsSection(title = "App Mode", icon = Icons.Default.PhoneAndroid) {
-            Text(
-                text = "Choose how the app displays content",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = uiState.settings.appMode == AppMode.NATIVE,
-                    onClick = { viewModel.setAppMode(AppMode.NATIVE) },
-                    label = { Text("Native UI") },
-                    leadingIcon = {
-                        Icon(Icons.Default.PhoneAndroid, contentDescription = null)
-                    }
-                )
-                FilterChip(
-                    selected = uiState.settings.appMode == AppMode.KIOSK,
-                    onClick = { viewModel.setAppMode(AppMode.KIOSK) },
-                    label = { Text("WebView (Kiosk)") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Web, contentDescription = null)
-                    }
-                )
             }
         }
 
