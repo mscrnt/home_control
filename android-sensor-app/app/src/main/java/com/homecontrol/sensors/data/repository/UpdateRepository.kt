@@ -49,7 +49,7 @@ class UpdateRepository @Inject constructor(
 ) {
     companion object {
         private const val TAG = "UpdateRepository"
-        private const val MANIFEST_URL = "https://mdm.mscrnt.com/files/homecontrol-latest.json"
+        private const val MANIFEST_URL = "https://raw.githubusercontent.com/mscrnt/home_control/refs/heads/android-native/android-sensor-app/homecontrol-latest.json"
         private const val APK_FILENAME = "update.apk"
     }
 
