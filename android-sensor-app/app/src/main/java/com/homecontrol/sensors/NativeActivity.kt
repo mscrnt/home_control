@@ -46,6 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -542,30 +543,30 @@ fun MainContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Main content - Calendar with drawer
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            gesturesEnabled = false, // Disable swipe to not interfere with calendar
-            drawerContent = {
-                ModalDrawerSheet(
-                    modifier = Modifier.width(300.dp),
-                    drawerContainerColor = HomeControlColors.cardBackgroundSolid()
-                ) {
-                    SmartHomeDrawerContent(
-                        onItemClick = { modal ->
-                            scope.launch {
-                                drawerState.close()
-                                activeModal = modal
-                            }
-                        },
-                        onClose = {
-                            scope.launch { drawerState.close() }
+    // Drawer wraps everything so it appears above modals
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = false, // Disable swipe to not interfere with calendar
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.width(300.dp),
+                drawerContainerColor = HomeControlColors.cardBackgroundSolid()
+            ) {
+                SmartHomeDrawerContent(
+                    onItemClick = { modal ->
+                        scope.launch {
+                            drawerState.close()
+                            activeModal = modal
                         }
-                    )
-                }
+                    },
+                    onClose = {
+                        scope.launch { drawerState.close() }
+                    }
+                )
             }
-        ) {
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             // Calendar is always the base
             CalendarScreen(
                 onOpenDrawer = {
@@ -574,56 +575,59 @@ fun MainContent(
                 isScreensaverActive = showScreensaver,
                 modifier = Modifier.fillMaxSize()
             )
-        }
 
-        // Full-screen modal overlay
-        AnimatedVisibility(
-            visible = activeModal != null,
-            enter = fadeIn() + slideInVertically { it / 4 },
-            exit = fadeOut() + slideOutVertically { it / 4 }
-        ) {
-            FullScreenModal(
-                title = when (activeModal) {
-                    SmartHomeModal.Home -> "Home"
-                    SmartHomeModal.Lights -> "hue"
-                    SmartHomeModal.Music -> "Spotify"
-                    SmartHomeModal.Cameras -> "Cameras"
-                    SmartHomeModal.Media -> "Entertainment"
-                    SmartHomeModal.Settings -> "Settings"
-                    null -> ""
-                },
-                onClose = { activeModal = null },
-                titleContent = when (activeModal) {
-                    SmartHomeModal.Music -> { { SpotifyLogoTitle() } }
-                    SmartHomeModal.Lights -> { { PhilipsHueLogoTitle() } }
-                    else -> null
-                }
+            // Full-screen modal overlay
+            AnimatedVisibility(
+                visible = activeModal != null,
+                enter = fadeIn() + slideInVertically { it / 4 },
+                exit = fadeOut() + slideOutVertically { it / 4 }
             ) {
-                when (activeModal) {
-                    SmartHomeModal.Home -> HomeScreen()
-                    SmartHomeModal.Lights -> HueScreen()
-                    SmartHomeModal.Music -> SpotifyScreen()
-                    SmartHomeModal.Cameras -> CamerasScreen()
-                    SmartHomeModal.Media -> EntertainmentScreen()
-                    SmartHomeModal.Settings -> SettingsScreen()
-                    null -> {}
+                FullScreenModal(
+                    title = when (activeModal) {
+                        SmartHomeModal.Home -> "Home"
+                        SmartHomeModal.Lights -> "hue"
+                        SmartHomeModal.Music -> "Spotify"
+                        SmartHomeModal.Cameras -> "Cameras"
+                        SmartHomeModal.Media -> "Entertainment"
+                        SmartHomeModal.Settings -> "Settings"
+                        null -> ""
+                    },
+                    onClose = { activeModal = null },
+                    onOpenDrawer = {
+                        scope.launch { drawerState.open() }
+                    },
+                    titleContent = when (activeModal) {
+                        SmartHomeModal.Music -> { { SpotifyLogoTitle() } }
+                        SmartHomeModal.Lights -> { { PhilipsHueLogoTitle() } }
+                        else -> null
+                    }
+                ) {
+                    when (activeModal) {
+                        SmartHomeModal.Home -> HomeScreen()
+                        SmartHomeModal.Lights -> HueScreen()
+                        SmartHomeModal.Music -> SpotifyScreen()
+                        SmartHomeModal.Cameras -> CamerasScreen()
+                        SmartHomeModal.Media -> EntertainmentScreen()
+                        SmartHomeModal.Settings -> SettingsScreen()
+                        null -> {}
+                    }
                 }
             }
-        }
 
-        // Screensaver overlay
-        AnimatedVisibility(
-            visible = showScreensaver,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            ScreensaverScreen(
-                onDismiss = {
-                    showScreensaver = false
-                    lastInteractionTime = System.currentTimeMillis()
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+            // Screensaver overlay
+            AnimatedVisibility(
+                visible = showScreensaver,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                ScreensaverScreen(
+                    onDismiss = {
+                        showScreensaver = false
+                        lastInteractionTime = System.currentTimeMillis()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }
@@ -632,6 +636,7 @@ fun MainContent(
 private fun FullScreenModal(
     title: String,
     onClose: () -> Unit,
+    onOpenDrawer: () -> Unit,
     titleContent: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
@@ -641,7 +646,7 @@ private fun FullScreenModal(
             .background(HomeControlColors.cardBackgroundSolid())
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header with title and close button
+            // Header with hamburger menu, title, and close button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -649,8 +654,14 @@ private fun FullScreenModal(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Empty spacer for balance
-                Spacer(modifier = Modifier.size(48.dp))
+                // Hamburger menu button
+                IconButton(onClick = onOpenDrawer) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Open menu",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
                 // Title - either custom composable or text
                 Box(
@@ -961,9 +972,15 @@ private fun AmcrestDrawerItem(
     onClick: () -> Unit
 ) {
     val backgroundColor = if (selected) {
-        AmcrestBlue.copy(alpha = 0.2f)
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
     } else {
         MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
     }
 
     Row(
@@ -985,7 +1002,7 @@ private fun AmcrestDrawerItem(
             text = "Cameras",
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = AmcrestBlue
+            color = contentColor
         )
     }
 }
