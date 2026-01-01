@@ -337,6 +337,12 @@ fun WeatherWidgetExpanded(
             // 10-DAY FORECAST with horizontal scroll, centered
             if (weather.daily.isNotEmpty()) {
                 val dailyScrollState = rememberScrollState()
+                // Filter to only today and future days
+                val todayStart = java.time.LocalDate.now()
+                    .atStartOfDay(ZoneId.systemDefault())
+                    .toEpochSecond()
+                val futureDays = weather.daily.filter { it.time >= todayStart }.take(10)
+
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -353,8 +359,13 @@ fun WeatherWidgetExpanded(
                         modifier = Modifier.horizontalScroll(dailyScrollState),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        weather.daily.take(10).forEachIndexed { index, day ->
-                            DailyForecastCard(daily = day, isToday = index == 0)
+                        futureDays.forEachIndexed { index, day ->
+                            // Check if this day is actually today
+                            val dayDate = Instant.ofEpochSecond(day.time)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                            val isToday = dayDate == java.time.LocalDate.now()
+                            DailyForecastCard(daily = day, isToday = isToday)
                         }
                     }
                 }

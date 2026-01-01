@@ -226,10 +226,10 @@ func (c *Client) Start() {
 		log.Printf("Weather cache load failed (will fetch fresh): %v", err)
 	}
 
-	// Only refresh data that has expired based on TTL
+	// Only refresh data that has expired based on TTL or is stale
 	now := time.Now()
 	needsCurrent := now.Sub(c.lastCurrent) >= currentRefreshInterval
-	needsDaily := now.Sub(c.lastDaily) >= dailyRefreshInterval
+	needsDaily := now.Sub(c.lastDaily) >= dailyRefreshInterval || c.isDailyStale()
 	needsHourly := now.Sub(c.lastHourly) >= hourlyRefreshInterval
 
 	if needsCurrent || needsDaily || needsHourly {
@@ -276,16 +276,45 @@ func (c *Client) runCurrentScheduler() {
 	}
 }
 
-// runDailyScheduler refreshes daily forecast every 12 hours
+// runDailyScheduler refreshes daily forecast every 12 hours or when data is stale
 func (c *Client) runDailyScheduler() {
 	ticker := time.NewTicker(dailyRefreshInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if err := c.refreshDaily(); err != nil {
-			log.Printf("Daily forecast refresh failed: %v", err)
+	// Also check every hour if daily data starts with a past day
+	staleTicker := time.NewTicker(1 * time.Hour)
+	defer staleTicker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.refreshDaily(); err != nil {
+				log.Printf("Daily forecast refresh failed: %v", err)
+			}
+		case <-staleTicker.C:
+			// Check if the first day in cache is before today
+			if c.isDailyStale() {
+				log.Printf("Daily forecast stale (first day is in the past), refreshing...")
+				if err := c.refreshDaily(); err != nil {
+					log.Printf("Daily forecast refresh failed: %v", err)
+				}
+			}
 		}
 	}
+}
+
+// isDailyStale returns true if the first day in the daily forecast is before today
+func (c *Client) isDailyStale() bool {
+	c.cacheMu.RLock()
+	defer c.cacheMu.RUnlock()
+
+	if len(c.cache.Daily) == 0 {
+		return true
+	}
+
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
+	return c.cache.Daily[0].Time < todayStart
 }
 
 // runHourlyScheduler refreshes hourly forecast every 6 hours
@@ -527,7 +556,7 @@ func (c *Client) mapConditionToIcon(conditionType string, isDaytime bool) string
 	}
 }
 
-// GetWeather returns the cached weather data
+// GetWeather returns the cached weather data with stale entries filtered out
 func (c *Client) GetWeather() *WeatherData {
 	c.cacheMu.RLock()
 	defer c.cacheMu.RUnlock()
@@ -536,7 +565,36 @@ func (c *Client) GetWeather() *WeatherData {
 	if c.cache.FetchedAt.IsZero() {
 		return nil
 	}
-	return c.cache
+
+	// Calculate the start of today (midnight local time)
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
+
+	// Filter daily forecast to only include today and future days
+	var filteredDaily []DailyWeather
+	for _, day := range c.cache.Daily {
+		if day.Time >= todayStart {
+			filteredDaily = append(filteredDaily, day)
+		}
+	}
+
+	// Filter hourly forecast to only include current hour and future
+	currentHour := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).Unix()
+	var filteredHourly []HourlyWeather
+	for _, hour := range c.cache.Hourly {
+		if hour.Time >= currentHour {
+			filteredHourly = append(filteredHourly, hour)
+		}
+	}
+
+	// Return a copy with filtered data
+	return &WeatherData{
+		Current:   c.cache.Current,
+		Hourly:    filteredHourly,
+		Daily:     filteredDaily,
+		Timezone:  c.cache.Timezone,
+		FetchedAt: c.cache.FetchedAt,
+	}
 }
 
 // IsConfigured returns true if the weather client is properly configured

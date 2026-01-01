@@ -168,7 +168,10 @@ fun CalendarScreen(
                     onTodayClick = { viewModel.goToToday() },
                     onTasksClick = { viewModel.toggleTasksPanel() },
                     onAddEventClick = { viewModel.openCreateEventModal(uiState.currentDate) },
-                    onWeatherClick = { showWeatherModal = true },
+                    onWeatherClick = {
+                        viewModel.refreshWeather()
+                        showWeatherModal = true
+                    },
                     onSmartHomeClick = onOpenDrawer
                 )
 

@@ -252,6 +252,10 @@ class CalendarViewModel @Inject constructor(
         loadInitialData()
     }
 
+    fun refreshWeather() {
+        viewModelScope.launch { loadWeather() }
+    }
+
     // Helper functions for date calculations
     private fun getDateRange(viewMode: CalendarViewMode, currentDate: LocalDate): Pair<LocalDate, LocalDate> {
         return when (viewMode) {
