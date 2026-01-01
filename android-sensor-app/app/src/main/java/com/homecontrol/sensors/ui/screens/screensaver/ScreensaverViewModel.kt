@@ -226,7 +226,7 @@ class ScreensaverViewModel @Inject constructor(
                 spotifyRepository.getPlayback().onSuccess { playback ->
                     _uiState.update { it.copy(playback = playback) }
                 }
-                delay(2000) // Poll every 2 seconds
+                delay(5000) // Poll every 5 seconds to respect Spotify rate limits
             }
         }
     }

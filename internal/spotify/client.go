@@ -70,7 +70,7 @@ func NewClient(clientID, clientSecret, redirectURI string) *Client {
 		clientSecret:     clientSecret,
 		redirectURI:      redirectURI,
 		httpClient:       &http.Client{Timeout: 10 * time.Second},
-		playbackCacheTTL: 3 * time.Second, // Cache playback state for 3 seconds
+		playbackCacheTTL: 5 * time.Second, // Cache playback state for 5 seconds to reduce API calls
 	}
 }
 

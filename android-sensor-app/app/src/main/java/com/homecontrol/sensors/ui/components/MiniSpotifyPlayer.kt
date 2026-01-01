@@ -59,7 +59,7 @@ class MiniSpotifyPlayerViewModel @Inject constructor(
             while (isActive) {
                 repository.getPlayback()
                     .onSuccess { _playback.value = it }
-                delay(2000) // Poll every 2 seconds
+                delay(5000) // Poll every 5 seconds to respect Spotify rate limits
             }
         }
     }

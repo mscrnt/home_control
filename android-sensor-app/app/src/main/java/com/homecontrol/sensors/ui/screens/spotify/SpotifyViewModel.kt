@@ -132,7 +132,7 @@ class SpotifyViewModel @Inject constructor(
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (true) {
-                delay(1_000) // Poll every second for smooth progress updates
+                delay(5_000) // Poll every 5 seconds to respect Spotify rate limits
                 loadPlayback()
             }
         }

@@ -258,6 +258,12 @@ var syncBoxCache struct {
 	CacheDuration time.Duration
 }
 
+// Spotify rate limit log throttle - only log once per minute
+var spotifyRateLimitLog struct {
+	sync.Mutex
+	lastLogged time.Time
+}
+
 func init() {
 	calendarCache.CacheDuration = 30 * time.Second // Refresh cache every 30 seconds
 	syncBoxCache.Statuses = make(map[int]*syncbox.Status)
@@ -3821,6 +3827,17 @@ func handleSpotifyPlayback(w http.ResponseWriter, r *http.Request) {
 
 	state, err := spotifyClient.GetPlaybackState(r.Context())
 	if err != nil {
+		// Log rate limit errors only once per minute to avoid spam
+		if strings.Contains(err.Error(), "rate limited") {
+			spotifyRateLimitLog.Lock()
+			if time.Since(spotifyRateLimitLog.lastLogged) > time.Minute {
+				log.Printf("Spotify rate limited: %v", err)
+				spotifyRateLimitLog.lastLogged = time.Now()
+			}
+			spotifyRateLimitLog.Unlock()
+			http.Error(w, err.Error(), http.StatusTooManyRequests)
+			return
+		}
 		log.Printf("Error getting playback state: %v", err)
 		http.Error(w, "Failed to get playback state: "+err.Error(), http.StatusInternalServerError)
 		return
