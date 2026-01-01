@@ -384,6 +384,12 @@ interface HomeControlApi {
     @GET("api/entertainment/shield/{name}/state")
     suspend fun getShieldState(@Path("name") name: String): Response<ShieldState>
 
+    @GET("api/entertainment/shield/{name}/apps")
+    suspend fun getShieldApps(
+        @Path("name") name: String,
+        @Query("system") includeSystem: Boolean = false
+    ): Response<List<ShieldApp>>
+
     @POST("api/entertainment/shield/{name}/power")
     suspend fun shieldPower(
         @Path("name") name: String,
@@ -394,6 +400,18 @@ interface HomeControlApi {
     suspend fun shieldLaunchApp(
         @Path("name") name: String,
         @Body request: AppRequest
+    ): Response<Unit>
+
+    @POST("api/entertainment/shield/{name}/key")
+    suspend fun shieldSendKey(
+        @Path("name") name: String,
+        @Body request: ShieldKeyRequest
+    ): Response<Unit>
+
+    @POST("api/entertainment/shield/{name}/command")
+    suspend fun shieldSendCommand(
+        @Path("name") name: String,
+        @Body request: ShieldCommandRequest
     ): Response<Unit>
 
     // Xbox

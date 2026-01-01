@@ -69,17 +69,41 @@ data class ShieldDevice(
 
 @Serializable
 data class ShieldState(
-    val power: Boolean,
+    val name: String? = null,
+    val host: String? = null,
+    val online: Boolean = false,
+    @SerialName("power_state")
+    val powerState: String? = null, // awake, dreaming, asleep, unknown
     @SerialName("current_app")
     val currentApp: String? = null,
-    val apps: List<ShieldApp> = emptyList()
-)
+    val volume: Int = 0,
+    val muted: Boolean = false,
+    val brightness: Int = 0,
+    val error: String? = null
+) {
+    // Helper property for backwards compatibility
+    val power: Boolean
+        get() = online && (powerState == "awake" || powerState == "dreaming")
+}
 
 @Serializable
 data class ShieldApp(
-    val name: String,
     @SerialName("package")
-    val packageName: String
+    val packageName: String,
+    val name: String? = null,
+    @SerialName("is_system")
+    val isSystem: Boolean = false
+)
+
+@Serializable
+data class ShieldKeyRequest(
+    val key: String
+)
+
+@Serializable
+data class ShieldCommandRequest(
+    val command: String,
+    val args: List<String> = emptyList()
 )
 
 // Xbox

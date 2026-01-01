@@ -96,6 +96,17 @@ class EntertainmentViewModel @Inject constructor(
                     it.copy(shieldStates = it.shieldStates + (name to state))
                 }
             }
+        // Also load apps for Shield devices
+        loadShieldApps(name)
+    }
+
+    private suspend fun loadShieldApps(name: String) {
+        entertainmentRepository.getShieldApps(name, includeSystem = false)
+            .onSuccess { apps ->
+                _uiState.update {
+                    it.copy(shieldApps = it.shieldApps + (name to apps))
+                }
+            }
     }
 
     private suspend fun loadXboxState(name: String) {
@@ -239,15 +250,38 @@ class EntertainmentViewModel @Inject constructor(
 
             entertainmentRepository.shieldPower(name, newPower)
                 .onSuccess {
-                    _uiState.update {
-                        it.copy(
-                            shieldStates = it.shieldStates + (name to currentState.copy(power = newPower))
-                        )
-                    }
+                    // Refresh state after power toggle
+                    loadShieldState(name)
                 }
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to toggle power: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun launchShieldApp(name: String, app: String) {
+        viewModelScope.launch {
+            entertainmentRepository.shieldLaunchApp(name, app)
+                .onSuccess {
+                    // Refresh state after launching app
+                    loadShieldState(name)
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to launch app: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun sendShieldKey(name: String, key: String) {
+        viewModelScope.launch {
+            entertainmentRepository.shieldSendKey(name, key)
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to send key: ${error.message}")
                     }
                 }
         }

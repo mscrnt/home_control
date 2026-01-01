@@ -116,6 +116,11 @@ fun EntertainmentScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Refresh data when screen appears
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
+
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             snackbarHostState.showSnackbar(error)
@@ -891,11 +896,21 @@ private fun ShieldTab(
 ) {
     val shieldDevice = uiState.devices.shield.firstOrNull()
     val shieldState = shieldDevice?.let { uiState.shieldStates[it.name] }
+    val shieldApps = shieldDevice?.let { uiState.shieldApps[it.name] } ?: emptyList()
 
     if (shieldDevice == null) {
         DevicePlaceholder("Shield")
         return
     }
+
+    // Key mappings for ADB
+    val keyMap = mapOf(
+        DPadDirection.UP to "dpad_up",
+        DPadDirection.DOWN to "dpad_down",
+        DPadDirection.LEFT to "dpad_left",
+        DPadDirection.RIGHT to "dpad_right",
+        DPadDirection.CENTER to "enter"
+    )
 
     RemoteTemplate(
         deviceName = shieldDevice.name,
@@ -903,48 +918,218 @@ private fun ShieldTab(
         isPowerOn = shieldState?.power == true,
         onPowerToggle = { viewModel.toggleShieldPower(shieldDevice.name) },
         onDPadPress = { direction ->
-            // TODO: Send ADB key events for D-pad navigation
+            keyMap[direction]?.let { key ->
+                viewModel.sendShieldKey(shieldDevice.name, key)
+            }
         },
         navButtons = standardNavButtons(
-            onBack = { /* TODO: Send back key event */ },
-            onHome = { /* TODO: Send home key event */ },
-            onMenu = { /* TODO: Send menu key event */ }
+            onBack = { viewModel.sendShieldKey(shieldDevice.name, "back") },
+            onHome = { viewModel.sendShieldKey(shieldDevice.name, "home") },
+            onMenu = { viewModel.sendShieldKey(shieldDevice.name, "menu") }
         ),
         mediaButtons = standardMediaButtons(
-            onRewind = { /* TODO: Send rewind key event */ },
-            onPlayPause = { /* TODO: Send play/pause key event */ },
-            onFastForward = { /* TODO: Send fast forward key event */ }
+            onRewind = { viewModel.sendShieldKey(shieldDevice.name, "rewind") },
+            onPlayPause = { viewModel.sendShieldKey(shieldDevice.name, "play_pause") },
+            onFastForward = { viewModel.sendShieldKey(shieldDevice.name, "fast_forward") }
         ),
         rightContent = {
-            // Show current app if available
+            ShieldRightPanel(
+                shieldState = shieldState,
+                shieldApps = shieldApps,
+                onAppClick = { app ->
+                    viewModel.launchShieldApp(shieldDevice.name, app.packageName)
+                }
+            )
+        }
+    )
+}
+
+@Composable
+private fun ShieldRightPanel(
+    shieldState: com.homecontrol.sensors.data.model.ShieldState?,
+    shieldApps: List<com.homecontrol.sensors.data.model.ShieldApp>,
+    onAppClick: (com.homecontrol.sensors.data.model.ShieldApp) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Status section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                shieldState?.currentApp?.let { app ->
-                    Text(
-                        text = "Now Running",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                // Power state indicator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (shieldState?.powerState) {
+                                    "awake" -> ShieldColor
+                                    "dreaming" -> Color(0xFFFFA726)
+                                    else -> Color.Gray
+                                }
+                            )
                     )
+                    Text(
+                        text = when (shieldState?.powerState) {
+                            "awake" -> "Awake"
+                            "dreaming" -> "Screensaver"
+                            "asleep" -> "Asleep"
+                            else -> if (shieldState?.online == true) "Online" else "Offline"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Current app
+                shieldState?.currentApp?.let { app ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
+                        text = "Now Running",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
                         text = app,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = ShieldColor,
                         textAlign = TextAlign.Center
                     )
-                } ?: Text(
-                    text = "Shield is ${if (shieldState?.power == true) "on" else "off"}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
+                }
+
+                // Volume (if available)
+                if (shieldState?.volume != null && shieldState.volume > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (shieldState.muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            contentDescription = "Volume",
+                            tint = if (shieldState.muted) Color.Red else ShieldColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "${shieldState.volume}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (shieldState.muted)
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
-    )
+
+        // Apps section
+        if (shieldApps.isNotEmpty()) {
+            Text(
+                text = "Installed Apps",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // Apps grid - 3 columns
+            val chunkedApps = shieldApps.chunked(3)
+            chunkedApps.forEach { rowApps ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    rowApps.forEach { app ->
+                        ShieldAppCard(
+                            app = app,
+                            onClick = { onAppClick(app) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    // Fill empty slots if row is not complete
+                    repeat(3 - rowApps.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = "Loading apps...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShieldAppCard(
+    app: com.homecontrol.sensors.data.model.ShieldApp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // App icon placeholder (using first letter)
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ShieldColor.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = (app.name ?: app.packageName.substringAfterLast("."))
+                        .take(1)
+                        .uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ShieldColor
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = app.name ?: app.packageName.substringAfterLast("."),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
+        }
+    }
 }
 
 @Composable

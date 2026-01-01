@@ -659,7 +659,10 @@ interface EntertainmentRepository {
     suspend fun getSonySoundSettings(name: String): Result<List<SonySoundSetting>>
     suspend fun setSonySoundSetting(name: String, target: String, value: String): Result<Unit>
     suspend fun getShieldState(name: String): Result<ShieldState>
+    suspend fun getShieldApps(name: String, includeSystem: Boolean = false): Result<List<ShieldApp>>
     suspend fun shieldPower(name: String, power: Boolean): Result<Unit>
+    suspend fun shieldLaunchApp(name: String, app: String): Result<Unit>
+    suspend fun shieldSendKey(name: String, key: String): Result<Unit>
     suspend fun getXboxState(name: String): Result<XboxState>
     suspend fun xboxPower(name: String, power: Boolean): Result<Unit>
     suspend fun getPS5State(name: String): Result<PS5State>
@@ -733,6 +736,25 @@ class EntertainmentRepositoryImpl @Inject constructor(
 
     override suspend fun shieldPower(name: String, power: Boolean): Result<Unit> = runCatching {
         val response = api.shieldPower(name, PowerRequest(power))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun getShieldApps(name: String, includeSystem: Boolean): Result<List<ShieldApp>> = runCatching {
+        val response = api.getShieldApps(name, includeSystem)
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun shieldLaunchApp(name: String, app: String): Result<Unit> = runCatching {
+        val response = api.shieldLaunchApp(name, AppRequest(app))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun shieldSendKey(name: String, key: String): Result<Unit> = runCatching {
+        val response = api.shieldSendKey(name, ShieldKeyRequest(key))
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 

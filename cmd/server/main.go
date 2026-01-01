@@ -750,10 +750,16 @@ func main() {
 	// Shield
 	r.Get("/api/entertainment/shield", handleGetShieldDevices)
 	r.Get("/api/entertainment/shield/{name}/state", handleGetShieldState)
+	r.Get("/api/entertainment/shield/{name}/info", handleGetShieldInfo)
+	r.Get("/api/entertainment/shield/{name}/apps", handleGetShieldApps)
 	r.Post("/api/entertainment/shield/{name}/power", handleShieldPower)
 	r.Post("/api/entertainment/shield/{name}/navigate", handleShieldNavigate)
 	r.Post("/api/entertainment/shield/{name}/media", handleShieldMedia)
 	r.Post("/api/entertainment/shield/{name}/app", handleShieldApp)
+	r.Post("/api/entertainment/shield/{name}/key", handleShieldKey)
+	r.Post("/api/entertainment/shield/{name}/input", handleShieldInput)
+	r.Post("/api/entertainment/shield/{name}/brightness", handleShieldBrightness)
+	r.Post("/api/entertainment/shield/{name}/command", handleShieldCommand)
 	// Xbox
 	r.Get("/api/entertainment/xbox", handleGetXboxDevices)
 	r.Get("/api/entertainment/xbox/{name}/state", handleGetXboxState)
@@ -2563,21 +2569,32 @@ func handleShieldPower(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Action string `json:"action"` // "wake", "sleep"
+		Action string `json:"action,omitempty"` // "wake", "sleep" (legacy)
+		Power  *bool  `json:"power,omitempty"`  // true = wake, false = sleep
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Support both action string and power boolean
+	action := req.Action
+	if req.Power != nil {
+		if *req.Power {
+			action = "wake"
+		} else {
+			action = "sleep"
+		}
+	}
+
 	var err error
-	switch req.Action {
+	switch action {
 	case "wake":
 		err = device.WakeUp()
 	case "sleep":
 		err = device.Sleep()
 	default:
-		http.Error(w, "Invalid action", http.StatusBadRequest)
+		http.Error(w, "Invalid action: use 'wake'/'sleep' or power: true/false", http.StatusBadRequest)
 		return
 	}
 
@@ -2629,6 +2646,89 @@ func handleShieldNavigate(w http.ResponseWriter, r *http.Request) {
 		err = device.Menu()
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleShieldKey(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Key string `json:"key"` // Key name: back, home, menu, dpad_up, dpad_down, dpad_left, dpad_right, enter, play_pause, rewind, fast_forward, etc.
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Key {
+	// Navigation keys
+	case "dpad_up", "up":
+		err = device.Up()
+	case "dpad_down", "down":
+		err = device.Down()
+	case "dpad_left", "left":
+		err = device.Left()
+	case "dpad_right", "right":
+		err = device.Right()
+	case "enter", "select", "ok":
+		err = device.Select()
+	case "back":
+		err = device.Back()
+	case "home":
+		err = device.Home()
+	case "menu":
+		err = device.Menu()
+	// Media keys
+	case "play":
+		err = device.Play()
+	case "pause":
+		err = device.Pause()
+	case "play_pause", "playpause":
+		err = device.PlayPause()
+	case "stop":
+		err = device.Stop()
+	case "next", "skip_next":
+		err = device.Next()
+	case "previous", "skip_previous":
+		err = device.Previous()
+	case "rewind", "fast_rewind":
+		err = device.Rewind()
+	case "fast_forward", "forward":
+		err = device.FastForward()
+	// Volume keys
+	case "volume_up":
+		err = device.VolumeUp()
+	case "volume_down":
+		err = device.VolumeDown()
+	case "mute":
+		err = device.Mute()
+	// Power keys
+	case "power":
+		err = device.SendKeyEvent(entertainment.KeyPower)
+	case "sleep":
+		err = device.Sleep()
+	case "wake", "wakeup":
+		err = device.WakeUp()
+	default:
+		http.Error(w, "Unknown key: "+req.Key, http.StatusBadRequest)
 		return
 	}
 
@@ -2724,6 +2824,191 @@ func handleShieldApp(w http.ResponseWriter, r *http.Request) {
 		err = device.LaunchApp(req.Package)
 	case "stop":
 		err = device.ForceStopApp(req.Package)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleGetShieldInfo(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	info, err := device.GetDeviceInfo()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+func handleGetShieldApps(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if system apps should be included
+	includeSystem := r.URL.Query().Get("system") == "true"
+
+	apps, err := device.ListInstalledApps(includeSystem)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(apps)
+}
+
+func handleShieldInput(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action   string `json:"action"`    // "text", "clear", "keycode", "longpress"
+		Text     string `json:"text"`      // For text input
+		KeyCode  int    `json:"key_code"`  // For keycode/longpress
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "text":
+		err = device.SendText(req.Text)
+	case "clear":
+		err = device.ClearText()
+	case "keycode":
+		err = device.SendKeyEvent(req.KeyCode)
+	case "longpress":
+		err = device.LongPressKeyEvent(req.KeyCode)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleShieldBrightness(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Level int `json:"level"` // 0-255
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := device.SetBrightness(req.Level); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleShieldCommand(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if shieldManager == nil {
+		http.Error(w, "Shield devices not configured", http.StatusNotFound)
+		return
+	}
+	device := shieldManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // Various quick commands
+		URL    string `json:"url"`    // For open_url
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var err error
+	switch req.Action {
+	case "search":
+		err = device.Search()
+	case "voice":
+		err = device.VoiceAssistant()
+	case "settings":
+		err = device.OpenSettings()
+	case "tv_input":
+		err = device.TVInput()
+	case "info":
+		err = device.Info()
+	case "captions":
+		err = device.Captions()
+	case "open_url":
+		if req.URL == "" {
+			http.Error(w, "URL required", http.StatusBadRequest)
+			return
+		}
+		err = device.OpenURL(req.URL)
+	case "screenshot":
+		path, screenshotErr := device.TakeScreenshot()
+		if screenshotErr != nil {
+			http.Error(w, screenshotErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "path": path})
+		return
+	case "reboot":
+		err = device.Reboot()
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
