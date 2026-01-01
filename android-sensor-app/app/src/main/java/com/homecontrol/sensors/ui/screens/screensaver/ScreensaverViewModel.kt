@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import com.homecontrol.sensors.ui.screens.calendar.Holiday
+import com.homecontrol.sensors.ui.screens.calendar.Holidays
 
 private const val TAG = "ScreensaverViewModel"
 
@@ -42,6 +44,7 @@ data class ScreensaverUiState(
     val serverUrl: String = "",
     val usingCachedPhotos: Boolean = false,
     val todayEvents: List<CalendarEvent> = emptyList(),
+    val todayHolidays: List<Holiday> = emptyList(),
     val use24HourFormat: Boolean = false
 )
 
@@ -126,16 +129,42 @@ class ScreensaverViewModel @Inject constructor(
     private suspend fun loadTodayEvents() {
         val today = java.time.LocalDate.now()
         val todayStr = today.toString() // Format: YYYY-MM-DD
+
+        // Load holidays for today (these are computed locally, not from API)
+        val todayHolidays = Holidays.getRegularHolidaysForDate(today)
+        _uiState.update { it.copy(todayHolidays = todayHolidays) }
+        if (todayHolidays.isNotEmpty()) {
+            Log.d(TAG, "Today's holidays: ${todayHolidays.map { it.name }}")
+        }
+
         calendarRepository.getEvents("day", todayStr).onSuccess { events ->
             // Filter to only events that start today, then sort by start time
+            // Handle various date formats: "2026-01-01", "2026-01-01T00:00:00", "2026-01-01T00:00:00-08:00"
             val todayEvents = events.filter { event ->
-                event.start.startsWith(todayStr) ||
-                (event.allDay && event.start.substringBefore("T") == todayStr)
+                val startDate = extractDateFromStart(event.start)
+                startDate == todayStr
             }.sortedBy { it.start }
             _uiState.update { it.copy(todayEvents = todayEvents) }
             Log.d(TAG, "Loaded ${todayEvents.size} events for today (filtered from ${events.size})")
+            if (events.isNotEmpty()) {
+                Log.d(TAG, "Sample event starts: ${events.take(3).map { "${it.title}: ${it.start}" }}")
+            }
         }.onFailure { error ->
             Log.w(TAG, "Failed to load today's events: ${error.message}")
+        }
+    }
+
+    /**
+     * Extract the date portion (YYYY-MM-DD) from various date/time formats.
+     * Handles: "2026-01-01", "2026-01-01T00:00:00", "2026-01-01T00:00:00-08:00", "2026-01-01T00:00:00Z"
+     */
+    private fun extractDateFromStart(start: String): String {
+        // If it contains 'T', take the part before it
+        // If it doesn't contain 'T', it's just a date - take first 10 chars
+        return if (start.contains("T")) {
+            start.substringBefore("T")
+        } else {
+            start.take(10)
         }
     }
 

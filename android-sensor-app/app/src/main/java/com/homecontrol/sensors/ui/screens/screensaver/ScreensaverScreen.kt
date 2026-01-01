@@ -84,10 +84,11 @@ fun ScreensaverScreen(
                 )
         )
 
-        // Events - top left
-        if (uiState.todayEvents.isNotEmpty()) {
+        // Events and holidays - top left
+        if (uiState.todayEvents.isNotEmpty() || uiState.todayHolidays.isNotEmpty()) {
             EventsOverlay(
                 events = uiState.todayEvents,
+                holidays = uiState.todayHolidays,
                 use24HourFormat = uiState.use24HourFormat,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -386,6 +387,7 @@ private fun SpotifyOverlay(
 @Composable
 private fun EventsOverlay(
     events: List<CalendarEvent>,
+    holidays: List<com.homecontrol.sensors.ui.screens.calendar.Holiday> = emptyList(),
     use24HourFormat: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -397,8 +399,9 @@ private fun EventsOverlay(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Black.copy(alpha = 0.5f))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 18.dp, vertical = 12.dp),  // 50% more horizontal padding
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "Today's Events",
@@ -406,11 +409,42 @@ private fun EventsOverlay(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White,
-                shadow = textOutlineShadow
+                shadow = textOutlineShadow,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
             )
         )
 
-        events.take(5).forEach { event ->
+        // Display holidays first
+        holidays.forEach { holiday ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Holiday",
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFFFFD700).copy(alpha = 0.9f),  // Gold color for holidays
+                        shadow = textOutlineShadow
+                    ),
+                    modifier = Modifier.widthIn(min = 60.dp)
+                )
+                Text(
+                    text = holiday.name,
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFFFD700),  // Gold color for holidays
+                        shadow = textOutlineShadow
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        events.take(10 - holidays.size.coerceAtMost(3)).forEach { event ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -475,9 +509,11 @@ private fun EventsOverlay(
             }
         }
 
-        if (events.size > 5) {
+        val totalItems = holidays.size + events.size
+        val displayedEvents = 10 - holidays.size.coerceAtMost(3)
+        if (events.size > displayedEvents) {
             Text(
-                text = "+${events.size - 5} more",
+                text = "+${events.size - displayedEvents} more",
                 style = TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,

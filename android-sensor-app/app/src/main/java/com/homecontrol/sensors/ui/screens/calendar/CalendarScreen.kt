@@ -126,6 +126,17 @@ fun CalendarScreen(
         }
     }
 
+    // Check for date changes when screen appears and periodically
+    LaunchedEffect(Unit) {
+        // Check immediately when screen appears
+        viewModel.checkDateChange()
+        // Then check every minute
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            viewModel.checkDateChange()
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         // Background image from Google Drive
         uiState.backgroundImageUrl?.let { imageUrl ->

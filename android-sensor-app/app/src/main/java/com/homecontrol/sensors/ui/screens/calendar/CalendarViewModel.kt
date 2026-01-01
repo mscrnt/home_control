@@ -60,9 +60,37 @@ class CalendarViewModel @Inject constructor(
 
     private val apiDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
+    // Track the last known "today" to detect date changes
+    private var lastKnownToday: LocalDate = LocalDate.now()
+
     init {
         loadInitialData()
         observeSettings()
+    }
+
+    /**
+     * Check if the date has changed (e.g., past midnight) and update accordingly.
+     * Should be called when the screen becomes visible.
+     */
+    fun checkDateChange() {
+        val today = LocalDate.now()
+        if (today != lastKnownToday) {
+            Log.d("CalendarViewModel", "Date changed from $lastKnownToday to $today")
+            lastKnownToday = today
+
+            // Check if we crossed into a new month
+            val currentMonth = YearMonth.from(_uiState.value.currentDate)
+            val todayMonth = YearMonth.from(today)
+
+            if (currentMonth != todayMonth) {
+                // We crossed into a new month, update the view to show today's month
+                Log.d("CalendarViewModel", "Month changed, navigating to today: $today")
+                goToToday()
+            } else {
+                // Same month, just refresh the events
+                viewModelScope.launch { loadEvents() }
+            }
+        }
     }
 
     private fun observeSettings() {
