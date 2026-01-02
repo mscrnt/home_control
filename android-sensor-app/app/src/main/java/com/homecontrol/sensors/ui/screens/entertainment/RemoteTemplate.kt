@@ -2,7 +2,10 @@ package com.homecontrol.sensors.ui.screens.entertainment
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,15 +35,18 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -48,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.homecontrol.sensors.R
 
 // D-Pad direction
@@ -71,24 +78,15 @@ data class MediaButtonConfig(
     val isPrimary: Boolean = false
 )
 
+// Volume/Channel rocker button configuration
+data class RockerButtonConfig(
+    val label: String,
+    val onMinus: () -> Unit,
+    val onPlus: () -> Unit
+)
+
 /**
  * A reusable remote control template with a consistent two-column layout.
- *
- * Left column (1/3 width):
- *   - Top 2/3: Power toggle + D-pad
- *   - Bottom 1/3: Navigation + Media buttons
- *
- * Right column (2/3 width):
- *   - Custom content for each device
- *
- * @param deviceName The name of the device being controlled
- * @param accentColor The accent color for the remote controls
- * @param isPowerOn Whether the device is powered on (for power toggle position)
- * @param onPowerToggle Callback for power toggle
- * @param onDPadPress Callback for D-pad button presses
- * @param navButtons List of navigation buttons (Back, Home, Menu, etc.)
- * @param mediaButtons List of media control buttons
- * @param rightContent Composable content for the right column
  */
 @Composable
 fun RemoteTemplate(
@@ -99,76 +97,73 @@ fun RemoteTemplate(
     onDPadPress: (DPadDirection) -> Unit,
     navButtons: List<NavButtonConfig> = emptyList(),
     mediaButtons: List<MediaButtonConfig> = emptyList(),
+    rockerButtons: List<RockerButtonConfig> = emptyList(),
     modifier: Modifier = Modifier,
     rightContent: @Composable (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Left column - 1/3 width
-        Column(
+        // Left column - Remote control panel (narrower)
+        Surface(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(0.55f)
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFF1E2530),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
         ) {
-            // Device name
-            Text(
-                text = deviceName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Top section (2/3 height) - Power toggle + D-pad
             Column(
                 modifier = Modifier
-                    .weight(2f)
-                    .fillMaxWidth(),
+                    .fillMaxSize()
+                    .padding(horizontal = 2.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Power toggle with Off/On labels
-                PowerToggleWithLabels(
+                // Power toggle - minimal design
+                MinimalPowerToggle(
                     isOn = isPowerOn,
                     accentColor = accentColor,
                     onToggle = onPowerToggle
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // D-Pad - larger with more spacing
-                DPad(
+                // D-Pad with refined design
+                ProfessionalDPad(
                     accentColor = accentColor,
                     onPress = onDPadPress,
-                    size = 200.dp,
-                    buttonSpacing = 1.15f
+                    size = 190.dp
                 )
-            }
 
-            // Bottom section (1/3 height) - Navigation + Media buttons
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
-            ) {
-                // Navigation buttons row
+                // Rocker buttons with refined styling
+                if (rockerButtons.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        rockerButtons.forEach { rocker ->
+                            ProfessionalRocker(
+                                label = rocker.label,
+                                onMinus = rocker.onMinus,
+                                onPlus = rocker.onPlus,
+                                accentColor = accentColor
+                            )
+                        }
+                    }
+                }
+
+                // Navigation buttons - refined icons
                 if (navButtons.isNotEmpty()) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         navButtons.forEach { button ->
-                            SmallIconButton(
+                            ProfessionalNavButton(
                                 icon = button.icon,
                                 label = button.label,
                                 onClick = button.onClick,
@@ -179,21 +174,21 @@ fun RemoteTemplate(
                     }
                 }
 
-                // Media buttons row
+                // Media buttons - clean design
                 if (mediaButtons.isNotEmpty()) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         mediaButtons.forEach { button ->
                             if (button.isPrimary) {
-                                PrimaryMediaButton(
+                                ProfessionalPrimaryButton(
                                     icon = button.icon,
                                     onClick = button.onClick,
                                     accentColor = accentColor
                                 )
                             } else {
-                                SmallMediaButton(
+                                ProfessionalMediaButton(
                                     icon = button.icon,
                                     onClick = button.onClick,
                                     accentColor = accentColor
@@ -205,20 +200,20 @@ fun RemoteTemplate(
             }
         }
 
-        // Right column - 2/3 width
+        // Right column - Device-specific content
         Card(
             modifier = Modifier
                 .weight(2f)
                 .fillMaxHeight(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = Color(0xFF1E2530).copy(alpha = 0.7f)
             )
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 rightContent?.invoke()
@@ -228,112 +223,113 @@ fun RemoteTemplate(
 }
 
 @Composable
-fun PowerToggleWithLabels(
-    isOn: Boolean,
-    accentColor: Color,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Off label
-        Text(
-            text = "Off",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (!isOn) FontWeight.Bold else FontWeight.Normal,
-            color = if (!isOn) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
-
-        // Power toggle
-        PowerToggle(
-            isOn = isOn,
-            accentColor = accentColor,
-            onToggle = onToggle
-        )
-
-        // On label
-        Text(
-            text = "On",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isOn) FontWeight.Bold else FontWeight.Normal,
-            color = if (isOn) accentColor
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
-    }
-}
-
-@Composable
-fun PowerToggle(
+private fun MinimalPowerToggle(
     isOn: Boolean,
     accentColor: Color,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val offsetX by animateDpAsState(
-        targetValue = if (isOn) 24.dp else (-24).dp,
-        label = "power_toggle_offset"
+        targetValue = if (isOn) 20.dp else (-20).dp,
+        label = "power_toggle"
     )
 
-    Box(
-        modifier = modifier
-            .width(100.dp)
-            .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(
-                if (isOn) accentColor.copy(alpha = 0.2f)
-                else MaterialTheme.colorScheme.surfaceVariant
-            )
-            .clickable(onClick = onToggle),
-        contentAlignment = Alignment.Center
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Power icon that slides
+        Text(
+            text = "OFF",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (!isOn) FontWeight.Bold else FontWeight.Normal,
+            color = if (!isOn) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f),
+            fontSize = 10.sp
+        )
+
         Box(
             modifier = Modifier
-                .offset(x = offsetX)
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(if (isOn) accentColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)),
+                .width(72.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (isOn) accentColor.copy(alpha = 0.3f)
+                    else Color(0xFF2A3441)
+                )
+                .border(
+                    width = 1.dp,
+                    color = if (isOn) accentColor.copy(alpha = 0.5f) else Color(0xFF3A4451),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .clickable(onClick = onToggle),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "⏻",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
+            Box(
+                modifier = Modifier
+                    .offset(x = offsetX)
+                    .size(26.dp)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(
+                        if (isOn) accentColor
+                        else Color(0xFF4A5461)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "⏻",
+                    fontSize = 12.sp,
+                    color = Color.White
+                )
+            }
         }
+
+        Text(
+            text = "ON",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (isOn) FontWeight.Bold else FontWeight.Normal,
+            color = if (isOn) accentColor else Color.White.copy(alpha = 0.3f),
+            fontSize = 10.sp
+        )
     }
 }
 
 @Composable
-fun DPad(
+private fun ProfessionalDPad(
     accentColor: Color,
     onPress: (DPadDirection) -> Unit,
     modifier: Modifier = Modifier,
-    size: Dp = 200.dp,
-    buttonSpacing: Float = 1f
+    size: Dp = 150.dp
 ) {
-    val buttonSize = size / 3.5f
-    val buttonOffset = buttonSize * buttonSpacing
+    val buttonSize = size / 4f
+    val buttonOffset = buttonSize * 1.15f
 
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        // Background shape
-        Card(
-            modifier = Modifier.size(size),
-            shape = RoundedCornerShape(size / 4),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
-        ) {}
+        // Outer ring background
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(RoundedCornerShape(size / 3.5f))
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF2A3441),
+                            Color(0xFF1A2331)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFF3A4451),
+                    shape = RoundedCornerShape(size / 3.5f)
+                )
+        )
 
         // Up button
-        DPadButton(
+        DPadDirectionButton(
             onClick = { onPress(DPadDirection.UP) },
             accentColor = accentColor,
             rotation = 90f,
@@ -343,7 +339,7 @@ fun DPad(
         )
 
         // Down button
-        DPadButton(
+        DPadDirectionButton(
             onClick = { onPress(DPadDirection.DOWN) },
             accentColor = accentColor,
             rotation = -90f,
@@ -353,7 +349,7 @@ fun DPad(
         )
 
         // Left button
-        DPadButton(
+        DPadDirectionButton(
             onClick = { onPress(DPadDirection.LEFT) },
             accentColor = accentColor,
             rotation = 0f,
@@ -363,7 +359,7 @@ fun DPad(
         )
 
         // Right button
-        DPadButton(
+        DPadDirectionButton(
             onClick = { onPress(DPadDirection.RIGHT) },
             accentColor = accentColor,
             rotation = 180f,
@@ -372,127 +368,278 @@ fun DPad(
                 .offset(x = buttonOffset)
         )
 
-        // Center/OK button
+        // Center OK button
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+
         Box(
             modifier = Modifier
-                .size(buttonSize)
+                .size(buttonSize * 1.1f)
+                .shadow(if (isPressed) 2.dp else 6.dp, CircleShape)
                 .clip(CircleShape)
-                .background(accentColor)
-                .clickable { onPress(DPadDirection.CENTER) },
+                .background(
+                    Brush.verticalGradient(
+                        colors = if (isPressed) listOf(accentColor.copy(alpha = 0.8f), accentColor)
+                        else listOf(accentColor, accentColor.copy(alpha = 0.8f))
+                    )
+                )
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) { onPress(DPadDirection.CENTER) },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "OK",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
+                fontSize = 13.sp
             )
         }
     }
 }
 
 @Composable
-private fun DPadButton(
+private fun DPadDirectionButton(
     onClick: () -> Unit,
     accentColor: Color,
     rotation: Float,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             painter = painterResource(id = R.drawable.ic_arrow_circle),
             contentDescription = null,
-            tint = accentColor,
+            tint = if (isPressed) accentColor else accentColor.copy(alpha = 0.7f),
             modifier = Modifier
-                .size(48.dp)
+                .size(36.dp)
                 .rotate(rotation)
         )
     }
 }
 
 @Composable
-private fun SmallIconButton(
+private fun ProfessionalRocker(
+    label: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.6f),
+            fontWeight = FontWeight.Medium,
+            fontSize = 10.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Pill-shaped rocker
+        Surface(
+            modifier = Modifier
+                .height(32.dp)
+                .width(76.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xFF2A3441),
+            tonalElevation = 2.dp
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Minus
+                RockerHalf(
+                    text = "−",
+                    onClick = onMinus,
+                    accentColor = accentColor,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Divider
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(20.dp)
+                        .background(Color(0xFF3A4451))
+                )
+
+                // Plus
+                RockerHalf(
+                    text = "+",
+                    onClick = onPlus,
+                    accentColor = accentColor,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RockerHalf(
+    text: String,
+    onClick: () -> Unit,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(if (isPressed) accentColor.copy(alpha = 0.2f) else Color.Transparent)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isPressed) accentColor else accentColor.copy(alpha = 0.8f)
+        )
+    }
+}
+
+@Composable
+private fun ProfessionalNavButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
     accentColor: Color,
     rotation: Float = 0f
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+        Surface(
+            modifier = Modifier.size(36.dp),
+            shape = CircleShape,
+            color = if (isPressed) accentColor.copy(alpha = 0.2f) else Color(0xFF2A3441),
+            tonalElevation = 2.dp
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = accentColor,
+            Box(
                 modifier = Modifier
-                    .size(20.dp)
-                    .rotate(rotation)
-            )
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onClick
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = if (isPressed) accentColor else accentColor.copy(alpha = 0.8f),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .rotate(rotation)
+                )
+            }
         }
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 9.sp
         )
     }
 }
 
 @Composable
-private fun SmallMediaButton(
+private fun ProfessionalMediaButton(
     icon: ImageVector,
     onClick: () -> Unit,
     accentColor: Color
 ) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    Surface(
+        modifier = Modifier.size(32.dp),
+        shape = CircleShape,
+        color = if (isPressed) accentColor.copy(alpha = 0.2f) else Color(0xFF2A3441)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = accentColor,
-            modifier = Modifier.size(20.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isPressed) accentColor else accentColor.copy(alpha = 0.8f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
 
 @Composable
-private fun PrimaryMediaButton(
+private fun ProfessionalPrimaryButton(
     icon: ImageVector,
     onClick: () -> Unit,
     accentColor: Color
 ) {
-    IconButton(
-        onClick = onClick,
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    Surface(
         modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(accentColor)
+            .size(40.dp)
+            .shadow(if (isPressed) 2.dp else 4.dp, CircleShape),
+        shape = CircleShape,
+        color = accentColor
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(28.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+        }
     }
 }
 

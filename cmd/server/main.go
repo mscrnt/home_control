@@ -747,6 +747,19 @@ func main() {
 	r.Post("/api/entertainment/sony/{name}/input", handleSonyInput)
 	r.Get("/api/entertainment/sony/{name}/soundsettings", handleGetSonySoundSettings)
 	r.Post("/api/entertainment/sony/{name}/soundsettings", handleSetSonySoundSetting)
+	r.Post("/api/entertainment/sony/{name}/command", handleSonySendCommand)
+	r.Get("/api/entertainment/sony/commands", handleGetSonyCommands)
+	r.Get("/api/entertainment/sony/{name}/apps", handleGetSonyApps)
+	r.Post("/api/entertainment/sony/{name}/app", handleLaunchSonyApp)
+	r.Get("/api/entertainment/sony/{name}/system", handleGetSonySystemInfo)
+	r.Post("/api/entertainment/sony/{name}/reboot", handleSonyReboot)
+	r.Get("/api/entertainment/sony/{name}/led", handleGetSonyLED)
+	r.Post("/api/entertainment/sony/{name}/led", handleSetSonyLED)
+	r.Get("/api/entertainment/sony/{name}/powersaving", handleGetSonyPowerSaving)
+	r.Post("/api/entertainment/sony/{name}/powersaving", handleSetSonyPowerSaving)
+	r.Post("/api/entertainment/sony/{name}/picture-off", handleSonyPictureOff)
+	r.Post("/api/entertainment/sony/{name}/picture-on", handleSonyPictureOn)
+	r.Get("/api/entertainment/sony/{name}/playing", handleGetSonyPlayingContent)
 	// Shield
 	r.Get("/api/entertainment/shield", handleGetShieldDevices)
 	r.Get("/api/entertainment/shield/{name}/state", handleGetShieldState)
@@ -2069,6 +2082,7 @@ func initEntertainmentManagers(cfg Config) {
 		for _, dev := range cfg.SonyDevices {
 			sonyManager.AddDevice(dev.Name, dev.Host, dev.Port, dev.PSK, dev.DeviceType)
 		}
+		sonyManager.StartPolling()
 		log.Printf("Sony Entertainment manager initialized with %d device(s)", len(cfg.SonyDevices))
 	}
 
@@ -2528,6 +2542,275 @@ func handleSetSonySoundSetting(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleSonySendCommand(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Command string `json:"command"` // e.g., "hdmi1", "netflix", "home"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Command == "" {
+		http.Error(w, "command is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := device.SendIRCC(req.Command); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleGetSonyCommands(w http.ResponseWriter, r *http.Request) {
+	commands := entertainment.GetAvailableCommands()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(commands)
+}
+
+func handleGetSonyApps(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	apps, err := device.GetApplicationList()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(apps)
+}
+
+func handleLaunchSonyApp(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		URI string `json:"uri"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := device.LaunchApp(req.URI); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleGetSonySystemInfo(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	info, err := device.GetSystemInfo()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+func handleSonyReboot(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	if err := device.RequestReboot(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleGetSonyLED(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	status, err := device.GetLEDStatus()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
+func handleSetSonyLED(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Mode   string `json:"mode"`
+		Status string `json:"status,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := device.SetLEDStatus(req.Mode, req.Status); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleGetSonyPowerSaving(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	mode, err := device.GetPowerSavingMode()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(mode)
+}
+
+func handleSetSonyPowerSaving(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := device.SetPowerSavingMode(req.Mode); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSonyPictureOff(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	if err := device.PictureOff(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleSonyPictureOn(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	if err := device.PictureOn(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleGetSonyPlayingContent(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if sonyManager == nil {
+		http.Error(w, "Sony devices not configured", http.StatusNotFound)
+		return
+	}
+	device := sonyManager.GetDevice(name)
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+	content, err := device.GetPlayingContent()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(content)
 }
 
 // ========== Shield Handlers ==========

@@ -15,15 +15,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Airplay
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.SettingsInputHdmi
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VolumeDown
@@ -32,6 +42,7 @@ import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -70,6 +81,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.homecontrol.sensors.R
 import com.homecontrol.sensors.data.model.SonySoundSetting
+import com.homecontrol.sensors.data.model.SonyState
 import com.homecontrol.sensors.ui.components.LoadingIndicator
 import com.homecontrol.sensors.ui.theme.HomeControlColors
 import kotlinx.coroutines.Dispatchers
@@ -146,7 +158,6 @@ private val activities = listOf(
         sofabatonOffUrl = sofabatonUrl("Mqg2Q8n104", 0),
         hdmiInput = "input3"  // Switch is on HDMI 3
     ),
-    Activity("Airplay", ActivityIcon.Vector(Icons.Default.Airplay), Color(0xFF007AFF)),
     Activity(
         name = "Spotify",
         icon = ActivityIcon.Drawable(R.drawable.ic_spotify),
@@ -258,6 +269,44 @@ private suspend fun launchShieldApp(baseUrl: String, shieldName: String, package
     }
 }
 
+// Helper function to turn off picture on Sony TV (audio continues)
+private suspend fun sonyPictureOff(baseUrl: String, deviceName: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val encodedName = java.net.URLEncoder.encode(deviceName, "UTF-8")
+        val url = URL("$baseUrl/api/entertainment/sony/$encodedName/picture-off")
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        val responseCode = connection.responseCode
+        connection.disconnect()
+        responseCode in 200..299
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
+
+// Helper function to turn picture back on for Sony TV
+private suspend fun sonyPictureOn(baseUrl: String, deviceName: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val encodedName = java.net.URLEncoder.encode(deviceName, "UTF-8")
+        val url = URL("$baseUrl/api/entertainment/sony/$encodedName/picture-on")
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        val responseCode = connection.responseCode
+        connection.disconnect()
+        responseCode in 200..299
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
+
 @Composable
 fun EntertainmentScreen(
     viewModel: EntertainmentViewModel = hiltViewModel(),
@@ -321,19 +370,23 @@ private fun EntertainmentContent(
                 .weight(1f)
                 .fillMaxHeight()
         ) {
-            // Header to align with tab row
-            Text(
-                text = "Activities",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
+            // Header to align with tab row - match TabRow height (48dp)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            )
+                    .height(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Activities",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Activity cards in matching card container
             Card(
@@ -347,8 +400,8 @@ private fun EntertainmentContent(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     activities.forEach { activity ->
@@ -412,7 +465,7 @@ private fun EntertainmentContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Power Off All",
+                            text = "Power Off",
                             color = Color.White,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -483,21 +536,7 @@ private fun EntertainmentContent(
                     DeviceTab.SOUNDBAR -> {
                         SoundbarTab(
                             uiState = uiState,
-                            onVolumeChange = { volume ->
-                                uiState.devices.sony.firstOrNull()?.let { device ->
-                                    viewModel.setSonyVolume(device.name, volume)
-                                }
-                            },
-                            onMuteToggle = {
-                                uiState.devices.sony.firstOrNull()?.let { device ->
-                                    viewModel.toggleSonyMute(device.name)
-                                }
-                            },
-                            onSoundSettingChange = { target, value ->
-                                uiState.devices.sony.firstOrNull()?.let { device ->
-                                    viewModel.setSonySoundSetting(device.name, target, value)
-                                }
-                            }
+                            viewModel = viewModel
                         )
                     }
                     DeviceTab.XBOX -> {
@@ -544,7 +583,7 @@ private fun ActivityCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -556,12 +595,12 @@ private fun ActivityCard(
                 ActivityIconContent(
                     icon = activity.icon,
                     tint = activity.color,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(26.dp)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = activity.name,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isActive) activity.color else MaterialTheme.colorScheme.onSurface
                 )
@@ -573,7 +612,7 @@ private fun ActivityCard(
                     imageVector = Icons.Default.PowerSettingsNew,
                     contentDescription = if (isActive) "Active" else "Inactive",
                     tint = if (isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
@@ -667,137 +706,472 @@ private fun DevicePlaceholder(name: String) {
 // Sony soundbar accent color
 private val SoundbarBlue = Color(0xFF2196F3)
 
+// Soundbar input definitions
+private data class SoundbarInput(
+    val uri: String,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
+private val soundbarInputs = listOf(
+    SoundbarInput("extInput:tv", "TV", Icons.Default.Tv),
+    SoundbarInput("extInput:btAudio", "Bluetooth", Icons.Default.Bluetooth),
+    SoundbarInput("extInput:hdmi?port=1", "HDMI", Icons.Default.SettingsInputHdmi)
+)
+
+// Sound mode display names
+private val soundModeNames = mapOf(
+    "clearAudio" to "ClearAudio+",
+    "3dsurround" to "3D Surround",
+    "movie2" to "Movie",
+    "music" to "Music",
+    "sports" to "Sports",
+    "game" to "Game",
+    "standard" to "Standard"
+)
+
+// Voice mode display names
+private val voiceModeNames = mapOf(
+    "type1" to "Off",
+    "type2" to "Level 1",
+    "type3" to "Level 2"
+)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SoundbarTab(
     uiState: EntertainmentUiState,
-    onVolumeChange: (Int) -> Unit,
-    onMuteToggle: () -> Unit,
-    onSoundSettingChange: (String, String) -> Unit
+    viewModel: EntertainmentViewModel
 ) {
-    val sonyDevice = uiState.devices.sony.firstOrNull()
-    val sonyState = sonyDevice?.let { uiState.sonyStates[it.name] }
-    val soundSettings = sonyDevice?.let { uiState.sonySoundSettings[it.name] } ?: emptyList()
+    // Find soundbar device specifically
+    val soundbarDevice = uiState.devices.sony.find {
+        uiState.sonyStates[it.name]?.type == "soundbar" || it.name.lowercase().contains("soundbar")
+    } ?: uiState.devices.sony.firstOrNull()
 
-    if (sonyDevice == null) {
+    val sonyState = soundbarDevice?.let { uiState.sonyStates[it.name] }
+    val soundSettings = soundbarDevice?.let { uiState.sonySoundSettings[it.name] } ?: emptyList()
+
+    // Get current subwoofer level from settings
+    val subwooferLevel = soundSettings.find { it.target == "subwooferLevel" }
+    val currentSubLevel = subwooferLevel?.currentValue?.toIntOrNull() ?: 6
+
+    if (soundbarDevice == null) {
         DevicePlaceholder("Soundbar")
         return
     }
 
     RemoteTemplate(
-        deviceName = sonyDevice.name,
+        deviceName = soundbarDevice.name,
         accentColor = SoundbarBlue,
         isPowerOn = sonyState?.power == true,
-        onPowerToggle = { /* TODO: Toggle soundbar power */ },
-        onDPadPress = { direction ->
-            // TODO: Send soundbar navigation commands
-        },
+        onPowerToggle = { viewModel.toggleSonyPower(soundbarDevice.name) },
+        onDPadPress = { /* Soundbar doesn't use D-pad navigation */ },
+        rockerButtons = listOf(
+            RockerButtonConfig(
+                label = "Vol",
+                onMinus = { viewModel.setSonyVolume(soundbarDevice.name, ((sonyState?.volume ?: 0) - 2).coerceAtLeast(0)) },
+                onPlus = { viewModel.setSonyVolume(soundbarDevice.name, ((sonyState?.volume ?: 0) + 2).coerceAtMost(50)) }
+            ),
+            RockerButtonConfig(
+                label = "S/W",
+                onMinus = { viewModel.setSonySoundSetting(soundbarDevice.name, "subwooferLevel", (currentSubLevel - 1).coerceAtLeast(0).toString()) },
+                onPlus = { viewModel.setSonySoundSetting(soundbarDevice.name, "subwooferLevel", (currentSubLevel + 1).coerceAtMost(12).toString()) }
+            )
+        ),
         navButtons = standardNavButtons(
-            onBack = { /* TODO */ },
-            onHome = { /* TODO */ },
-            onMenu = { /* TODO */ }
+            onBack = { viewModel.sendSonyCommand(soundbarDevice.name, "Return") },
+            onHome = { viewModel.sendSonyCommand(soundbarDevice.name, "Home") },
+            onMenu = { viewModel.sendSonyCommand(soundbarDevice.name, "Options") }
         ),
         mediaButtons = standardMediaButtons(
-            onPlayPause = { /* TODO */ }
+            onPlayPause = { viewModel.sendSonyCommand(soundbarDevice.name, "Play") }
         ),
         rightContent = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+            SoundbarRightPanel(
+                sonyState = sonyState,
+                soundSettings = soundSettings,
+                deviceName = soundbarDevice.name,
+                viewModel = viewModel
+            )
+        }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SoundbarRightPanel(
+    sonyState: SonyState?,
+    soundSettings: List<SonySoundSetting>,
+    deviceName: String,
+    viewModel: EntertainmentViewModel
+) {
+    // Extract settings by target
+    val soundField = soundSettings.find { it.target == "soundField" }
+    val nightMode = soundSettings.find { it.target == "nightMode" }
+    val voiceMode = soundSettings.find { it.target == "voice" }
+    val subwooferLevel = soundSettings.find { it.target == "subwooferLevel" }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Input Sources Section
+        SoundbarSectionCard(title = "Input") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Volume display
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "${sonyState?.volume ?: 0}",
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (sonyState?.muted == true)
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        else SoundbarBlue
-                    )
-                    Text(
-                        text = if (sonyState?.muted == true) "Muted" else "Volume",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                soundbarInputs.forEach { input ->
+                    val isSelected = sonyState?.input == input.uri
+                    SoundbarInputButton(
+                        label = input.label,
+                        icon = input.icon,
+                        isSelected = isSelected,
+                        onClick = { viewModel.setSonyInput(deviceName, input.uri) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
+            }
+        }
 
-                // Volume buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+        // Sound Mode Section
+        if (soundField != null) {
+            SoundbarSectionCard(title = "Sound Mode") {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    IconButton(
-                        onClick = { onVolumeChange((sonyState?.volume ?: 0) - 5) },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VolumeDown,
-                            contentDescription = "Volume Down",
-                            tint = SoundbarBlue
-                        )
-                    }
-                    IconButton(
-                        onClick = onMuteToggle,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (sonyState?.muted == true) Color.Red.copy(alpha = 0.2f)
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                    ) {
-                        Icon(
-                            imageVector = if (sonyState?.muted == true) Icons.Default.VolumeOff else Icons.Default.VolumeMute,
-                            contentDescription = "Mute",
-                            tint = if (sonyState?.muted == true) Color.Red else SoundbarBlue
-                        )
-                    }
-                    IconButton(
-                        onClick = { onVolumeChange((sonyState?.volume ?: 0) + 5) },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VolumeUp,
-                            contentDescription = "Volume Up",
-                            tint = SoundbarBlue
+                    soundField.candidate.filter { it.isAvailable && it.value.isNotEmpty() }.forEach { candidate ->
+                        val isSelected = soundField.currentValue == candidate.value
+                        SoundModeChip(
+                            label = soundModeNames[candidate.value] ?: candidate.title.ifEmpty { candidate.value },
+                            isSelected = isSelected,
+                            onClick = { viewModel.setSonySoundSetting(deviceName, "soundField", candidate.value) }
                         )
                     }
                 }
+            }
+        }
 
-                // Sound settings
-                if (soundSettings.isNotEmpty()) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Quick Settings Section (Night Mode & Voice)
+        SoundbarSectionCard(title = "Settings") {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Night Mode Toggle
+                if (nightMode != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Sound Mode",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        soundSettings.forEach { setting ->
-                            SoundSettingCompact(
-                                setting = setting,
-                                onValueChange = { value ->
-                                    onSoundSettingChange(setting.target, value)
-                                }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NightsStay,
+                                contentDescription = null,
+                                tint = if (nightMode.currentValue == "on") SoundbarBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Text(
+                                text = "Night Mode",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Switch(
+                            checked = nightMode.currentValue == "on",
+                            onCheckedChange = { checked ->
+                                viewModel.setSonySoundSetting(deviceName, "nightMode", if (checked) "on" else "off")
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = SoundbarBlue,
+                                checkedTrackColor = SoundbarBlue.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier.height(24.dp)
+                        )
+                    }
+                }
+
+                // Voice Enhancement
+                if (voiceMode != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RecordVoiceOver,
+                                contentDescription = null,
+                                tint = if (voiceMode.currentValue != "type1") SoundbarBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Voice",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            voiceMode.candidate.filter { it.isAvailable && it.value.isNotEmpty() }.forEach { candidate ->
+                                val isSelected = voiceMode.currentValue == candidate.value
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setSonySoundSetting(deviceName, "voice", candidate.value) },
+                                    label = {
+                                        Text(
+                                            text = voiceModeNames[candidate.value] ?: candidate.title,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = SoundbarBlue,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Subwoofer Level
+                if (subwooferLevel != null) {
+                    val sliderCandidate = subwooferLevel.candidate.firstOrNull { it.min != null }
+                    val min = sliderCandidate?.min ?: 0
+                    val max = sliderCandidate?.max ?: 12
+                    val currentValue = subwooferLevel.currentValue.toIntOrNull() ?: 0
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Speaker,
+                                contentDescription = null,
+                                tint = SoundbarBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Subwoofer",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    val newValue = (currentValue - 1).coerceAtLeast(min)
+                                    viewModel.setSonySoundSetting(deviceName, "subwooferLevel", newValue.toString())
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Icon(Icons.Default.Remove, "Decrease", tint = SoundbarBlue, modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                text = currentValue.toString(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = SoundbarBlue
+                            )
+                            IconButton(
+                                onClick = {
+                                    val newValue = (currentValue + 1).coerceAtMost(max)
+                                    viewModel.setSonySoundSetting(deviceName, "subwooferLevel", newValue.toString())
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Icon(Icons.Default.Add, "Increase", tint = SoundbarBlue, modifier = Modifier.size(16.dp))
+                            }
                         }
                     }
                 }
             }
         }
+
+        // Volume Section
+        SoundbarSectionCard(title = "Volume") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { viewModel.setSonyVolume(deviceName, ((sonyState?.volume ?: 0) - 2).coerceAtLeast(0)) },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(Icons.Default.VolumeDown, "Volume Down", tint = SoundbarBlue)
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = "${sonyState?.volume ?: 0}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (sonyState?.muted == true)
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        else SoundbarBlue
+                    )
+                    if (sonyState?.muted == true) {
+                        Text(
+                            text = "Muted",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Red
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = { viewModel.toggleSonyMute(deviceName) },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (sonyState?.muted == true) Color.Red.copy(alpha = 0.2f)
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                ) {
+                    Icon(
+                        if (sonyState?.muted == true) Icons.Default.VolumeOff else Icons.Default.VolumeMute,
+                        "Mute",
+                        tint = if (sonyState?.muted == true) Color.Red else SoundbarBlue
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = { viewModel.setSonyVolume(deviceName, ((sonyState?.volume ?: 0) + 2).coerceAtMost(50)) },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(Icons.Default.VolumeUp, "Volume Up", tint = SoundbarBlue)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SoundbarSectionCard(
+    title: String?,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            if (title != null) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SoundbarInputButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (isSelected) SoundbarBlue else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = backgroundColor,
+            contentColor = contentColor
+        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun SoundModeChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = isSelected,
+        onClick = onClick,
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium
+            )
+        },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = SoundbarBlue,
+            selectedLabelColor = Color.White
+        )
     )
 }
 
@@ -1027,113 +1401,452 @@ private fun TVTab(
     uiState: EntertainmentUiState,
     viewModel: EntertainmentViewModel
 ) {
-    val sonyDevice = uiState.devices.sony.firstOrNull()
-    val sonyState = sonyDevice?.let { uiState.sonyStates[it.name] }
+    // Find TV device (not soundbar) - look for device with "tv" in type or name
+    val tvDevice = uiState.devices.sony.find {
+        it.name.contains("tv", ignoreCase = true)
+    } ?: uiState.devices.sony.firstOrNull()
 
-    if (sonyDevice == null) {
+    val sonyState = tvDevice?.let { uiState.sonyStates[it.name] }
+
+    if (tvDevice == null) {
         DevicePlaceholder("TV")
         return
     }
 
+    // D-Pad key mappings
+    val dpadKeyMap = mapOf(
+        DPadDirection.UP to "up",
+        DPadDirection.DOWN to "down",
+        DPadDirection.LEFT to "left",
+        DPadDirection.RIGHT to "right",
+        DPadDirection.CENTER to "enter"
+    )
+
     RemoteTemplate(
-        deviceName = sonyDevice.name,
+        deviceName = tvDevice.name,
         accentColor = TVColor,
         isPowerOn = sonyState?.power == true,
-        onPowerToggle = { viewModel.toggleSonyPower(sonyDevice.name) },
+        onPowerToggle = { viewModel.toggleSonyPower(tvDevice.name) },
         onDPadPress = { direction ->
-            // TODO: Send IR/CEC commands for D-pad navigation
+            dpadKeyMap[direction]?.let { key ->
+                viewModel.sendSonyCommand(tvDevice.name, key)
+            }
         },
         navButtons = standardNavButtons(
-            onBack = { /* TODO */ },
-            onHome = { /* TODO */ },
-            onMenu = { /* TODO */ }
+            onBack = { viewModel.sendSonyCommand(tvDevice.name, "back") },
+            onHome = { viewModel.sendSonyCommand(tvDevice.name, "home") },
+            onMenu = { viewModel.sendSonyCommand(tvDevice.name, "options") }
         ),
         mediaButtons = standardMediaButtons(
-            onPlayPause = { /* TODO */ }
+            onRewind = { viewModel.sendSonyCommand(tvDevice.name, "rewind") },
+            onPlayPause = { viewModel.sendSonyCommand(tvDevice.name, "play") },
+            onFastForward = { viewModel.sendSonyCommand(tvDevice.name, "forward") }
         ),
         rightContent = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // Volume display
-                Text(
-                    text = "Volume: ${sonyState?.volume ?: 0}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (sonyState?.muted == true)
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    else TVColor
-                )
+            TVRightPanel(
+                sonyState = sonyState,
+                deviceName = tvDevice.name,
+                viewModel = viewModel
+            )
+        }
+    )
+}
 
-                // Volume buttons
+// HDMI input labels (what device is plugged into each port)
+private val hdmiLabels = mapOf(
+    1 to "Xbox",
+    2 to "PS5",
+    3 to "Switch",
+    4 to "Shield"
+)
+
+@Composable
+private fun TVRightPanel(
+    sonyState: com.homecontrol.sensors.data.model.SonyState?,
+    deviceName: String,
+    viewModel: EntertainmentViewModel
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var isPictureOff by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsState()
+
+    // Check if audio is routed to external audio system
+    val soundSettings = uiState.sonySoundSettings[deviceName] ?: emptyList()
+    val outputTerminal = soundSettings.find { it.target == "outputTerminal" }
+    val isExternalAudio = outputTerminal?.currentValue == "audioSystem"
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // HDMI Inputs Section Card
+        TVSectionCard(title = "Inputs") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                (1..4).forEach { port ->
+                    TVHdmiButton(
+                        port = port,
+                        label = hdmiLabels[port] ?: "HDMI $port",
+                        onClick = { viewModel.sendSonyCommand(deviceName, "hdmi$port") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // Streaming Apps Section Card
+        TVSectionCard(title = "Apps") {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // First row
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(
-                        onClick = {
-                            val currentVolume = sonyState?.volume ?: 0
-                            viewModel.setSonyVolume(sonyDevice.name, (currentVolume - 5).coerceAtLeast(0))
-                        },
+                    TVAppChip(
+                        label = "Netflix",
+                        color = Color(0xFFE50914),
+                        onClick = { viewModel.sendSonyCommand(deviceName, "netflix") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TVAppChip(
+                        label = "YouTube",
+                        color = Color(0xFFFF0000),
+                        onClick = { viewModel.sendSonyCommand(deviceName, "youtube") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TVAppChip(
+                        label = "Prime",
+                        color = Color(0xFF00A8E1),
+                        onClick = { viewModel.sendSonyCommand(deviceName, "primevideo") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Second row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TVAppChip(
+                        label = "Disney+",
+                        color = Color(0xFF113CCF),
+                        onClick = { viewModel.sendSonyCommand(deviceName, "disney") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TVAppChip(
+                        label = "Apple TV",
+                        color = Color(0xFF555555),
+                        onClick = { viewModel.sendSonyCommand(deviceName, "appletv") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TVAppChip(
+                        label = "Hulu",
+                        color = Color(0xFF1CE783),
+                        onClick = { viewModel.launchSonyApp(deviceName, "com.sony.dtv.com.hulu.livingroomplus.com.hulu.livingroomplus.WKFactivity") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Third row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TVAppChip(
+                        label = "HBO",
+                        color = Color(0xFF5822B4),
+                        onClick = { viewModel.launchSonyApp(deviceName, "com.sony.dtv.com.wbd.stream.com.wbd.beam.BeamActivity") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TVAppChip(
+                        label = "Spotify",
+                        color = Color(0xFF1DB954),
+                        onClick = { viewModel.launchSonyApp(deviceName, "com.sony.dtv.com.spotify.tv.android.com.spotify.tv.android.SpotifyTVActivity") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TVAppChip(
+                        label = "Plex",
+                        color = Color(0xFFE5A00D),
+                        onClick = { viewModel.launchSonyApp(deviceName, "com.sony.dtv.com.plexapp.android.com.plexapp.plex.activities.SplashActivity") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // Audio & Display Section Card
+        TVSectionCard(title = if (isExternalAudio) "Audio & Display" else "Volume & Display") {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Audio Section
+                if (isExternalAudio) {
+                    // Soundbar indicator
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Icon(Icons.Default.VolumeDown, "Volume Down", tint = TVColor)
-                    }
-                    IconButton(
-                        onClick = { viewModel.toggleSonyMute(sonyDevice.name) },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
+                            .fillMaxWidth()
                             .background(
-                                if (sonyState?.muted == true) Color.Red.copy(alpha = 0.2f)
-                                else MaterialTheme.colorScheme.surfaceVariant
+                                color = SoundbarBlue.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(8.dp)
                             )
+                            .padding(12.dp)
                     ) {
                         Icon(
-                            if (sonyState?.muted == true) Icons.Default.VolumeOff else Icons.Default.VolumeMute,
-                            "Mute",
-                            tint = if (sonyState?.muted == true) Color.Red else TVColor
+                            imageVector = Icons.Default.Speaker,
+                            contentDescription = "External Audio",
+                            modifier = Modifier.size(22.dp),
+                            tint = SoundbarBlue
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Audio via Soundbar",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = SoundbarBlue
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            val currentVolume = sonyState?.volume ?: 0
-                            viewModel.setSonyVolume(sonyDevice.name, (currentVolume + 5).coerceAtMost(100))
-                        },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                } else {
+                    // Volume controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.VolumeUp, "Volume Up", tint = TVColor)
+                        IconButton(
+                            onClick = {
+                                val currentVolume = sonyState?.volume ?: 0
+                                viewModel.setSonyVolume(deviceName, (currentVolume - 5).coerceAtLeast(0))
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Icon(Icons.Default.VolumeDown, "Volume Down", tint = TVColor)
+                        }
+
+                        // Volume display
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        ) {
+                            Text(
+                                text = "${sonyState?.volume ?: 0}",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (sonyState?.muted == true)
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                else TVColor
+                            )
+                            if (sonyState?.muted == true) {
+                                Text(
+                                    text = "Muted",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Red
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { viewModel.toggleSonyMute(deviceName) },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (sonyState?.muted == true) Color.Red.copy(alpha = 0.2f)
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                        ) {
+                            Icon(
+                                if (sonyState?.muted == true) Icons.Default.VolumeOff else Icons.Default.VolumeMute,
+                                "Mute",
+                                tint = if (sonyState?.muted == true) Color.Red else TVColor
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        IconButton(
+                            onClick = {
+                                val currentVolume = sonyState?.volume ?: 0
+                                viewModel.setSonyVolume(deviceName, (currentVolume + 5).coerceAtMost(100))
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Icon(Icons.Default.VolumeUp, "Volume Up", tint = TVColor)
+                        }
                     }
                 }
 
-                // Input selector
-                if (sonyState?.inputs?.isNotEmpty() == true) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                // Display controls row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Screen toggle
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                if (isPictureOff) {
+                                    sonyPictureOn(uiState.serverUrl.trimEnd('/'), deviceName)
+                                } else {
+                                    sonyPictureOff(uiState.serverUrl.trimEnd('/'), deviceName)
+                                }
+                                isPictureOff = !isPictureOff
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (isPictureOff) Color.Gray else TVColor
+                        ),
+                        border = BorderStroke(1.dp, if (isPictureOff) Color.Gray else TVColor.copy(alpha = 0.5f))
                     ) {
                         Text(
-                            text = "Input",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (isPictureOff) "Screen Off" else "Screen On",
+                            style = MaterialTheme.typography.labelMedium
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = sonyState.input ?: "Unknown",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TVColor
-                        )
+                    }
+
+                    // Action Menu
+                    OutlinedButton(
+                        onClick = { viewModel.sendSonyCommand(deviceName, "actionMenu") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TVColor),
+                        border = BorderStroke(1.dp, TVColor.copy(alpha = 0.5f))
+                    ) {
+                        Text("Action", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    // Settings
+                    OutlinedButton(
+                        onClick = { viewModel.launchSonyApp(deviceName, "com.sony.dtv.com.android.tv.settings.com.android.tv.settings.MainSettings") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TVColor),
+                        border = BorderStroke(1.dp, TVColor.copy(alpha = 0.5f))
+                    ) {
+                        Text("Settings", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    // Guide
+                    OutlinedButton(
+                        onClick = { viewModel.sendSonyCommand(deviceName, "guide") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TVColor),
+                        border = BorderStroke(1.dp, TVColor.copy(alpha = 0.5f))
+                    ) {
+                        Text("Guide", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
         }
-    )
+    }
+}
+
+@Composable
+private fun TVSectionCard(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun TVHdmiButton(
+    port: Int,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(52.dp),
+        shape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(4.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = TVColor
+        ),
+        border = BorderStroke(1.dp, TVColor.copy(alpha = 0.4f))
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "HDMI $port",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun TVAppChip(
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(42.dp),
+        shape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = color
+        )
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Medium
+        )
+    }
 }
 
 @Composable

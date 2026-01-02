@@ -22,12 +22,18 @@ data class SonyDevice(
 
 @Serializable
 data class SonyState(
-    val power: Boolean,
+    val name: String? = null,
+    val type: String? = null,
+    val power: Boolean = false,
     val volume: Int = 0,
-    val muted: Boolean = false,
+    val mute: Boolean = false,
     val input: String? = null,
+    val online: Boolean = true,
     val inputs: List<SonyInput> = emptyList()
-)
+) {
+    // Alias for backwards compatibility with UI code using "muted"
+    val muted: Boolean get() = mute
+}
 
 @Serializable
 data class SonyInput(
@@ -145,6 +151,16 @@ data class PowerRequest(
 @Serializable
 data class MuteRequest(
     val mute: Boolean
+)
+
+@Serializable
+data class CommandRequest(
+    val command: String
+)
+
+@Serializable
+data class SonyAppRequest(
+    val uri: String
 )
 
 @OptIn(ExperimentalSerializationApi::class)

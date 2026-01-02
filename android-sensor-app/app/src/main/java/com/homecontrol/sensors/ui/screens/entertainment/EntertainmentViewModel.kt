@@ -216,13 +216,13 @@ class EntertainmentViewModel @Inject constructor(
     fun toggleSonyMute(name: String) {
         viewModelScope.launch {
             val currentState = _uiState.value.sonyStates[name] ?: return@launch
-            val newMute = !currentState.muted
+            val newMute = !currentState.mute
 
             entertainmentRepository.sonyMute(name, newMute)
                 .onSuccess {
                     _uiState.update {
                         it.copy(
-                            sonyStates = it.sonyStates + (name to currentState.copy(muted = newMute))
+                            sonyStates = it.sonyStates + (name to currentState.copy(mute = newMute))
                         )
                     }
                 }
@@ -273,6 +273,28 @@ class EntertainmentViewModel @Inject constructor(
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(error = "Failed to set sound setting: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun sendSonyCommand(name: String, command: String) {
+        viewModelScope.launch {
+            entertainmentRepository.sendSonyCommand(name, command)
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to send command: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun launchSonyApp(name: String, uri: String) {
+        viewModelScope.launch {
+            entertainmentRepository.launchSonyApp(name, uri)
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to launch app: ${error.message}")
                     }
                 }
         }

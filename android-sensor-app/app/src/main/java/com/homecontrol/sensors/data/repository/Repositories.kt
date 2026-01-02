@@ -658,6 +658,8 @@ interface EntertainmentRepository {
     suspend fun sonyInput(name: String, input: String): Result<Unit>
     suspend fun getSonySoundSettings(name: String): Result<List<SonySoundSetting>>
     suspend fun setSonySoundSetting(name: String, target: String, value: String): Result<Unit>
+    suspend fun sendSonyCommand(name: String, command: String): Result<Unit>
+    suspend fun launchSonyApp(name: String, uri: String): Result<Unit>
     suspend fun getShieldState(name: String): Result<ShieldState>
     suspend fun getShieldApps(name: String, includeSystem: Boolean = false): Result<List<ShieldApp>>
     suspend fun shieldPower(name: String, power: Boolean): Result<Unit>
@@ -722,6 +724,16 @@ class EntertainmentRepositoryImpl @Inject constructor(
 
     override suspend fun setSonySoundSetting(name: String, target: String, value: String): Result<Unit> = runCatching {
         val response = api.setSonySoundSetting(name, SoundSettingRequest(target, value))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun sendSonyCommand(name: String, command: String): Result<Unit> = runCatching {
+        val response = api.sendSonyCommand(name, CommandRequest(command))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun launchSonyApp(name: String, uri: String): Result<Unit> = runCatching {
+        val response = api.launchSonyApp(name, SonyAppRequest(uri))
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 
