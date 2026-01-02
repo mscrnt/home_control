@@ -423,7 +423,22 @@ func (d *ShieldDevice) LaunchApp(packageName string) error {
 		packageName = pkg
 	}
 
+	// Try monkey first (works for most apps)
 	cmd := fmt.Sprintf("monkey -p %s -c android.intent.category.LAUNCHER 1", packageName)
+	err := d.Shell(cmd)
+	if err == nil {
+		return nil
+	}
+
+	// Fallback: try leanback launcher intent (for Android TV apps)
+	cmd = fmt.Sprintf("am start -n $(cmd package resolve-activity --brief -c android.intent.category.LEANBACK_LAUNCHER %s | tail -n 1)", packageName)
+	err = d.Shell(cmd)
+	if err == nil {
+		return nil
+	}
+
+	// Final fallback: try standard launcher intent
+	cmd = fmt.Sprintf("am start -n $(cmd package resolve-activity --brief -c android.intent.category.LAUNCHER %s | tail -n 1)", packageName)
 	return d.Shell(cmd)
 }
 

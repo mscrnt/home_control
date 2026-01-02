@@ -23,5 +23,6 @@ data class EntertainmentUiState(
     val ps5States: Map<String, PS5State> = emptyMap(),
     val sonySoundSettings: Map<String, List<SonySoundSetting>> = emptyMap(),
     val expandedDevice: Pair<DeviceType, String>? = null,
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    val serverUrl: String = ""
 )

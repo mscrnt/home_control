@@ -23,12 +23,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Airplay
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -50,7 +53,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +72,11 @@ import com.homecontrol.sensors.R
 import com.homecontrol.sensors.data.model.SonySoundSetting
 import com.homecontrol.sensors.ui.components.LoadingIndicator
 import com.homecontrol.sensors.ui.theme.HomeControlColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.URL
 
 // Entertainment accent color
 private val EntertainmentOrange = Color(0xFFffa726)
@@ -81,7 +91,11 @@ sealed class ActivityIcon {
 data class Activity(
     val name: String,
     val icon: ActivityIcon,
-    val color: Color = EntertainmentOrange
+    val color: Color = EntertainmentOrange,
+    val sofabatonOnUrl: String? = null,
+    val sofabatonOffUrl: String? = null,
+    val hdmiInput: String? = null,  // input1, input2, input3, input4
+    val shieldApp: String? = null   // Package name of app to launch on Shield
 )
 
 // Device tabs
@@ -94,20 +108,155 @@ enum class DeviceTab(val label: String, val icon: ActivityIcon? = null) {
     PS5("PS5", ActivityIcon.Drawable(R.drawable.ic_playstation))
 }
 
+// Sofabaton API base
+private const val SOFABATON_NODE = "Mqg2Q8nJ8MXVHXuFT9MzVe"
+private fun sofabatonUrl(id: String, type: Int) =
+    "https://app1.sofabaton.com/app/keypress?node_id=$SOFABATON_NODE&id=$id&type=$type"
+
 // Activities list
 private val activities = listOf(
-    Activity("Watch TV", ActivityIcon.Vector(Icons.Default.Tv)),
-    Activity("Play Xbox", ActivityIcon.Drawable(R.drawable.ic_xbox), Color(0xFF107C10)),
-    Activity("Play PS5", ActivityIcon.Drawable(R.drawable.ic_playstation), Color(0xFF003791)),
-    Activity("Play Switch", ActivityIcon.Drawable(R.drawable.ic_nintendo_switch), Color(0xFFE60012)),
+    Activity(
+        name = "TV",
+        icon = ActivityIcon.Vector(Icons.Default.Tv),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4"  // Shield is on HDMI 4
+    ),
+    Activity(
+        name = "Xbox",
+        icon = ActivityIcon.Drawable(R.drawable.ic_xbox),
+        color = Color(0xFF107C10),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n102", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n102", 0),
+        hdmiInput = "input1"  // Xbox is on HDMI 1
+    ),
+    Activity(
+        name = "PS5",
+        icon = ActivityIcon.Drawable(R.drawable.ic_playstation),
+        color = Color(0xFF003791),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n103", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n103", 0),
+        hdmiInput = "input2"  // PS5 is on HDMI 2
+    ),
+    Activity(
+        name = "Switch",
+        icon = ActivityIcon.Drawable(R.drawable.ic_nintendo_switch),
+        color = Color(0xFFE60012),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n104", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n104", 0),
+        hdmiInput = "input3"  // Switch is on HDMI 3
+    ),
     Activity("Airplay", ActivityIcon.Vector(Icons.Default.Airplay), Color(0xFF007AFF)),
-    Activity("Spotify", ActivityIcon.Drawable(R.drawable.ic_spotify), Color(0xFF1DB954)),
-    Activity("YouTube", ActivityIcon.Drawable(R.drawable.ic_youtube), Color(0xFFFF0000)),
-    Activity("Twitch", ActivityIcon.Drawable(R.drawable.ic_twitch), Color(0xFF9146FF)),
-    Activity("HBO", ActivityIcon.Drawable(R.drawable.ic_hbo), Color(0xFF991EEB)),
-    Activity("Plex", ActivityIcon.Drawable(R.drawable.ic_plex), Color(0xFFE5A00D)),
-    Activity("Crunchyroll", ActivityIcon.Drawable(R.drawable.ic_crunchyroll), Color(0xFFF47521))
+    Activity(
+        name = "Spotify",
+        icon = ActivityIcon.Drawable(R.drawable.ic_spotify),
+        color = Color(0xFF1DB954),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),  // Uses TV command
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4",
+        shieldApp = "com.spotify.tv.android"
+    ),
+    Activity(
+        name = "YouTube",
+        icon = ActivityIcon.Drawable(R.drawable.ic_youtube),
+        color = Color(0xFFFF0000),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4",
+        shieldApp = "com.google.android.youtube.tv"
+    ),
+    Activity(
+        name = "Twitch",
+        icon = ActivityIcon.Drawable(R.drawable.ic_twitch),
+        color = Color(0xFF9146FF),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4",
+        shieldApp = "tv.twitch.android.app"
+    ),
+    Activity(
+        name = "HBO",
+        icon = ActivityIcon.Drawable(R.drawable.ic_hbo),
+        color = Color(0xFF991EEB),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4",
+        shieldApp = "com.hbo.hbomax"
+    ),
+    Activity(
+        name = "Plex",
+        icon = ActivityIcon.Drawable(R.drawable.ic_plex),
+        color = Color(0xFFE5A00D),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4",
+        shieldApp = "com.plexapp.android"
+    ),
+    Activity(
+        name = "Crunchyroll",
+        icon = ActivityIcon.Drawable(R.drawable.ic_crunchyroll),
+        color = Color(0xFFF47521),
+        sofabatonOnUrl = sofabatonUrl("Mqg2Q8n101", 1),
+        sofabatonOffUrl = sofabatonUrl("Mqg2Q8n101", 0),
+        hdmiInput = "input4",
+        shieldApp = "com.crunchyroll.crunchyroid"
+    )
 )
+
+// Helper function to call Sofabaton API
+private suspend fun callSofabatonApi(url: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val connection = URL(url).openConnection()
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.getInputStream().close()
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
+
+// Helper function to set Hue Sync Box HDMI input (index 0 = first sync box)
+private suspend fun setSyncBoxHdmiInput(baseUrl: String, input: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$baseUrl/api/syncbox/0/input")
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.outputStream.write("""{"hdmiSource":"$input"}""".toByteArray())
+        val responseCode = connection.responseCode
+        connection.disconnect()
+        responseCode in 200..299
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
+
+// Helper function to launch an app on Shield (uses first Shield device)
+private suspend fun launchShieldApp(baseUrl: String, shieldName: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val encodedName = java.net.URLEncoder.encode(shieldName, "UTF-8")
+        val url = URL("$baseUrl/api/entertainment/shield/$encodedName/app")
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.outputStream.write("""{"action":"launch","package":"$packageName"}""".toByteArray())
+        val responseCode = connection.responseCode
+        connection.disconnect()
+        responseCode in 200..299
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
 
 @Composable
 fun EntertainmentScreen(
@@ -156,6 +305,9 @@ private fun EntertainmentContent(
     viewModel: EntertainmentViewModel
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    // Track the currently active activity (only one at a time)
+    var currentActivity by remember { mutableStateOf<String?>(null) }
 
     Row(
         modifier = Modifier
@@ -172,21 +324,21 @@ private fun EntertainmentContent(
             // Header to align with tab row
             Text(
                 text = "Activities",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp)
+                    .padding(vertical = 8.dp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Activity cards in matching card container
             Card(
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = HomeControlColors.cardBackground()
                 ),
@@ -195,15 +347,74 @@ private fun EntertainmentContent(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     activities.forEach { activity ->
+                        val isActive = currentActivity == activity.name
+                        val hasPowerControl = activity.sofabatonOnUrl != null
+
                         ActivityCard(
                             activity = activity,
-                            onClick = { /* TODO: Implement activity launch */ }
+                            isActive = isActive,
+                            onClick = if (hasPowerControl) {
+                                {
+                                    scope.launch {
+                                        if (isActive) {
+                                            // Turn off current activity
+                                            activity.sofabatonOffUrl?.let { url -> callSofabatonApi(url) }
+                                            currentActivity = null
+                                        } else {
+                                            // Turn on new activity (Sofabaton handles turning off the previous one)
+                                            activity.sofabatonOnUrl?.let { url -> callSofabatonApi(url) }
+                                            // Set HDMI input if applicable
+                                            activity.hdmiInput?.let { input ->
+                                                setSyncBoxHdmiInput(uiState.serverUrl.trimEnd('/'), input)
+                                            }
+                                            // Launch Shield app if applicable
+                                            activity.shieldApp?.let { pkg ->
+                                                uiState.devices.shield.firstOrNull()?.let { shieldDevice ->
+                                                    launchShieldApp(uiState.serverUrl.trimEnd('/'), shieldDevice.name, pkg)
+                                                }
+                                            }
+                                            currentActivity = activity.name
+                                        }
+                                    }
+                                }
+                            } else { {} },
+                            showPowerIcon = hasPowerControl
+                        )
+                    }
+
+                    // Power Off All button
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                // Turn off all activities with power control
+                                activities.filter { act -> act.sofabatonOffUrl != null }.forEach { act ->
+                                    act.sofabatonOffUrl?.let { url -> callSofabatonApi(url) }
+                                }
+                                currentActivity = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFD32F2F)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Power Off All",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
@@ -310,36 +521,61 @@ private fun EntertainmentContent(
 @Composable
 private fun ActivityCard(
     activity: Activity,
-    onClick: () -> Unit
+    isActive: Boolean = false,
+    onClick: () -> Unit,
+    showPowerIcon: Boolean = false
 ) {
+    // Use a consistent green for active state that works in both light/dark themes
+    val activeColor = Color(0xFF4CAF50)  // Material Green 500
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = HomeControlColors.cardBackground()
+            containerColor = if (isActive) activeColor.copy(alpha = 0.15f) else HomeControlColors.cardBackground()
         ),
-        border = BorderStroke(1.dp, HomeControlColors.cardBorder())
+        border = BorderStroke(
+            width = if (isActive) 2.dp else 1.dp,
+            color = if (isActive) activeColor else HomeControlColors.cardBorder()
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            ActivityIconContent(
-                icon = activity.icon,
-                tint = activity.color,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = activity.name,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            // Left side - icon and text
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                ActivityIconContent(
+                    icon = activity.icon,
+                    tint = activity.color,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = activity.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isActive) activity.color else MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Right side - power indicator icon (just shows state, whole card is clickable)
+            if (showPowerIcon) {
+                Icon(
+                    imageVector = Icons.Default.PowerSettingsNew,
+                    contentDescription = if (isActive) "Active" else "Inactive",
+                    tint = if (isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

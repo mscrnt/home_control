@@ -202,5 +202,6 @@ data class SyncRequest(
 
 @Serializable
 data class InputRequest(
+    @SerialName("hdmiSource")
     val input: String
 )

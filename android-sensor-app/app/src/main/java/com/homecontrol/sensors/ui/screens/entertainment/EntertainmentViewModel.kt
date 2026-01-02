@@ -16,10 +16,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class EntertainmentViewModel @Inject constructor(
-    private val entertainmentRepository: EntertainmentRepository
+    private val entertainmentRepository: EntertainmentRepository,
+    @com.homecontrol.sensors.di.ServerUrl private val serverUrl: String
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(EntertainmentUiState())
+    private val _uiState = MutableStateFlow(EntertainmentUiState(serverUrl = serverUrl))
     val uiState: StateFlow<EntertainmentUiState> = _uiState.asStateFlow()
 
     private var shieldPollingJob: Job? = null
