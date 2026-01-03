@@ -2,6 +2,123 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.7.0] - 2026-01-02
+
+### Server/Backend
+
+#### Added
+- **Xbox Home Assistant Integration** (`d83bea9`)
+  - Replaced SmartGlass REST with Home Assistant media_player/remote control
+  - GET/POST `/api/entertainment/xbox/{name}/state` - Xbox power and state via HA
+  - POST `/api/entertainment/xbox/{name}/input` - Button presses via HA remote
+  - POST `/api/entertainment/xbox/{name}/media` - Media commands (play/pause/stop)
+  - POST `/api/entertainment/xbox/{name}/launch` - Launch apps/games
+  - Optional `now_playing_sensor` for rich game info (genre, developer, progress, gamerscore)
+  - Config format: `name:media_player_id:remote_id[:now_playing_sensor]`
+
+- **PS5 Home Assistant Integration** (`cdf32b3`)
+  - Power control via PS5-MQTT switch entity
+  - PSN integration for game info, trophies, online status
+  - GET `/api/entertainment/ps5/{name}/state` - PS5 state with PSN data
+  - POST `/api/entertainment/ps5/{name}/power` - Power on/off via HA switch
+  - Fetches: current game, game art, trophy counts, online ID, avatar
+  - Config format: `name:power_switch:psn_account_id`
+
+- **Sony Device Control Endpoints** (`4270a79`, `9c7c6a3`)
+  - POST `/api/entertainment/sony/{name}/command` - Send IRCC commands
+  - POST `/api/entertainment/sony/{name}/app` - Launch apps by URI
+  - GET `/api/entertainment/sony/{name}/apps` - List installed applications
+  - GET `/api/entertainment/sony/{name}/system` - System info and settings
+  - Background polling with configurable interval
+  - State caching with TTL for reduced API calls
+  - Support for both TVs (with PSK) and soundbars (open API)
+
+- **Shield Device Enhancements** (`1b1fc9e`, `182bfd2`, `1931405`)
+  - GET `/api/entertainment/shield/{name}/apps` - List installed apps
+  - POST `/api/entertainment/shield/{name}/app` - Launch app by package name
+  - POST `/api/entertainment/shield/{name}/text` - Send text input
+  - POST `/api/entertainment/shield/{name}/screenshot` - Take screenshot
+  - POST `/api/entertainment/shield/{name}/reboot` - Reboot device
+  - Expanded ShieldApps map with 20+ streaming service packages
+  - PackageToName mapping for friendly app display names
+  - ADB daemon startup for faster command execution
+
+- **Streaming Service Icons** (`fc8a3a7`)
+  - Added SVG icons: Netflix, Hulu, Disney+, Prime Video, Apple TV, HBO Max
+  - Added SVG icons: Peacock, YouTube TV, Twitch, Steam, RetroArch
+  - Added SVG icons: Xbox Game Pass, OpenVPN
+
+#### Changed
+- **Weather API Refresh Intervals** (`5a1189b`)
+  - Current conditions: 30 min → 15 min refresh
+  - Forecasts: optimized for ~4,320 calls/month within free tier
+
+- **Home Assistant Client** (`d83bea9`)
+  - Added `GetBaseURL()` method for constructing entity picture URLs
+  - Added `CallServiceWithData()` for custom service payloads
+
+### Android App
+
+#### Added
+- **RemoteTemplate Composable** (`67e3235`)
+  - Reusable remote control UI component
+  - D-pad navigation with center select button
+  - Volume/channel rockers with mute toggle
+  - Customizable button callbacks for different devices
+
+- **Xbox Controller Panel** (`d83bea9`)
+  - Full Xbox control UI with game art display
+  - D-pad, A/B/X/Y, menu/view, guide buttons
+  - Media controls for video playback
+  - Game info display: title, genre, developer, progress
+  - Gamerscore display
+
+- **PS5 Controller Panel** (`cdf32b3`)
+  - Power toggle with status display
+  - Large game art display (fills panel when playing)
+  - PS5 logo display when in standby
+  - Current game title and online status
+  - Trophy summary (platinum, gold, silver, bronze)
+  - PSN ID and avatar display
+
+- **Sony TV/Soundbar Control** (`4270a79`, `9c7c6a3`)
+  - Full remote control with number pad
+  - Input source selection grid
+  - App launcher with streaming service icons
+  - Volume control with mute
+  - Sound settings panel for soundbars
+  - Power and system controls
+
+- **Shield App Launcher** (`1b1fc9e`, `182bfd2`)
+  - Grid of installed apps with custom icons
+  - Quick launch for popular streaming services
+  - App filtering (user vs system apps)
+
+- **Sofabaton Integration** (`1931405`)
+  - IR blaster control for legacy devices
+  - HDMI input management
+  - Activity-based automation
+
+- **Streaming Service Icons** (`fc8a3a7`)
+  - Vector drawable icons for 12+ streaming services
+  - Consistent styling across app launcher UI
+
+- **Holiday Display** (`bd229b1`)
+  - Calendar shows holidays on date cells
+  - Screensaver displays current holiday
+
+#### Changed
+- **Entertainment Screen Layout** (`67e3235` - `cdf32b3`)
+  - Tab-based navigation: Shield, Sony, Xbox, PS5
+  - Two-column layout: controls left, content right
+  - Consistent styling across all device panels
+
+- **Date Change Detection** (`bd229b1`)
+  - Calendar auto-refreshes on date change
+  - Screensaver updates when day changes at midnight
+
+---
+
 ## [Unreleased]
 
 ### Server/Backend

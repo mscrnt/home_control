@@ -1,6 +1,6 @@
 {
-  "version": "1.6.1",
-  "versionCode": 5,
-  "url": "https://github.com/mscrnt/home_control/releases/download/v1.6.1/homecontrol-1.6.1-debug.apk",
-  "changelog": "Fix weather 10-day forecast showing stale data, refresh weather on modal open, fix version display in nav drawer, auto-restart after OTA, 90s screensaver interval, update manifest via GitHub"
+  "version": "1.7.0",
+  "versionCode": 6,
+  "url": "https://github.com/mscrnt/home_control/releases/download/v1.7.0/homecontrol-1.7.0-debug.apk",
+  "changelog": "Entertainment overhaul: Xbox/PS5 via Home Assistant, Sony TV/Soundbar control, Shield app launcher, streaming service icons, holiday display, reusable remote template"
 }
