@@ -199,11 +199,11 @@ type googleSunEvents struct {
 	Sunset  string `json:"sunsetTime"`
 }
 
-// Refresh intervals
+// Refresh intervals (10K free calls/month = ~4,320 calls with these settings)
 const (
-	currentRefreshInterval = 1 * time.Hour  // Refresh current conditions hourly
-	dailyRefreshInterval   = 12 * time.Hour // Refresh daily forecast every 12 hours
-	hourlyRefreshInterval  = 6 * time.Hour  // Refresh hourly forecast every 6 hours
+	currentRefreshInterval = 15 * time.Minute // Refresh current conditions every 15 min (~2,880/month)
+	dailyRefreshInterval   = 1 * time.Hour    // Refresh daily forecast hourly (~720/month)
+	hourlyRefreshInterval  = 1 * time.Hour    // Refresh hourly forecast hourly (~720/month)
 )
 
 // NewClient creates a new weather client using API key authentication
