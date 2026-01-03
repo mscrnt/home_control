@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"home_control/internal/amcrest"
 	"home_control/internal/calendar"
 	"home_control/internal/camera"
 	"home_control/internal/drive"
@@ -209,6 +210,7 @@ var tasksClient *tasks.Client
 var weatherClient *weather.Client
 var mqttClient *mqtt.Client
 var cameraManager *camera.Manager
+var amcrestManager *amcrest.Manager
 var driveClient *drive.Client
 var spotifyClient *spotify.Client
 var wsHub *websocket.Hub
@@ -221,19 +223,6 @@ var sonyManager *entertainment.SonyManager
 var shieldManager *entertainment.ShieldManager
 var xboxManager *entertainment.XboxManager
 var ps5Manager *entertainment.PS5Manager
-
-// Sensor state from Android app (HCC)
-var sensorState struct {
-	sync.RWMutex
-	ProximityNear    bool
-	LightLevel       float64
-	LastProximityAt  time.Time
-	LastLightAt      time.Time
-	ScreenIdleAt     time.Time // when screen should turn off due to no proximity
-	IdleTimeoutSecs  int       // seconds before screen turns off (from app config)
-}
-
-var tabletIdleTimeout = 180 * time.Second // default 180 seconds (3 minutes)
 
 // Calendar cache for faster page loads
 var calendarCache struct {
@@ -523,6 +512,14 @@ func main() {
 		log.Printf("Camera manager initialized with %d cameras", len(cfg.Cameras))
 	}
 
+	// Initialize Amcrest manager for advanced camera control
+	amcrestManager = amcrest.NewManager()
+	for name, rtspURL := range cfg.Cameras {
+		if err := amcrestManager.AddCamera(name, rtspURL); err != nil {
+			log.Printf("Warning: Failed to add Amcrest camera %s: %v", name, err)
+		}
+	}
+
 	// Initialize MQTT client for doorbell events
 	if cfg.MQTTHost != "" {
 		mqttClient = mqtt.NewClient(mqtt.Config{
@@ -641,6 +638,10 @@ func main() {
 	r.Post("/api/camera/{name}/talk", handleCameraTalk)
 	r.Get("/api/cameras", handleGetCameras)
 
+	// Amcrest doorbell API (ring/talk volume control)
+	r.Get("/api/amcrest/{name}/doorbell", handleAmcrestGetDoorbell)
+	r.Post("/api/amcrest/{name}/doorbell", handleAmcrestSetDoorbell)
+
 	// Entity states API (for AJAX refresh)
 	r.Get("/api/entities", handleGetEntities(cfg))
 
@@ -650,13 +651,11 @@ func main() {
 	// Webhook for Home Assistant doorbell events
 	r.Post("/api/webhook/doorbell", handleDoorbellWebhook)
 
-	// Tablet app communication routes (app reports sensor data, server sends commands)
-	r.Post("/api/tablet/sensor/proximity", handleTabletProximity)
-	r.Post("/api/tablet/sensor/light", handleTabletLight)
-	r.Get("/api/tablet/sensor/state", handleGetSensorState)
-	r.Post("/api/tablet/kiosk/exit", handleExitKiosk)
-	r.Post("/api/tablet/reload", handleTabletReload)
-	r.Get("/api/tablet/theme", handleGetTabletTheme)
+	// Tablet sensor endpoint (stub - app sends data, we just acknowledge)
+	r.Post("/api/tablet/sensor/proximity", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"success":true}`))
+	})
 
 	// Hue API routes
 	r.Get("/api/hue/rooms", handleGetHueRooms)
@@ -3733,6 +3732,107 @@ func handleGetCameras(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(cameraList)
 }
 
+// Amcrest doorbell API handlers
+
+func handleAmcrestGetDoorbell(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	client := amcrestManager.GetClient(name)
+	if client == nil {
+		http.Error(w, "Camera not found", http.StatusNotFound)
+		return
+	}
+
+	if !client.IsDoorbell() {
+		http.Error(w, "Camera is not a doorbell", http.StatusBadRequest)
+		return
+	}
+
+	config, err := client.GetDoorbellConfig()
+	if err != nil {
+		http.Error(w, "Failed to get doorbell config: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+func handleAmcrestSetDoorbell(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	client := amcrestManager.GetClient(name)
+	if client == nil {
+		http.Error(w, "Camera not found", http.StatusNotFound)
+		return
+	}
+
+	if !client.IsDoorbell() {
+		http.Error(w, "Camera is not a doorbell", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		RingEnable    *bool `json:"ringEnable,omitempty"`
+		RingVolume    *int  `json:"ringVolume,omitempty"`
+		TalkVolume    *int  `json:"talkVolume,omitempty"`
+		LEDEnable     *bool `json:"ledEnable,omitempty"`
+		LEDBrightness *int  `json:"ledBrightness,omitempty"`
+		TriggerRing   bool  `json:"triggerRing,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.TriggerRing {
+		if err := client.TriggerDoorbellRing(); err != nil {
+			http.Error(w, "Failed to trigger ring: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+		return
+	}
+
+	if req.RingEnable != nil {
+		if err := client.SetDoorbellRingEnable(*req.RingEnable); err != nil {
+			http.Error(w, "Failed to set ring enable: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+
+	if req.RingVolume != nil {
+		if err := client.SetDoorbellRingVolume(*req.RingVolume); err != nil {
+			http.Error(w, "Failed to set ring volume: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+
+	if req.TalkVolume != nil {
+		if err := client.SetDoorbellTalkVolume(*req.TalkVolume); err != nil {
+			http.Error(w, "Failed to set talk volume: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+
+	if req.LEDEnable != nil || req.LEDBrightness != nil {
+		enable := true
+		brightness := 100
+		if req.LEDEnable != nil {
+			enable = *req.LEDEnable
+		}
+		if req.LEDBrightness != nil {
+			brightness = *req.LEDBrightness
+		}
+		if err := client.SetDoorbellLED(enable, brightness); err != nil {
+			http.Error(w, "Failed to set LED: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
 func handleTestDoorbell(w http.ResponseWriter, r *http.Request) {
 	go wakeTablet() // Wake tablet screen first
 	wsHub.BroadcastDoorbell(appConfig.DoorbellCamera)
@@ -5627,105 +5727,6 @@ func getCalendarsWithPrefs(ctx context.Context) ([]CalendarWithPrefs, error) {
 	return result, nil
 }
 
-// handleTabletProximity receives proximity sensor data from the app
-func handleTabletProximity(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Near        bool `json:"near"`
-		IdleTimeout int  `json:"idleTimeout"` // seconds
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	sensorState.Lock()
-	wasNear := sensorState.ProximityNear
-	sensorState.ProximityNear = req.Near
-	sensorState.LastProximityAt = time.Now()
-	if req.IdleTimeout > 0 {
-		sensorState.IdleTimeoutSecs = req.IdleTimeout
-		tabletIdleTimeout = time.Duration(req.IdleTimeout) * time.Second
-	}
-
-	// Track proximity state changes
-	if req.Near && !wasNear {
-		// Someone approached - clear idle timer
-		sensorState.ScreenIdleAt = time.Time{}
-		sensorState.Unlock()
-		log.Println("Tablet proximity: someone approached")
-		// Broadcast wake event to all connected clients
-		if wsHub != nil {
-			wsHub.Broadcast(websocket.Event{Type: "proximity_wake"})
-		}
-	} else if !req.Near && wasNear {
-		// Someone left - start idle timer
-		sensorState.ScreenIdleAt = time.Now().Add(tabletIdleTimeout)
-		sensorState.Unlock()
-	} else {
-		sensorState.Unlock()
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-	})
-}
-
-// handleTabletLight receives light sensor data from the app
-func handleTabletLight(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Lux float64 `json:"lux"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	sensorState.Lock()
-	sensorState.LightLevel = req.Lux
-	sensorState.LastLightAt = time.Now()
-	sensorState.Unlock()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-	})
-}
-
-// handleGetSensorState returns the current sensor state
-func handleGetSensorState(w http.ResponseWriter, r *http.Request) {
-	sensorState.RLock()
-	defer sensorState.RUnlock()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"proximityNear":   sensorState.ProximityNear,
-		"lightLevel":      sensorState.LightLevel,
-		"lastProximityAt": sensorState.LastProximityAt,
-		"lastLightAt":     sensorState.LastLightAt,
-		"screenIdleAt":    sensorState.ScreenIdleAt,
-		"idleTimeoutSecs": sensorState.IdleTimeoutSecs,
-	})
-}
-
-// handleExitKiosk broadcasts a command to exit kiosk mode via WebSocket
-func handleExitKiosk(w http.ResponseWriter, r *http.Request) {
-	if wsHub != nil {
-		wsHub.Broadcast(websocket.Event{Type: "kiosk_exit"})
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
-}
-
-// handleTabletReload broadcasts a reload command via WebSocket
-func handleTabletReload(w http.ResponseWriter, r *http.Request) {
-	if wsHub != nil {
-		wsHub.Broadcast(websocket.Event{Type: "tablet_reload"})
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
-}
-
 // wakeTablet broadcasts a wake event via WebSocket to dismiss screensaver
 // This is called asynchronously when doorbell events occur
 func wakeTablet() {
@@ -5733,12 +5734,4 @@ func wakeTablet() {
 		log.Println("Broadcasting tablet_wake to WebSocket clients")
 		wsHub.Broadcast(websocket.Event{Type: "tablet_wake"})
 	}
-}
-
-// handleGetTabletTheme returns the theme configuration
-func handleGetTabletTheme(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"theme": "dark",
-	})
 }
