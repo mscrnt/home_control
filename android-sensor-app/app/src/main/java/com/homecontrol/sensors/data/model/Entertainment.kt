@@ -158,13 +158,40 @@ data class XboxMediaRequest(
 @Serializable
 data class PS5Device(
     val name: String,
-    val host: String? = null
+    @SerialName("media_player_id")
+    val mediaPlayerId: String? = null,
+    @SerialName("psn_account_id")
+    val psnAccountId: String? = null
 )
 
 @Serializable
 data class PS5State(
-    val power: Boolean,
-    val status: String? = null
+    val name: String? = null,
+    val power: Boolean = false,
+    val state: String? = null,
+    @SerialName("online_status")
+    val onlineStatus: String? = null,
+    @SerialName("current_title")
+    val currentTitle: String? = null,
+    @SerialName("image_url")
+    val imageUrl: String? = null,
+    // Trophy info
+    @SerialName("trophy_level")
+    val trophyLevel: Int? = null,
+    @SerialName("platinum_trophies")
+    val platinumTrophies: Int? = null,
+    @SerialName("gold_trophies")
+    val goldTrophies: Int? = null,
+    @SerialName("silver_trophies")
+    val silverTrophies: Int? = null,
+    @SerialName("bronze_trophies")
+    val bronzeTrophies: Int? = null,
+    // PSN info
+    @SerialName("online_id")
+    val onlineId: String? = null,
+    @SerialName("avatar_url")
+    val avatarUrl: String? = null,
+    val error: String? = null
 )
 
 // Common request models

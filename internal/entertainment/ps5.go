@@ -1,302 +1,246 @@
 package entertainment
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
-	"time"
+	"strings"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"home_control/internal/homeassistant"
 )
 
-// PS5Device represents a PlayStation 5
+// PS5Device represents a PlayStation 5 controlled via Home Assistant
 type PS5Device struct {
-	Name       string
-	DeviceID   string // Unique device ID from PS5-MQTT
-	PSNAccount string // PSN account name (optional)
-	mu         sync.RWMutex
-	state      *PS5State
+	Name         string
+	PowerSwitch  string // e.g., "switch.ps5_302_power" - for power control
+	PSNAccountID string // e.g., "mscrnt" - used to find PSN sensors
 }
 
-// PS5State represents the current state of a PS5
-type PS5State struct {
-	Name       string `json:"name"`
-	DeviceID   string `json:"device_id"`
-	Power      string `json:"power"`       // "STANDBY", "AWAKE", "UNKNOWN"
-	Activity   string `json:"activity"`    // Current activity/game
-	Online     bool   `json:"online"`
-	LastUpdate time.Time `json:"last_update"`
-	Error      string `json:"error,omitempty"`
-}
-
-// PS5Manager manages PlayStation 5 devices via MQTT
+// PS5Manager manages PlayStation 5 devices via Home Assistant
 type PS5Manager struct {
-	devices     map[string]*PS5Device
-	mqttClient  mqtt.Client
-	baseTopic   string // e.g., "homeassistant" or custom discovery topic
-	mu          sync.RWMutex
+	devices  map[string]*PS5Device
+	haClient *homeassistant.Client
 }
 
-// PS5-MQTT topic structure:
-// {baseTopic}/switch/{device_id}/set - Power control (ON/OFF)
-// {baseTopic}/sensor/{device_id}/state - State updates
-// {baseTopic}/switch/{device_id}/power/state - Power state (ON/OFF)
-
-// NewPS5Manager creates a new PS5 manager
-func NewPS5Manager(mqttClient mqtt.Client, baseTopic string) *PS5Manager {
-	if baseTopic == "" {
-		baseTopic = "homeassistant"
+// NewPS5Manager creates a new PS5 manager using Home Assistant
+func NewPS5Manager(haClient *homeassistant.Client) *PS5Manager {
+	return &PS5Manager{
+		devices:  make(map[string]*PS5Device),
+		haClient: haClient,
 	}
-
-	mgr := &PS5Manager{
-		devices:    make(map[string]*PS5Device),
-		mqttClient: mqttClient,
-		baseTopic:  baseTopic,
-	}
-
-	// Subscribe to PS5 state updates if MQTT client is connected
-	if mqttClient != nil && mqttClient.IsConnected() {
-		mgr.subscribeToStates()
-	}
-
-	return mgr
 }
 
-// AddDevice adds a PS5 device
-func (m *PS5Manager) AddDevice(name, deviceID, psnAccount string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+// AddDevice adds a PS5 device with its HA entity IDs
+func (m *PS5Manager) AddDevice(name, powerSwitch, psnAccountID string) {
 	m.devices[name] = &PS5Device{
-		Name:       name,
-		DeviceID:   deviceID,
-		PSNAccount: psnAccount,
-		state: &PS5State{
-			Name:     name,
-			DeviceID: deviceID,
-			Power:    "UNKNOWN",
-			Online:   false,
-		},
+		Name:         name,
+		PowerSwitch:  powerSwitch,
+		PSNAccountID: psnAccountID,
 	}
-	log.Printf("Added PS5: %s (Device ID: %s)", name, deviceID)
+	log.Printf("Added PS5: %s (power_switch: %s, psn_account: %s)", name, powerSwitch, psnAccountID)
 }
 
 // GetDevice returns a device by name
 func (m *PS5Manager) GetDevice(name string) *PS5Device {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	return m.devices[name]
 }
 
 // GetDevices returns all devices
 func (m *PS5Manager) GetDevices() map[string]*PS5Device {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	return m.devices
 }
 
-// subscribeToStates subscribes to MQTT state topics for all devices
-func (m *PS5Manager) subscribeToStates() {
-	// Subscribe to all PS5 power state topics
-	topic := fmt.Sprintf("%s/switch/+/power/state", m.baseTopic)
-	m.mqttClient.Subscribe(topic, 0, m.handlePowerState)
-
-	// Subscribe to activity/sensor states
-	topic = fmt.Sprintf("%s/sensor/+/state", m.baseTopic)
-	m.mqttClient.Subscribe(topic, 0, m.handleActivityState)
-
-	log.Printf("PS5 MQTT: Subscribed to state topics under %s", m.baseTopic)
+// PS5State represents the state of a PS5
+type PS5State struct {
+	Name         string `json:"name,omitempty"`
+	Power        bool   `json:"power"`
+	State        string `json:"state,omitempty"`         // "off", "on", "playing", "idle"
+	OnlineStatus string `json:"online_status,omitempty"` // "offline", "availabletoplay", "busy"
+	CurrentTitle string `json:"current_title,omitempty"`
+	ImageUrl     string `json:"image_url,omitempty"`
+	// Trophy info
+	TrophyLevel     int `json:"trophy_level,omitempty"`
+	PlatinumTrophies int `json:"platinum_trophies,omitempty"`
+	GoldTrophies    int `json:"gold_trophies,omitempty"`
+	SilverTrophies  int `json:"silver_trophies,omitempty"`
+	BronzeTrophies  int `json:"bronze_trophies,omitempty"`
+	// PSN info
+	OnlineID string `json:"online_id,omitempty"`
+	AvatarUrl string `json:"avatar_url,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-// handlePowerState handles power state MQTT messages
-func (m *PS5Manager) handlePowerState(client mqtt.Client, msg mqtt.Message) {
-	// Extract device ID from topic
-	// Topic format: {baseTopic}/switch/{device_id}/power/state
-	topic := msg.Topic()
-	payload := string(msg.Payload())
+// GetState returns the current state of the PS5 via Home Assistant
+func (m *PS5Manager) GetState(deviceName string) (*PS5State, error) {
+	device := m.devices[deviceName]
+	if device == nil {
+		return nil, fmt.Errorf("device not found: %s", deviceName)
+	}
 
-	log.Printf("PS5 MQTT power state: %s = %s", topic, payload)
+	state := &PS5State{
+		Name: device.Name,
+	}
 
-	// Find matching device and update state
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	// Get power switch state from HA
+	if device.PowerSwitch != "" {
+		entity, err := m.haClient.GetState(device.PowerSwitch)
+		if err != nil {
+			state.Error = err.Error()
+		} else {
+			state.State = entity.State
+			state.Power = entity.State == "on"
+		}
+	}
 
-	for _, device := range m.devices {
-		expectedTopic := fmt.Sprintf("%s/switch/%s/power/state", m.baseTopic, device.DeviceID)
-		if topic == expectedTopic {
-			device.mu.Lock()
-			if payload == "ON" {
-				device.state.Power = "AWAKE"
+	// Get PSN sensors if account ID is provided
+	if device.PSNAccountID != "" {
+		m.fetchPSNData(device.PSNAccountID, state)
+	}
+
+	return state, nil
+}
+
+// fetchPSNData fetches PSN sensor data and populates the state
+func (m *PS5Manager) fetchPSNData(psnAccountID string, state *PS5State) {
+	// Now Playing sensor
+	nowPlayingSensor := fmt.Sprintf("sensor.%s_now_playing", psnAccountID)
+	if entity, err := m.haClient.GetState(nowPlayingSensor); err == nil {
+		if entity.State != "unknown" && entity.State != "unavailable" {
+			state.CurrentTitle = entity.State
+		}
+	}
+
+	// Now Playing image
+	nowPlayingImage := fmt.Sprintf("image.%s_now_playing", psnAccountID)
+	if entity, err := m.haClient.GetState(nowPlayingImage); err == nil {
+		if entityPicture, ok := entity.Attributes["entity_picture"].(string); ok && entityPicture != "" {
+			if strings.HasPrefix(entityPicture, "/") {
+				state.ImageUrl = m.haClient.GetBaseURL() + entityPicture
 			} else {
-				device.state.Power = "STANDBY"
+				state.ImageUrl = entityPicture
 			}
-			device.state.Online = true
-			device.state.LastUpdate = time.Now()
-			device.mu.Unlock()
-			break
+		}
+	}
+
+	// Online Status sensor
+	onlineStatusSensor := fmt.Sprintf("sensor.%s_online_status", psnAccountID)
+	if entity, err := m.haClient.GetState(onlineStatusSensor); err == nil {
+		state.OnlineStatus = entity.State
+	}
+
+	// Online ID sensor
+	onlineIDSensor := fmt.Sprintf("sensor.%s_online_id", psnAccountID)
+	if entity, err := m.haClient.GetState(onlineIDSensor); err == nil {
+		if entity.State != "unknown" && entity.State != "unavailable" {
+			state.OnlineID = entity.State
+		}
+	}
+
+	// Avatar image
+	avatarImage := fmt.Sprintf("image.%s_avatar", psnAccountID)
+	if entity, err := m.haClient.GetState(avatarImage); err == nil {
+		if entityPicture, ok := entity.Attributes["entity_picture"].(string); ok && entityPicture != "" {
+			if strings.HasPrefix(entityPicture, "/") {
+				state.AvatarUrl = m.haClient.GetBaseURL() + entityPicture
+			} else {
+				state.AvatarUrl = entityPicture
+			}
+		}
+	}
+
+	// Trophy sensors
+	trophyLevelSensor := fmt.Sprintf("sensor.%s_trophy_level", psnAccountID)
+	if entity, err := m.haClient.GetState(trophyLevelSensor); err == nil {
+		if level, ok := parseIntFromState(entity.State); ok {
+			state.TrophyLevel = level
+		}
+	}
+
+	platinumSensor := fmt.Sprintf("sensor.%s_platinum_trophies", psnAccountID)
+	if entity, err := m.haClient.GetState(platinumSensor); err == nil {
+		if count, ok := parseIntFromState(entity.State); ok {
+			state.PlatinumTrophies = count
+		}
+	}
+
+	goldSensor := fmt.Sprintf("sensor.%s_gold_trophies", psnAccountID)
+	if entity, err := m.haClient.GetState(goldSensor); err == nil {
+		if count, ok := parseIntFromState(entity.State); ok {
+			state.GoldTrophies = count
+		}
+	}
+
+	silverSensor := fmt.Sprintf("sensor.%s_silver_trophies", psnAccountID)
+	if entity, err := m.haClient.GetState(silverSensor); err == nil {
+		if count, ok := parseIntFromState(entity.State); ok {
+			state.SilverTrophies = count
+		}
+	}
+
+	bronzeSensor := fmt.Sprintf("sensor.%s_bronze_trophies", psnAccountID)
+	if entity, err := m.haClient.GetState(bronzeSensor); err == nil {
+		if count, ok := parseIntFromState(entity.State); ok {
+			state.BronzeTrophies = count
 		}
 	}
 }
 
-// handleActivityState handles activity/sensor state MQTT messages
-func (m *PS5Manager) handleActivityState(client mqtt.Client, msg mqtt.Message) {
-	topic := msg.Topic()
-	payload := string(msg.Payload())
-
-	log.Printf("PS5 MQTT activity state: %s = %s", topic, payload)
-
-	// Find matching device and update activity
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, device := range m.devices {
-		// Check for activity sensor
-		expectedTopic := fmt.Sprintf("%s/sensor/%s/state", m.baseTopic, device.DeviceID)
-		if topic == expectedTopic {
-			device.mu.Lock()
-			device.state.Activity = payload
-			device.state.LastUpdate = time.Now()
-			device.mu.Unlock()
-			break
-		}
+// parseIntFromState parses an integer from an HA state string
+func parseIntFromState(state string) (int, bool) {
+	if state == "unknown" || state == "unavailable" || state == "" {
+		return 0, false
 	}
+	var val int
+	_, err := fmt.Sscanf(state, "%d", &val)
+	return val, err == nil
 }
 
-// ========== Power Control ==========
-
-// publish publishes an MQTT message
-func (m *PS5Manager) publish(topic, payload string) error {
-	if m.mqttClient == nil {
-		return fmt.Errorf("MQTT client not configured")
+// Power controls PS5 power via Home Assistant
+func (m *PS5Manager) Power(deviceName string, on bool) error {
+	device := m.devices[deviceName]
+	if device == nil {
+		return fmt.Errorf("device not found: %s", deviceName)
 	}
 
-	if !m.mqttClient.IsConnected() {
-		return fmt.Errorf("MQTT client not connected")
+	if device.PowerSwitch == "" {
+		return fmt.Errorf("no power switch configured for %s", deviceName)
 	}
 
-	token := m.mqttClient.Publish(topic, 0, false, payload)
-	token.Wait()
-	return token.Error()
+	service := "turn_off"
+	if on {
+		service = "turn_on"
+	}
+
+	return m.haClient.CallService("switch", service, device.PowerSwitch)
 }
 
-// PowerOn turns on a PS5
+// PowerOn turns on the PS5
 func (m *PS5Manager) PowerOn(deviceName string) error {
-	m.mu.RLock()
-	device := m.devices[deviceName]
-	m.mu.RUnlock()
-
-	if device == nil {
-		return fmt.Errorf("device not found: %s", deviceName)
-	}
-
-	topic := fmt.Sprintf("%s/switch/%s/set", m.baseTopic, device.DeviceID)
-	log.Printf("PS5 power on: %s -> %s", deviceName, topic)
-
-	return m.publish(topic, "ON")
+	return m.Power(deviceName, true)
 }
 
-// PowerOff puts a PS5 into standby
+// PowerOff puts the PS5 into standby
 func (m *PS5Manager) PowerOff(deviceName string) error {
-	m.mu.RLock()
-	device := m.devices[deviceName]
-	m.mu.RUnlock()
-
-	if device == nil {
-		return fmt.Errorf("device not found: %s", deviceName)
-	}
-
-	topic := fmt.Sprintf("%s/switch/%s/set", m.baseTopic, device.DeviceID)
-	log.Printf("PS5 power off: %s -> %s", deviceName, topic)
-
-	return m.publish(topic, "OFF")
+	return m.Power(deviceName, false)
 }
 
 // TogglePower toggles power state
 func (m *PS5Manager) TogglePower(deviceName string) error {
-	m.mu.RLock()
-	device := m.devices[deviceName]
-	m.mu.RUnlock()
-
-	if device == nil {
-		return fmt.Errorf("device not found: %s", deviceName)
+	state, err := m.GetState(deviceName)
+	if err != nil {
+		return err
 	}
 
-	device.mu.RLock()
-	currentPower := device.state.Power
-	device.mu.RUnlock()
-
-	if currentPower == "AWAKE" {
-		return m.PowerOff(deviceName)
-	}
-	return m.PowerOn(deviceName)
-}
-
-// ========== State Management ==========
-
-// GetState returns the current state of a PS5
-func (m *PS5Manager) GetState(deviceName string) *PS5State {
-	m.mu.RLock()
-	device := m.devices[deviceName]
-	m.mu.RUnlock()
-
-	if device == nil {
-		return nil
-	}
-
-	device.mu.RLock()
-	defer device.mu.RUnlock()
-
-	// Return a copy of the state
-	stateCopy := *device.state
-	return &stateCopy
+	return m.Power(deviceName, !state.Power)
 }
 
 // GetAllStates returns states of all devices
 func (m *PS5Manager) GetAllStates() []*PS5State {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	states := make([]*PS5State, 0, len(m.devices))
-	for _, device := range m.devices {
-		device.mu.RLock()
-		stateCopy := *device.state
-		device.mu.RUnlock()
-		states = append(states, &stateCopy)
+	for name := range m.devices {
+		state, _ := m.GetState(name)
+		if state != nil {
+			states = append(states, state)
+		}
 	}
 	return states
-}
-
-// RefreshState requests a state refresh for a device
-func (m *PS5Manager) RefreshState(deviceName string) error {
-	m.mu.RLock()
-	device := m.devices[deviceName]
-	m.mu.RUnlock()
-
-	if device == nil {
-		return fmt.Errorf("device not found: %s", deviceName)
-	}
-
-	// Request state refresh by publishing to the state topic
-	// PS5-MQTT typically auto-publishes state changes
-	topic := fmt.Sprintf("%s/switch/%s/power/state", m.baseTopic, device.DeviceID)
-	log.Printf("Requesting PS5 state refresh: %s", topic)
-
-	// For PS5-MQTT, we might need to check specific topics
-	// The actual refresh mechanism depends on PS5-MQTT implementation
-	return nil
-}
-
-// ========== Serialization ==========
-
-// MarshalJSON marshals a PS5State to JSON
-func (s *PS5State) MarshalJSON() ([]byte, error) {
-	type Alias PS5State
-	return json.Marshal(&struct {
-		*Alias
-		LastUpdate string `json:"last_update"`
-	}{
-		Alias:      (*Alias)(s),
-		LastUpdate: s.LastUpdate.Format(time.RFC3339),
-	})
 }

@@ -25,8 +25,6 @@ import (
 	"home_control/internal/icons"
 	"home_control/internal/mqtt"
 	"home_control/internal/spotify"
-
-	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 	"home_control/internal/syncbox"
 	"home_control/internal/tasks"
 	"home_control/internal/weather"
@@ -168,11 +166,11 @@ type XboxDeviceConfig struct {
 	NowPlayingSensorID string // e.g., "sensor.the_og_ninja_now_playing" (optional)
 }
 
-// PS5DeviceConfig holds configuration for a PS5
+// PS5DeviceConfig holds configuration for a PS5 via Home Assistant
 type PS5DeviceConfig struct {
-	Name       string
-	DeviceID   string
-	PSNAccount string
+	Name         string
+	PowerSwitch  string // e.g., "switch.ps5_302_power" - for power control
+	PSNAccountID string // e.g., "mscrnt" - PSN account ID for sensors
 }
 
 // SyncBoxConfig holds configuration for a single Hue Sync Box
@@ -2103,17 +2101,13 @@ func initEntertainmentManagers(cfg Config) {
 		log.Printf("Xbox manager initialized with %d device(s) via Home Assistant", len(cfg.XboxDevices))
 	}
 
-	// Initialize PS5 manager (requires MQTT)
-	if len(cfg.PS5Devices) > 0 {
-		var pahoClient pahomqtt.Client
-		if mqttClient != nil {
-			pahoClient = mqttClient.GetPahoClient()
-		}
-		ps5Manager = entertainment.NewPS5Manager(pahoClient, cfg.PS5MQTTTopic)
+	// Initialize PS5 manager (uses Home Assistant for control)
+	if len(cfg.PS5Devices) > 0 && haClient != nil {
+		ps5Manager = entertainment.NewPS5Manager(haClient)
 		for _, dev := range cfg.PS5Devices {
-			ps5Manager.AddDevice(dev.Name, dev.DeviceID, dev.PSNAccount)
+			ps5Manager.AddDevice(dev.Name, dev.PowerSwitch, dev.PSNAccountID)
 		}
-		log.Printf("PS5 manager initialized with %d device(s)", len(cfg.PS5Devices))
+		log.Printf("PS5 manager initialized with %d device(s) via Home Assistant", len(cfg.PS5Devices))
 	}
 }
 
@@ -2231,7 +2225,8 @@ func parseXboxDevices(s string) []XboxDeviceConfig {
 	return devices
 }
 
-// parsePS5Devices parses format: "name:deviceid:psnaccount,..."
+// parsePS5Devices parses format: "name:power_switch:psn_account_id,..."
+// Example: "ps5:switch.ps5_302_power:mscrnt"
 func parsePS5Devices(s string) []PS5DeviceConfig {
 	if s == "" {
 		return nil
@@ -2241,14 +2236,14 @@ func parsePS5Devices(s string) []PS5DeviceConfig {
 		entry = strings.TrimSpace(entry)
 		parts := strings.SplitN(entry, ":", 3)
 		if len(parts) >= 2 {
-			psnAccount := ""
+			psnAccountID := ""
 			if len(parts) >= 3 {
-				psnAccount = strings.TrimSpace(parts[2])
+				psnAccountID = strings.TrimSpace(parts[2])
 			}
 			devices = append(devices, PS5DeviceConfig{
-				Name:       strings.TrimSpace(parts[0]),
-				DeviceID:   strings.TrimSpace(parts[1]),
-				PSNAccount: psnAccount,
+				Name:         strings.TrimSpace(parts[0]),
+				PowerSwitch:  strings.TrimSpace(parts[1]),
+				PSNAccountID: psnAccountID,
 			})
 		}
 	}
@@ -3467,9 +3462,9 @@ func handleGetPS5State(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "PS5 devices not configured", http.StatusNotFound)
 		return
 	}
-	state := ps5Manager.GetState(name)
-	if state == nil {
-		http.Error(w, "Device not found", http.StatusNotFound)
+	state, err := ps5Manager.GetState(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -3484,25 +3479,14 @@ func handlePS5Power(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Action string `json:"action"` // "on", "off", "toggle"
+		Power bool `json:"power"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var err error
-	switch req.Action {
-	case "on":
-		err = ps5Manager.PowerOn(name)
-	case "off":
-		err = ps5Manager.PowerOff(name)
-	case "toggle":
-		err = ps5Manager.TogglePower(name)
-	default:
-		http.Error(w, "Invalid action", http.StatusBadRequest)
-		return
-	}
+	err := ps5Manager.Power(name, req.Power)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

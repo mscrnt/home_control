@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.homecontrol.sensors.R
+import com.homecontrol.sensors.data.model.PS5State
 import com.homecontrol.sensors.data.model.SonySoundSetting
 import com.homecontrol.sensors.data.model.SonyState
 import com.homecontrol.sensors.data.model.XboxState
@@ -2532,25 +2533,219 @@ private fun PS5Tab(
             onPlayPause = { /* TODO */ }
         ),
         rightContent = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_playstation),
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = Color.Unspecified
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (ps5State?.power == true) "PS5 is on" else "PS5 is off",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
-            }
+            PS5ContentPanel(ps5State = ps5State)
         }
     )
+}
+
+@Composable
+private fun PS5ContentPanel(ps5State: PS5State?) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Large game art or PS5 logo
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(PS5Color.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (ps5State?.imageUrl != null && ps5State.power == true) {
+                // Show game art when playing
+                AsyncImage(
+                    model = ps5State.imageUrl,
+                    contentDescription = "Game art",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                // Gradient overlay at bottom for text
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "Now Playing",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = ps5State.currentTitle ?: "Unknown",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2
+                        )
+                    }
+                }
+            } else {
+                // Show PS5 logo when standby or no game art
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_playstation),
+                        contentDescription = "PlayStation",
+                        modifier = Modifier.size(120.dp),
+                        tint = Color.Unspecified
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = when {
+                            ps5State?.power != true -> "Standby"
+                            ps5State.currentTitle != null -> ps5State.currentTitle
+                            else -> "Home"
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (ps5State?.power == true) PS5Color else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    // Online status
+                    if (ps5State?.onlineStatus != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when (ps5State.onlineStatus) {
+                                            "online" -> Color(0xFF4CAF50)
+                                            "busy" -> Color(0xFFFF9800)
+                                            else -> Color.Gray
+                                        }
+                                    )
+                            )
+                            Text(
+                                text = ps5State.onlineStatus.replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            if (ps5State.onlineId != null) {
+                                Text(
+                                    text = "• ${ps5State.onlineId}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Trophy section
+        if (ps5State?.power == true && (ps5State.platinumTrophies ?: 0) + (ps5State.goldTrophies ?: 0) +
+            (ps5State.silverTrophies ?: 0) + (ps5State.bronzeTrophies ?: 0) > 0) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "🏆",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Trophies",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (ps5State.trophyLevel != null && ps5State.trophyLevel > 0) {
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "Level ${ps5State.trophyLevel}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = PS5Color
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Platinum
+                        TrophyCount(
+                            emoji = "🏆",
+                            count = ps5State.platinumTrophies ?: 0,
+                            color = Color(0xFFE5E4E2)
+                        )
+                        // Gold
+                        TrophyCount(
+                            emoji = "🥇",
+                            count = ps5State.goldTrophies ?: 0,
+                            color = Color(0xFFFFD700)
+                        )
+                        // Silver
+                        TrophyCount(
+                            emoji = "🥈",
+                            count = ps5State.silverTrophies ?: 0,
+                            color = Color(0xFFC0C0C0)
+                        )
+                        // Bronze
+                        TrophyCount(
+                            emoji = "🥉",
+                            count = ps5State.bronzeTrophies ?: 0,
+                            color = Color(0xFFCD7F32)
+                        )
+                    }
+                }
+            }
+        }
+
+    }
+}
+
+@Composable
+private fun TrophyCount(
+    emoji: String,
+    count: Int,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = emoji,
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+    }
 }
