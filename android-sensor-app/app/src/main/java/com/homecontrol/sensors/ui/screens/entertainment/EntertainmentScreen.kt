@@ -56,6 +56,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -77,11 +78,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.homecontrol.sensors.R
 import com.homecontrol.sensors.data.model.SonySoundSetting
 import com.homecontrol.sensors.data.model.SonyState
+import com.homecontrol.sensors.data.model.XboxState
 import com.homecontrol.sensors.ui.components.LoadingIndicator
 import com.homecontrol.sensors.ui.theme.HomeControlColors
 import kotlinx.coroutines.Dispatchers
@@ -2151,6 +2155,309 @@ private fun ShieldAppCard(
 }
 
 @Composable
+private fun XboxControllerPanel(
+    xboxState: XboxState?,
+    onButtonPress: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Now Playing section with game art
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Game art image
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(XboxColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (xboxState?.imageUrl != null) {
+                        AsyncImage(
+                            model = xboxState.imageUrl,
+                            contentDescription = "Game art",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_xbox),
+                            contentDescription = "Xbox",
+                            modifier = Modifier.size(48.dp),
+                            tint = Color.Unspecified
+                        )
+                    }
+                }
+
+                // Game info
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Now Playing",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = xboxState?.currentTitle ?: "—",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (xboxState?.currentTitle != null) XboxColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        maxLines = 2
+                    )
+                    // Genre
+                    if (xboxState?.genre != null) {
+                        Text(
+                            text = xboxState.genre,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1
+                        )
+                    }
+                    // Developer/Publisher
+                    if (xboxState?.developer != null || xboxState?.publisher != null) {
+                        Text(
+                            text = xboxState.developer ?: xboxState.publisher ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            maxLines = 1
+                        )
+                    }
+                    // Progress bar
+                    if (xboxState?.progress != null && xboxState.progress > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth((xboxState.progress / 100f).toFloat().coerceIn(0f, 1f))
+                                        .background(XboxColor)
+                                )
+                            }
+                            Text(
+                                text = "${xboxState.progress.toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = XboxColor
+                            )
+                        }
+                    }
+                    // Gamerscore
+                    if (xboxState?.gamerscore != null && xboxState.gamerscore > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "G",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFD700)
+                            )
+                            Text(
+                                text = "${xboxState.gamerscore}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Face buttons - A B X Y in Xbox layout
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Face Buttons",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            // Y button (top)
+            XboxFaceButton(
+                label = "Y",
+                color = Color(0xFFFFB900),
+                onClick = { onButtonPress("y") }
+            )
+            // X and B buttons (middle)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(48.dp)
+            ) {
+                XboxFaceButton(
+                    label = "X",
+                    color = Color(0xFF0078D4),
+                    onClick = { onButtonPress("x") }
+                )
+                XboxFaceButton(
+                    label = "B",
+                    color = Color(0xFFE81123),
+                    onClick = { onButtonPress("b") }
+                )
+            }
+            // A button (bottom)
+            XboxFaceButton(
+                label = "A",
+                color = XboxColor,
+                onClick = { onButtonPress("a") }
+            )
+        }
+
+        // Shoulder/Trigger buttons
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Shoulders & Triggers",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                XboxShoulderButton(
+                    label = "LT",
+                    onClick = { onButtonPress("left_trigger") }
+                )
+                XboxShoulderButton(
+                    label = "RT",
+                    onClick = { onButtonPress("right_trigger") }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                XboxShoulderButton(
+                    label = "LB",
+                    onClick = { onButtonPress("left_shoulder") }
+                )
+                XboxShoulderButton(
+                    label = "RB",
+                    onClick = { onButtonPress("right_shoulder") }
+                )
+            }
+        }
+
+        // Utility buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            XboxUtilityButton(
+                label = "View",
+                onClick = { onButtonPress("view") }
+            )
+            XboxUtilityButton(
+                label = "Menu",
+                onClick = { onButtonPress("menu") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun XboxFaceButton(
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .size(48.dp)
+            .clickable(onClick = onClick),
+        shape = CircleShape,
+        color = color.copy(alpha = 0.9f),
+        shadowElevation = 4.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun XboxShoulderButton(
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(60.dp)
+            .height(36.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xFF3A3A3A),
+        shadowElevation = 2.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun XboxUtilityButton(
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        shape = RoundedCornerShape(4.dp),
+        color = Color(0xFF2A2A2A)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White.copy(alpha = 0.8f),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
 private fun XboxTab(
     uiState: EntertainmentUiState,
     viewModel: EntertainmentViewModel
@@ -2169,36 +2476,28 @@ private fun XboxTab(
         isPowerOn = xboxState?.power == true,
         onPowerToggle = { viewModel.toggleXboxPower(xboxDevice.name) },
         onDPadPress = { direction ->
-            // TODO: Send Xbox controller commands
+            val button = when (direction) {
+                DPadDirection.UP -> "dpad_up"
+                DPadDirection.DOWN -> "dpad_down"
+                DPadDirection.LEFT -> "dpad_left"
+                DPadDirection.RIGHT -> "dpad_right"
+                DPadDirection.CENTER -> "a"
+            }
+            viewModel.sendXboxButton(xboxDevice.name, button)
         },
         navButtons = standardNavButtons(
-            onBack = { /* TODO: Send B button */ },
-            onHome = { /* TODO: Send Xbox button */ },
-            onMenu = { /* TODO: Send menu button */ }
+            onBack = { viewModel.sendXboxButton(xboxDevice.name, "b") },
+            onHome = { viewModel.sendXboxButton(xboxDevice.name, "nexus") },
+            onMenu = { viewModel.sendXboxButton(xboxDevice.name, "menu") }
         ),
         mediaButtons = standardMediaButtons(
-            onPlayPause = { /* TODO */ }
+            onPlayPause = { viewModel.sendXboxMedia(xboxDevice.name, "play_pause") }
         ),
         rightContent = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_xbox),
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = Color.Unspecified
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (xboxState?.power == true) "Xbox is on" else "Xbox is off",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
-            }
+            XboxControllerPanel(
+                xboxState = xboxState,
+                onButtonPress = { button -> viewModel.sendXboxButton(xboxDevice.name, button) }
+            )
         }
     )
 }

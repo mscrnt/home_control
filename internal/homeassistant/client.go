@@ -31,6 +31,11 @@ func NewClient(baseURL, token string) *Client {
 	}
 }
 
+// GetBaseURL returns the Home Assistant base URL
+func (c *Client) GetBaseURL() string {
+	return c.baseURL
+}
+
 // GetState fetches a single entity state
 func (c *Client) GetState(entityID string) (*Entity, error) {
 	url := fmt.Sprintf("%s/api/states/%s", c.baseURL, entityID)
@@ -213,6 +218,38 @@ func (c *Client) SetClimateFanMode(entityID string, fanMode string) error {
 
 	req, err := http.NewRequest("POST", url, io.NopCloser(
 		io.Reader(stringReader(body)),
+	))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HA service call failed %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// CallServiceWithData calls a Home Assistant service with custom JSON data
+func (c *Client) CallServiceWithData(domain, service string, data map[string]interface{}) error {
+	url := fmt.Sprintf("%s/api/services/%s/%s", c.baseURL, domain, service)
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, io.NopCloser(
+		io.Reader(stringReader(string(jsonData))),
 	))
 	if err != nil {
 		return err

@@ -366,6 +366,28 @@ class EntertainmentViewModel @Inject constructor(
         }
     }
 
+    fun sendXboxButton(name: String, button: String) {
+        viewModelScope.launch {
+            entertainmentRepository.xboxInput(name, button)
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to send button: ${error.message}")
+                    }
+                }
+        }
+    }
+
+    fun sendXboxMedia(name: String, command: String) {
+        viewModelScope.launch {
+            entertainmentRepository.xboxMedia(name, command)
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(error = "Failed to send media command: ${error.message}")
+                    }
+                }
+        }
+    }
+
     fun togglePS5Power(name: String) {
         viewModelScope.launch {
             val currentState = _uiState.value.ps5States[name] ?: return@launch

@@ -439,6 +439,18 @@ interface HomeControlApi {
         @Body request: PowerRequest
     ): Response<Unit>
 
+    @POST("api/entertainment/xbox/{name}/input")
+    suspend fun xboxInput(
+        @Path("name") name: String,
+        @Body request: XboxInputRequest
+    ): Response<Unit>
+
+    @POST("api/entertainment/xbox/{name}/media")
+    suspend fun xboxMedia(
+        @Path("name") name: String,
+        @Body request: XboxMediaRequest
+    ): Response<Unit>
+
     // PS5
     @GET("api/entertainment/ps5")
     suspend fun getPS5Devices(): Response<List<PS5Device>>

@@ -118,15 +118,40 @@ data class ShieldCommandRequest(
 @Serializable
 data class XboxDevice(
     val name: String,
-    @SerialName("live_id")
-    val liveId: String? = null
+    @SerialName("media_player_id")
+    val mediaPlayerId: String? = null,
+    @SerialName("remote_id")
+    val remoteId: String? = null
 )
 
 @Serializable
 data class XboxState(
-    val power: Boolean,
-    @SerialName("power_state")
-    val powerState: String? = null
+    val name: String? = null,
+    val power: Boolean = false,
+    val state: String? = null,
+    @SerialName("media_type")
+    val mediaType: String? = null,
+    @SerialName("current_title")
+    val currentTitle: String? = null,
+    @SerialName("image_url")
+    val imageUrl: String? = null,
+    // Extra info from now_playing sensor
+    val genre: String? = null,
+    val developer: String? = null,
+    val publisher: String? = null,
+    val progress: Double? = null,
+    val gamerscore: Int? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class XboxInputRequest(
+    val button: String
+)
+
+@Serializable
+data class XboxMediaRequest(
+    val command: String
 )
 
 // PS5

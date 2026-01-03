@@ -137,9 +137,8 @@ type Config struct {
 	SonyDevices []SonyDeviceConfig
 	// Nvidia Shield format: "name:host:port"
 	ShieldDevices []ShieldDeviceConfig
-	// Xbox format: "name:host:liveid"
-	XboxDevices       []XboxDeviceConfig
-	XboxRESTServerURL string // Optional: xbox-smartglass-rest server URL
+	// Xbox format: "name:media_player_id:remote_id" (uses Home Assistant)
+	XboxDevices []XboxDeviceConfig
 	// PS5 format: "name:deviceid:psnaccount"
 	PS5Devices    []PS5DeviceConfig
 	PS5MQTTTopic  string // Base MQTT topic for PS5-MQTT (default: homeassistant)
@@ -161,11 +160,12 @@ type ShieldDeviceConfig struct {
 	Port int
 }
 
-// XboxDeviceConfig holds configuration for an Xbox
+// XboxDeviceConfig holds configuration for an Xbox via Home Assistant
 type XboxDeviceConfig struct {
-	Name   string
-	Host   string
-	LiveID string
+	Name               string
+	MediaPlayerID      string // e.g., "media_player.xbox"
+	RemoteID           string // e.g., "remote.xbox_remote"
+	NowPlayingSensorID string // e.g., "sensor.the_og_ninja_now_playing" (optional)
 }
 
 // PS5DeviceConfig holds configuration for a PS5
@@ -352,10 +352,9 @@ func main() {
 		SpotifyClientSecret:       getEnv("SPOTIFY_CLIENT_SECRET", ""),
 		// Entertainment devices
 		SonyDevices:       parseSonyDevices(getEnv("SONY_DEVICES", "")),
-		ShieldDevices:     parseShieldDevices(getEnv("SHIELD_DEVICES", "")),
-		XboxDevices:       parseXboxDevices(getEnv("XBOX_DEVICES", "")),
-		XboxRESTServerURL: getEnv("XBOX_REST_SERVER", ""),
-		PS5Devices:        parsePS5Devices(getEnv("PS5_DEVICES", "")),
+		ShieldDevices: parseShieldDevices(getEnv("SHIELD_DEVICES", "")),
+		XboxDevices:   parseXboxDevices(getEnv("XBOX_DEVICES", "")),
+		PS5Devices:    parsePS5Devices(getEnv("PS5_DEVICES", "")),
 		PS5MQTTTopic:      getEnv("PS5_MQTT_TOPIC", "homeassistant"),
 	}
 	appConfig = cfg
@@ -2095,13 +2094,13 @@ func initEntertainmentManagers(cfg Config) {
 		log.Printf("Nvidia Shield manager initialized with %d device(s)", len(cfg.ShieldDevices))
 	}
 
-	// Initialize Xbox manager
-	if len(cfg.XboxDevices) > 0 {
-		xboxManager = entertainment.NewXboxManager(cfg.XboxRESTServerURL)
+	// Initialize Xbox manager (uses Home Assistant for control)
+	if len(cfg.XboxDevices) > 0 && haClient != nil {
+		xboxManager = entertainment.NewXboxManager(haClient)
 		for _, dev := range cfg.XboxDevices {
-			xboxManager.AddDevice(dev.Name, dev.Host, dev.LiveID)
+			xboxManager.AddDevice(dev.Name, dev.MediaPlayerID, dev.RemoteID, dev.NowPlayingSensorID)
 		}
-		log.Printf("Xbox manager initialized with %d device(s)", len(cfg.XboxDevices))
+		log.Printf("Xbox manager initialized with %d device(s) via Home Assistant", len(cfg.XboxDevices))
 	}
 
 	// Initialize PS5 manager (requires MQTT)
@@ -2207,7 +2206,8 @@ func parseShieldDevices(s string) []ShieldDeviceConfig {
 	return devices
 }
 
-// parseXboxDevices parses format: "name:host:liveid,..."
+// parseXboxDevices parses format: "name:media_player_id:remote_id[:now_playing_sensor],..."
+// Example: "xbox:media_player.xbox:remote.xbox_remote:sensor.the_og_ninja_now_playing"
 func parseXboxDevices(s string) []XboxDeviceConfig {
 	if s == "" {
 		return nil
@@ -2215,13 +2215,17 @@ func parseXboxDevices(s string) []XboxDeviceConfig {
 	var devices []XboxDeviceConfig
 	for _, entry := range strings.Split(s, ",") {
 		entry = strings.TrimSpace(entry)
-		parts := strings.SplitN(entry, ":", 3)
+		parts := strings.SplitN(entry, ":", 4)
 		if len(parts) >= 3 {
-			devices = append(devices, XboxDeviceConfig{
-				Name:   strings.TrimSpace(parts[0]),
-				Host:   strings.TrimSpace(parts[1]),
-				LiveID: strings.TrimSpace(parts[2]),
-			})
+			cfg := XboxDeviceConfig{
+				Name:          strings.TrimSpace(parts[0]),
+				MediaPlayerID: strings.TrimSpace(parts[1]),
+				RemoteID:      strings.TrimSpace(parts[2]),
+			}
+			if len(parts) >= 4 {
+				cfg.NowPlayingSensorID = strings.TrimSpace(parts[3])
+			}
+			devices = append(devices, cfg)
 		}
 	}
 	return devices
@@ -3334,7 +3338,12 @@ func handleGetXboxState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(device.GetState())
+	state, err := xboxManager.GetState(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(state)
 }
 
 func handleXboxPower(w http.ResponseWriter, r *http.Request) {
@@ -3360,9 +3369,9 @@ func handleXboxPower(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Action {
 	case "on":
-		err = device.PowerOn()
+		err = xboxManager.Power(name, true)
 	case "off":
-		err = xboxManager.PowerOffViaREST(name)
+		err = xboxManager.Power(name, false)
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
@@ -3391,7 +3400,7 @@ func handleXboxInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := xboxManager.SendButton(name, req.Button); err != nil {
+	if err := xboxManager.Input(name, req.Button); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -667,6 +667,8 @@ interface EntertainmentRepository {
     suspend fun shieldSendKey(name: String, key: String): Result<Unit>
     suspend fun getXboxState(name: String): Result<XboxState>
     suspend fun xboxPower(name: String, power: Boolean): Result<Unit>
+    suspend fun xboxInput(name: String, button: String): Result<Unit>
+    suspend fun xboxMedia(name: String, command: String): Result<Unit>
     suspend fun getPS5State(name: String): Result<PS5State>
     suspend fun ps5Power(name: String, power: Boolean): Result<Unit>
 }
@@ -781,6 +783,16 @@ class EntertainmentRepositoryImpl @Inject constructor(
 
     override suspend fun xboxPower(name: String, power: Boolean): Result<Unit> = runCatching {
         val response = api.xboxPower(name, PowerRequest(power))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun xboxInput(name: String, button: String): Result<Unit> = runCatching {
+        val response = api.xboxInput(name, XboxInputRequest(button))
+        if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
+    }
+
+    override suspend fun xboxMedia(name: String, command: String): Result<Unit> = runCatching {
+        val response = api.xboxMedia(name, XboxMediaRequest(command))
         if (!response.isSuccessful) throw Exception("API error: ${response.code()}")
     }
 
