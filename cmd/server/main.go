@@ -62,6 +62,8 @@ func getTemplate(page string) *template.Template {
 var quietPaths = map[string]bool{
 	"/api/hue/rooms":        true,
 	"/api/ha/states":        true,
+	"/api/ha/registry":      true,
+	"/api/ha/domains":       true,
 	"/api/entities":         true,
 	"/api/syncbox":          true,
 	"/api/spotify/playback": true,
@@ -72,6 +74,8 @@ var quietPaths = map[string]bool{
 var quietPrefixes = []string{
 	"/api/syncbox/",
 	"/api/tablet/",
+	"/api/ha/domain/",
+	"/api/ha/entity/",
 }
 
 // ConditionalLogger is a middleware that skips logging for certain paths
@@ -201,6 +205,7 @@ type CalendarWithPrefs struct {
 }
 
 var haClient *homeassistant.Client
+var haRegistry *homeassistant.RegistryManager
 var hueClient *hue.Client
 var hueStreamer *hue.EntertainmentStreamer
 var hueEventStream *hue.EventStream
@@ -351,6 +356,11 @@ func main() {
 	if cfg.HomeAssistantToken != "" {
 		haClient = homeassistant.NewClient(cfg.HomeAssistantURL, cfg.HomeAssistantToken)
 		log.Printf("Home Assistant client initialized for %s", cfg.HomeAssistantURL)
+
+		// Initialize entity registry manager with file caching
+		haRegistry = homeassistant.NewRegistryManager(haClient, "data")
+		haRegistry.Start(5 * time.Minute) // Refresh every 5 minutes
+		log.Printf("Home Assistant entity registry initialized")
 	} else {
 		log.Println("Warning: HA_TOKEN not set, Home Assistant integration disabled")
 	}
@@ -520,6 +530,14 @@ func main() {
 		}
 	}
 
+	// Set up Amcrest doorbell event monitoring
+	amcrestManager.SetDoorbellHandler(func(cameraName string) {
+		log.Printf("Amcrest doorbell pressed: %s", cameraName)
+		go wakeTablet() // Wake tablet screen first
+		wsHub.BroadcastDoorbell(cameraName)
+	})
+	amcrestManager.StartDoorbellMonitoring()
+
 	// Initialize MQTT client for doorbell events
 	if cfg.MQTTHost != "" {
 		mqttClient = mqtt.NewClient(mqtt.Config{
@@ -595,6 +613,7 @@ func main() {
 
 	// API endpoints
 	r.Post("/api/toggle/{entityID}", handleToggle)
+	r.Post("/api/button/{entityID}/press", handlePressButton)
 
 	// Climate control endpoints
 	r.Post("/api/climate/{entityID}/temperature", handleSetClimateTemperature)
@@ -644,6 +663,17 @@ func main() {
 
 	// Entity states API (for AJAX refresh)
 	r.Get("/api/entities", handleGetEntities(cfg))
+
+	// Home Assistant entity registry API (for discovery/browsing)
+	r.Get("/api/ha/registry", handleGetHARegistry)
+	r.Get("/api/ha/domains", handleGetHADomains)
+	r.Get("/api/ha/domain/{domain}", handleGetHADomainEntities)
+	r.Get("/api/ha/entity/{entityID}", handleGetHAEntity)
+	r.Post("/api/ha/registry/refresh", handleRefreshHARegistry)
+	r.Get("/api/ha/search", handleSearchHAEntities)
+	r.Get("/api/ha/automations/filtered", handleGetFilteredAutomations)
+	r.Get("/api/ha/fans", handleGetFans)
+	r.Get("/api/ha/climate", handleGetClimateEntities)
 
 	// Test doorbell (for debugging)
 	r.Post("/api/doorbell/test", handleTestDoorbell)
@@ -1300,6 +1330,216 @@ func handleGetEntities(cfg Config) http.HandlerFunc {
 	}
 }
 
+// handleGetHARegistry returns the full entity registry
+func handleGetHARegistry(w http.ResponseWriter, r *http.Request) {
+	if haRegistry == nil {
+		http.Error(w, "HA registry not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	registry := haRegistry.GetRegistry()
+	if registry == nil {
+		http.Error(w, "Registry not yet populated", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(registry)
+}
+
+// handleGetHADomains returns available domains with metadata and entity counts
+func handleGetHADomains(w http.ResponseWriter, r *http.Request) {
+	if haRegistry == nil {
+		http.Error(w, "HA registry not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	domains := haRegistry.GetDomainsWithInfo()
+	if domains == nil {
+		http.Error(w, "Registry not yet populated", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Return just domain info without entities for a lighter response
+	type DomainSummary struct {
+		Domain string                   `json:"domain"`
+		Info   homeassistant.DomainInfo `json:"info"`
+		Count  int                      `json:"count"`
+	}
+	summaries := make([]DomainSummary, len(domains))
+	for i, d := range domains {
+		summaries[i] = DomainSummary{
+			Domain: d.Domain,
+			Info:   d.Info,
+			Count:  d.Count,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summaries)
+}
+
+// handleGetHADomainEntities returns entities for a specific domain
+func handleGetHADomainEntities(w http.ResponseWriter, r *http.Request) {
+	if haRegistry == nil {
+		http.Error(w, "HA registry not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	domain := chi.URLParam(r, "domain")
+	if domain == "" {
+		http.Error(w, "Missing domain", http.StatusBadRequest)
+		return
+	}
+
+	entities := haRegistry.GetEntitiesByDomain(domain)
+	if entities == nil {
+		entities = []*homeassistant.Entity{}
+	}
+
+	response := struct {
+		Domain   string                   `json:"domain"`
+		Info     homeassistant.DomainInfo `json:"info"`
+		Entities []*homeassistant.Entity  `json:"entities"`
+		Count    int                      `json:"count"`
+	}{
+		Domain:   domain,
+		Info:     homeassistant.GetDomainInfo(domain),
+		Entities: entities,
+		Count:    len(entities),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetHAEntity returns a single entity's current state
+func handleGetHAEntity(w http.ResponseWriter, r *http.Request) {
+	if haClient == nil {
+		http.Error(w, "HA not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	entityID := chi.URLParam(r, "entityID")
+	if entityID == "" {
+		http.Error(w, "Missing entity ID", http.StatusBadRequest)
+		return
+	}
+
+	entity, err := haClient.GetState(entityID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get entity: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(entity)
+}
+
+// handleRefreshHARegistry forces a refresh of the entity registry
+func handleRefreshHARegistry(w http.ResponseWriter, r *http.Request) {
+	if haRegistry == nil {
+		http.Error(w, "HA registry not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := haRegistry.Refresh(); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to refresh: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true,"message":"Registry refreshed"}`))
+}
+
+// handleSearchHAEntities searches for entities matching a query
+func handleSearchHAEntities(w http.ResponseWriter, r *http.Request) {
+	if haRegistry == nil {
+		http.Error(w, "HA registry not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Missing search query (q parameter)", http.StatusBadRequest)
+		return
+	}
+
+	results := haRegistry.SearchEntities(query)
+	if results == nil {
+		results = []*homeassistant.Entity{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
+// handleGetFilteredAutomations returns automations triggered by buttons or switches
+func handleGetFilteredAutomations(w http.ResponseWriter, r *http.Request) {
+	if haClient == nil {
+		http.Error(w, "HA client not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	automations, err := haClient.GetButtonSwitchTriggeredAutomations()
+	if err != nil {
+		log.Printf("Error fetching filtered automations: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to fetch automations: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if automations == nil {
+		automations = []homeassistant.FilteredAutomation{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(automations)
+}
+
+// handleGetFans returns all fan entities
+func handleGetFans(w http.ResponseWriter, r *http.Request) {
+	if haClient == nil {
+		http.Error(w, "HA client not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	fans, err := haClient.GetFanEntities()
+	if err != nil {
+		log.Printf("Error fetching fans: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to fetch fans: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if fans == nil {
+		fans = []homeassistant.FanEntity{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(fans)
+}
+
+// handleGetClimateEntities returns all climate entities with fan modes
+func handleGetClimateEntities(w http.ResponseWriter, r *http.Request) {
+	if haClient == nil {
+		http.Error(w, "HA client not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	climates, err := haClient.GetClimateEntities()
+	if err != nil {
+		log.Printf("Error fetching climate entities: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to fetch climate entities: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if climates == nil {
+		climates = []homeassistant.ClimateEntity{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(climates)
+}
+
 func handleToggle(w http.ResponseWriter, r *http.Request) {
 	if haClient == nil {
 		http.Error(w, "HA not configured", http.StatusServiceUnavailable)
@@ -1324,7 +1564,7 @@ func handleToggle(w http.ResponseWriter, r *http.Request) {
 
 	// Some domains use different services
 	switch domain {
-	case "light", "switch", "fan", "cover":
+	case "light", "switch", "fan", "cover", "input_boolean":
 		service = "toggle"
 	case "lock":
 		// Check current state to determine lock/unlock
@@ -1358,6 +1598,43 @@ func handleToggle(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(entity.ToCard())
+}
+
+func handlePressButton(w http.ResponseWriter, r *http.Request) {
+	if haClient == nil {
+		http.Error(w, "HA not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	entityID := chi.URLParam(r, "entityID")
+	if entityID == "" {
+		http.Error(w, "Missing entity ID", http.StatusBadRequest)
+		return
+	}
+
+	// Determine domain from entity ID
+	parts := strings.Split(entityID, ".")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid entity ID", http.StatusBadRequest)
+		return
+	}
+
+	domain := parts[0]
+
+	// Only allow button and input_button domains
+	if domain != "button" && domain != "input_button" {
+		http.Error(w, "Entity is not a button", http.StatusBadRequest)
+		return
+	}
+
+	// Call the press service
+	if err := haClient.CallService(domain, "press", entityID); err != nil {
+		log.Printf("Error pressing button %s: %v", entityID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 type SetTemperatureRequest struct {

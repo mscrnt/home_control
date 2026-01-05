@@ -14,9 +14,19 @@ import javax.inject.Inject
 interface EntityRepository {
     suspend fun getEntities(): Result<List<EntityGroup>>
     suspend fun toggleEntity(entityId: String): Result<Unit>
+    suspend fun pressButton(entityId: String): Result<Unit>
     suspend fun setClimateTemperature(entityId: String, request: TemperatureRequest): Result<Unit>
     suspend fun setClimateMode(entityId: String, mode: String): Result<Unit>
     suspend fun setClimateFanMode(entityId: String, fanMode: String): Result<Unit>
+    // HA Registry
+    suspend fun getHADomains(): Result<List<HADomainSummary>>
+    suspend fun getHADomainEntities(domain: String): Result<HADomainEntities>
+    suspend fun getHAEntity(entityId: String): Result<HAEntity>
+    suspend fun searchHAEntities(query: String): Result<List<HAEntity>>
+    suspend fun refreshHARegistry(): Result<Unit>
+    suspend fun getFilteredAutomations(): Result<List<FilteredAutomation>>
+    suspend fun getFans(): Result<List<FanEntity>>
+    suspend fun getClimateEntities(): Result<List<ClimateEntity>>
 }
 
 class EntityRepositoryImpl @Inject constructor(
@@ -39,6 +49,13 @@ class EntityRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun pressButton(entityId: String): Result<Unit> = runCatching {
+        val response = api.pressButton(entityId)
+        if (!response.isSuccessful) {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
     override suspend fun setClimateTemperature(entityId: String, request: TemperatureRequest): Result<Unit> = runCatching {
         val response = api.setClimateTemperature(entityId, request)
         if (!response.isSuccessful) {
@@ -56,6 +73,76 @@ class EntityRepositoryImpl @Inject constructor(
     override suspend fun setClimateFanMode(entityId: String, fanMode: String): Result<Unit> = runCatching {
         val response = api.setClimateFanMode(entityId, FanModeRequest(fanMode))
         if (!response.isSuccessful) {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getHADomains(): Result<List<HADomainSummary>> = runCatching {
+        val response = api.getHADomains()
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getHADomainEntities(domain: String): Result<HADomainEntities> = runCatching {
+        val response = api.getHADomainEntities(domain)
+        if (response.isSuccessful) {
+            response.body() ?: throw Exception("Empty response")
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getHAEntity(entityId: String): Result<HAEntity> = runCatching {
+        val response = api.getHAEntity(entityId)
+        if (response.isSuccessful) {
+            response.body() ?: throw Exception("Empty response")
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun searchHAEntities(query: String): Result<List<HAEntity>> = runCatching {
+        val response = api.searchHAEntities(query)
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun refreshHARegistry(): Result<Unit> = runCatching {
+        val response = api.refreshHARegistry()
+        if (!response.isSuccessful) {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getFilteredAutomations(): Result<List<FilteredAutomation>> = runCatching {
+        val response = api.getFilteredAutomations()
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getFans(): Result<List<FanEntity>> = runCatching {
+        val response = api.getFans()
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
+            throw Exception("API error: ${response.code()}")
+        }
+    }
+
+    override suspend fun getClimateEntities(): Result<List<ClimateEntity>> = runCatching {
+        val response = api.getClimateEntities()
+        if (response.isSuccessful) {
+            response.body() ?: emptyList()
+        } else {
             throw Exception("API error: ${response.code()}")
         }
     }

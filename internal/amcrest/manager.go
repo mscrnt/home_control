@@ -6,12 +6,18 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
+
+// DoorbellHandler is called when a doorbell button is pressed
+type DoorbellHandler func(cameraName string)
 
 // Manager handles multiple Amcrest cameras
 type Manager struct {
-	clients map[string]*Client
-	mu      sync.RWMutex
+	clients         map[string]*Client
+	mu              sync.RWMutex
+	doorbellHandler DoorbellHandler
+	stopMonitoring  chan struct{}
 }
 
 // NewManager creates a new Amcrest camera manager
@@ -225,4 +231,66 @@ func ParseCamerasEnv(camerasEnv string, rtspURLs map[string]string) map[string]s
 	}
 
 	return result
+}
+
+// SetDoorbellHandler sets the callback for doorbell button press events
+func (m *Manager) SetDoorbellHandler(handler DoorbellHandler) {
+	m.doorbellHandler = handler
+}
+
+// StartDoorbellMonitoring starts monitoring all doorbells for button presses
+func (m *Manager) StartDoorbellMonitoring() {
+	m.stopMonitoring = make(chan struct{})
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for name, client := range m.clients {
+		if client.IsDoorbell() {
+			go m.monitorDoorbell(name, client)
+		}
+	}
+}
+
+// StopDoorbellMonitoring stops all doorbell monitoring
+func (m *Manager) StopDoorbellMonitoring() {
+	if m.stopMonitoring != nil {
+		close(m.stopMonitoring)
+	}
+}
+
+// monitorDoorbell monitors a single doorbell for button press events
+func (m *Manager) monitorDoorbell(name string, client *Client) {
+	log.Printf("Amcrest: Starting doorbell monitoring for %s", name)
+
+	// Retry loop - reconnects on failure
+	for {
+		select {
+		case <-m.stopMonitoring:
+			log.Printf("Amcrest: Stopping doorbell monitoring for %s", name)
+			return
+		default:
+		}
+
+		err := client.SubscribeEvents([]EventType{EventDoorbell}, func(event Event) {
+			// Only trigger on "Start" action (button press, not release)
+			if event.Action == "Start" {
+				log.Printf("Amcrest: Doorbell button pressed on %s (event: %s)", name, event.Code)
+				if m.doorbellHandler != nil {
+					m.doorbellHandler(name)
+				}
+			}
+		})
+
+		if err != nil {
+			log.Printf("Amcrest: Doorbell event stream error for %s: %v (reconnecting in 5s)", name, err)
+		}
+
+		// Wait before reconnecting
+		select {
+		case <-m.stopMonitoring:
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
 }

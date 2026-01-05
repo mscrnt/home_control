@@ -14,6 +14,34 @@ interface HomeControlApi {
     @POST("api/toggle/{entityId}")
     suspend fun toggleEntity(@Path("entityId") entityId: String): Response<Unit>
 
+    @POST("api/button/{entityId}/press")
+    suspend fun pressButton(@Path("entityId") entityId: String): Response<Unit>
+
+    // HA Entity Registry (discovery/browsing)
+    @GET("api/ha/domains")
+    suspend fun getHADomains(): Response<List<HADomainSummary>>
+
+    @GET("api/ha/domain/{domain}")
+    suspend fun getHADomainEntities(@Path("domain") domain: String): Response<HADomainEntities>
+
+    @GET("api/ha/entity/{entityId}")
+    suspend fun getHAEntity(@Path("entityId") entityId: String): Response<HAEntity>
+
+    @POST("api/ha/registry/refresh")
+    suspend fun refreshHARegistry(): Response<Unit>
+
+    @GET("api/ha/search")
+    suspend fun searchHAEntities(@Query("q") query: String): Response<List<HAEntity>>
+
+    @GET("api/ha/automations/filtered")
+    suspend fun getFilteredAutomations(): Response<List<FilteredAutomation>>
+
+    @GET("api/ha/fans")
+    suspend fun getFans(): Response<List<FanEntity>>
+
+    @GET("api/ha/climate")
+    suspend fun getClimateEntities(): Response<List<ClimateEntity>>
+
     // Climate
     @POST("api/climate/{entityId}/temperature")
     suspend fun setClimateTemperature(

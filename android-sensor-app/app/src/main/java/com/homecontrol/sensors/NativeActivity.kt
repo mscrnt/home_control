@@ -20,11 +20,13 @@ import android.view.animation.DecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -95,6 +97,7 @@ import com.homecontrol.sensors.ui.screens.hue.HueScreen
 import com.homecontrol.sensors.ui.screens.calendar.CalendarScreen
 import com.homecontrol.sensors.ui.screens.screensaver.ScreensaverScreen
 import com.homecontrol.sensors.ui.screens.cameras.CamerasScreen
+import com.homecontrol.sensors.ui.screens.cameras.DoorbellScreen
 import com.homecontrol.sensors.ui.screens.entertainment.EntertainmentScreen
 import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
 import com.homecontrol.sensors.ui.screens.spotify.SpotifyScreen
@@ -136,6 +139,9 @@ class NativeActivity : ComponentActivity() {
 
     @Inject
     lateinit var sensorServiceBridge: SensorServiceBridge
+
+    @Inject
+    lateinit var webSocketClient: com.homecontrol.sensors.data.api.WebSocketClient
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var brightnessAnimator: ValueAnimator? = null
@@ -246,7 +252,8 @@ class NativeActivity : ComponentActivity() {
             HomeControlTheme(darkTheme = darkTheme) {
                 MainContent(
                     idleTimeoutSeconds = settings.idleTimeout,
-                    wakeToScreensaver = sensorServiceBridge.wakeToScreensaver
+                    wakeToScreensaver = sensorServiceBridge.wakeToScreensaver,
+                    webSocketEvents = webSocketClient.events
                 )
             }
         }
@@ -438,6 +445,7 @@ sealed class SmartHomeModal {
     object Cameras : SmartHomeModal()
     object Media : SmartHomeModal()
     object Settings : SmartHomeModal()
+    data class Doorbell(val cameraName: String) : SmartHomeModal() // Dedicated doorbell view with PTT
 }
 
 data class DrawerNavItem(
@@ -449,7 +457,7 @@ data class DrawerNavItem(
 val smartHomeNavItems = listOf(
     DrawerNavItem(
         modal = SmartHomeModal.Home,
-        label = "Home",
+        label = "Home Assistant",
         icon = Icons.Filled.Home
     ),
     DrawerNavItem(
@@ -482,7 +490,8 @@ val smartHomeNavItems = listOf(
 @Composable
 fun MainContent(
     idleTimeoutSeconds: Int = 60,
-    wakeToScreensaver: kotlinx.coroutines.flow.SharedFlow<Unit>? = null
+    wakeToScreensaver: kotlinx.coroutines.flow.SharedFlow<Unit>? = null,
+    webSocketEvents: kotlinx.coroutines.flow.SharedFlow<com.homecontrol.sensors.data.api.WebSocketEvent>? = null
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -499,6 +508,24 @@ fun MainContent(
         wakeToScreensaver?.collect {
             Log.d("MainContent", "Wake to screensaver event received - showing screensaver")
             showScreensaver = true
+        }
+    }
+
+    // Listen for WebSocket events (doorbell, etc.)
+    LaunchedEffect(webSocketEvents) {
+        webSocketEvents?.collect { event ->
+            when (event) {
+                is com.homecontrol.sensors.data.api.WebSocketEvent.Doorbell -> {
+                    Log.d("MainContent", "Doorbell event received for camera: ${event.camera}")
+                    // Wake from screensaver and show doorbell modal with PTT
+                    showScreensaver = false
+                    lastInteractionTime = System.currentTimeMillis()
+                    activeModal = SmartHomeModal.Doorbell(event.camera)
+                }
+                else -> {
+                    // Other events handled elsewhere or ignored
+                }
+            }
         }
     }
 
@@ -576,40 +603,59 @@ fun MainContent(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Full-screen modal overlay
-            AnimatedVisibility(
-                visible = activeModal != null,
-                enter = fadeIn() + slideInVertically { it / 4 },
-                exit = fadeOut() + slideOutVertically { it / 4 }
-            ) {
-                FullScreenModal(
-                    title = when (activeModal) {
-                        SmartHomeModal.Home -> "Home"
-                        SmartHomeModal.Lights -> "hue"
-                        SmartHomeModal.Music -> "Spotify"
-                        SmartHomeModal.Cameras -> "Cameras"
-                        SmartHomeModal.Media -> "Entertainment"
-                        SmartHomeModal.Settings -> "Settings"
-                        null -> ""
-                    },
-                    onClose = { activeModal = null },
-                    onOpenDrawer = {
-                        scope.launch { drawerState.open() }
-                    },
-                    titleContent = when (activeModal) {
-                        SmartHomeModal.Music -> { { SpotifyLogoTitle() } }
-                        SmartHomeModal.Lights -> { { PhilipsHueLogoTitle() } }
-                        else -> null
+            // Full-screen modal overlay using AnimatedContent for proper state transitions
+            AnimatedContent(
+                targetState = activeModal,
+                transitionSpec = {
+                    fadeIn() togetherWith fadeOut()
+                },
+                label = "modal"
+            ) { modal ->
+                when (modal) {
+                    null -> {
+                        // No modal - empty box
+                        Box(modifier = Modifier.fillMaxSize())
                     }
-                ) {
-                    when (activeModal) {
-                        SmartHomeModal.Home -> HomeScreen()
-                        SmartHomeModal.Lights -> HueScreen()
-                        SmartHomeModal.Music -> SpotifyScreen()
-                        SmartHomeModal.Cameras -> CamerasScreen()
-                        SmartHomeModal.Media -> EntertainmentScreen()
-                        SmartHomeModal.Settings -> SettingsScreen()
-                        null -> {}
+                    is SmartHomeModal.Doorbell -> {
+                        // Doorbell modal - full screen with PTT, no drawer/header
+                        DoorbellScreen(
+                            cameraName = modal.cameraName,
+                            onClose = { activeModal = null },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    else -> {
+                        // Standard modals with header
+                        FullScreenModal(
+                            title = when (modal) {
+                                SmartHomeModal.Home -> "Home Assistant"
+                                SmartHomeModal.Lights -> "hue"
+                                SmartHomeModal.Music -> "Spotify"
+                                SmartHomeModal.Cameras -> "Cameras"
+                                SmartHomeModal.Media -> "Entertainment"
+                                SmartHomeModal.Settings -> "Settings"
+                                else -> ""
+                            },
+                            onClose = { activeModal = null },
+                            onOpenDrawer = {
+                                scope.launch { drawerState.open() }
+                            },
+                            titleContent = when (modal) {
+                                SmartHomeModal.Music -> { { SpotifyLogoTitle() } }
+                                SmartHomeModal.Lights -> { { PhilipsHueLogoTitle() } }
+                                else -> null
+                            }
+                        ) {
+                            when (modal) {
+                                SmartHomeModal.Home -> HomeScreen()
+                                SmartHomeModal.Lights -> HueScreen()
+                                SmartHomeModal.Music -> SpotifyScreen()
+                                SmartHomeModal.Cameras -> CamerasScreen()
+                                SmartHomeModal.Media -> EntertainmentScreen()
+                                SmartHomeModal.Settings -> SettingsScreen()
+                                else -> {}
+                            }
+                        }
                     }
                 }
             }
@@ -783,6 +829,13 @@ private fun SmartHomeDrawerContent(
         // Smart home items
         smartHomeNavItems.forEach { item ->
             when (item.modal) {
+                SmartHomeModal.Home -> {
+                    // Home Assistant drawer item with logo
+                    HomeAssistantDrawerItem(
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
                 SmartHomeModal.Music -> {
                     // Special Spotify drawer item with logo
                     SpotifyDrawerItem(
@@ -1000,6 +1053,47 @@ private fun AmcrestDrawerItem(
         Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = "Cameras",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+private fun HomeAssistantDrawerItem(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_home_assistant),
+            contentDescription = "Home Assistant",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = "Home Assistant",
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = contentColor

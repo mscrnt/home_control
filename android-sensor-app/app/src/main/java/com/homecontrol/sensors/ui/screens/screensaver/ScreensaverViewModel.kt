@@ -45,6 +45,9 @@ data class ScreensaverUiState(
     val usingCachedPhotos: Boolean = false,
     val todayEvents: List<CalendarEvent> = emptyList(),
     val todayHolidays: List<Holiday> = emptyList(),
+    val tomorrowEvents: List<CalendarEvent> = emptyList(),
+    val tomorrowHolidays: List<Holiday> = emptyList(),
+    val showTomorrow: Boolean = false,  // True when after 9pm
     val use24HourFormat: Boolean = false
 )
 
@@ -70,6 +73,9 @@ class ScreensaverViewModel @Inject constructor(
     private val timeFormatter12 = DateTimeFormatter.ofPattern("h:mm a")
     private val timeFormatter24 = DateTimeFormatter.ofPattern("HH:mm")
     private val dateFormatter = DateTimeFormatter.ofPattern("EEEE, MMMM d")
+
+    // Track the last date we loaded events for to detect day changes
+    private var lastLoadedEventsDate: java.time.LocalDate? = null
 
     init {
         observeSettings()
@@ -127,30 +133,69 @@ class ScreensaverViewModel @Inject constructor(
     }
 
     private suspend fun loadTodayEvents() {
-        val today = java.time.LocalDate.now()
+        val now = java.time.LocalDateTime.now()
+        val today = now.toLocalDate()
+        val tomorrow = today.plusDays(1)
         val todayStr = today.toString() // Format: YYYY-MM-DD
+        val tomorrowStr = tomorrow.toString()
+
+        // Check if it's after 9pm (21:00)
+        val showTomorrow = now.hour >= 21
+
+        // Check if date has changed - if so, clear old events first
+        if (lastLoadedEventsDate != null && lastLoadedEventsDate != today) {
+            Log.d(TAG, "Date changed from $lastLoadedEventsDate to $today, clearing old events")
+            _uiState.update { it.copy(
+                todayEvents = emptyList(),
+                todayHolidays = emptyList(),
+                tomorrowEvents = emptyList(),
+                tomorrowHolidays = emptyList()
+            ) }
+        }
+        lastLoadedEventsDate = today
 
         // Load holidays for today (these are computed locally, not from API)
         val todayHolidays = Holidays.getRegularHolidaysForDate(today)
-        _uiState.update { it.copy(todayHolidays = todayHolidays) }
+        val tomorrowHolidays = if (showTomorrow) Holidays.getRegularHolidaysForDate(tomorrow) else emptyList()
+        _uiState.update { it.copy(
+            todayHolidays = todayHolidays,
+            tomorrowHolidays = tomorrowHolidays,
+            showTomorrow = showTomorrow
+        ) }
         if (todayHolidays.isNotEmpty()) {
             Log.d(TAG, "Today's holidays: ${todayHolidays.map { it.name }}")
         }
 
+        // Load today's events
         calendarRepository.getEvents("day", todayStr).onSuccess { events ->
-            // Filter to only events that start today, then sort by start time
-            // Handle various date formats: "2026-01-01", "2026-01-01T00:00:00", "2026-01-01T00:00:00-08:00"
             val todayEvents = events.filter { event ->
                 val startDate = extractDateFromStart(event.start)
                 startDate == todayStr
             }.sortedBy { it.start }
             _uiState.update { it.copy(todayEvents = todayEvents) }
             Log.d(TAG, "Loaded ${todayEvents.size} events for today (filtered from ${events.size})")
-            if (events.isNotEmpty()) {
-                Log.d(TAG, "Sample event starts: ${events.take(3).map { "${it.title}: ${it.start}" }}")
-            }
         }.onFailure { error ->
             Log.w(TAG, "Failed to load today's events: ${error.message}")
+            if (lastLoadedEventsDate == today) {
+                _uiState.update { it.copy(todayEvents = emptyList()) }
+            }
+        }
+
+        // Load tomorrow's events if after 9pm
+        if (showTomorrow) {
+            calendarRepository.getEvents("day", tomorrowStr).onSuccess { events ->
+                val tomorrowEvents = events.filter { event ->
+                    val startDate = extractDateFromStart(event.start)
+                    startDate == tomorrowStr
+                }.sortedBy { it.start }
+                _uiState.update { it.copy(tomorrowEvents = tomorrowEvents) }
+                Log.d(TAG, "Loaded ${tomorrowEvents.size} events for tomorrow")
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to load tomorrow's events: ${error.message}")
+                _uiState.update { it.copy(tomorrowEvents = emptyList()) }
+            }
+        } else {
+            _uiState.update { it.copy(tomorrowEvents = emptyList(), tomorrowHolidays = emptyList()) }
         }
     }
 
@@ -194,6 +239,9 @@ class ScreensaverViewModel @Inject constructor(
     private fun startClockUpdates() {
         clockJob?.cancel()
         clockJob = viewModelScope.launch {
+            var lastCheckedDate: java.time.LocalDate? = null
+            var tickCount = 0
+
             while (true) {
                 val now = LocalDateTime.now()
                 val use24Hour = _uiState.value.use24HourFormat
@@ -204,6 +252,19 @@ class ScreensaverViewModel @Inject constructor(
                         currentDate = now.format(dateFormatter)
                     )
                 }
+
+                // Check for date change every minute (60 ticks) or on first run
+                tickCount++
+                if (tickCount >= 60 || lastCheckedDate == null) {
+                    tickCount = 0
+                    val today = now.toLocalDate()
+                    if (lastCheckedDate != today) {
+                        Log.d(TAG, "Date changed or first check, refreshing events")
+                        lastCheckedDate = today
+                        loadTodayEvents()
+                    }
+                }
+
                 delay(1000) // Update every second
             }
         }

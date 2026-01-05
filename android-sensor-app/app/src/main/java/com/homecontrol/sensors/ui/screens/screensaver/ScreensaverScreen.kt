@@ -85,10 +85,15 @@ fun ScreensaverScreen(
         )
 
         // Events and holidays - top left
-        if (uiState.todayEvents.isNotEmpty() || uiState.todayHolidays.isNotEmpty()) {
+        val hasTodayContent = uiState.todayEvents.isNotEmpty() || uiState.todayHolidays.isNotEmpty()
+        val hasTomorrowContent = uiState.showTomorrow && (uiState.tomorrowEvents.isNotEmpty() || uiState.tomorrowHolidays.isNotEmpty())
+        if (hasTodayContent || hasTomorrowContent) {
             EventsOverlay(
-                events = uiState.todayEvents,
-                holidays = uiState.todayHolidays,
+                todayEvents = uiState.todayEvents,
+                todayHolidays = uiState.todayHolidays,
+                tomorrowEvents = if (uiState.showTomorrow) uiState.tomorrowEvents else emptyList(),
+                tomorrowHolidays = if (uiState.showTomorrow) uiState.tomorrowHolidays else emptyList(),
+                showTomorrow = uiState.showTomorrow,
                 use24HourFormat = uiState.use24HourFormat,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -386,8 +391,11 @@ private fun SpotifyOverlay(
 
 @Composable
 private fun EventsOverlay(
-    events: List<CalendarEvent>,
-    holidays: List<com.homecontrol.sensors.ui.screens.calendar.Holiday> = emptyList(),
+    todayEvents: List<CalendarEvent>,
+    todayHolidays: List<com.homecontrol.sensors.ui.screens.calendar.Holiday> = emptyList(),
+    tomorrowEvents: List<CalendarEvent> = emptyList(),
+    tomorrowHolidays: List<com.homecontrol.sensors.ui.screens.calendar.Holiday> = emptyList(),
+    showTomorrow: Boolean = false,
     use24HourFormat: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -399,127 +407,171 @@ private fun EventsOverlay(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Black.copy(alpha = 0.5f))
-            .padding(horizontal = 18.dp, vertical = 12.dp),  // 50% more horizontal padding
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Today's Events",
-            style = TextStyle(
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-                shadow = textOutlineShadow,
-                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+        // Today's Events section
+        if (todayEvents.isNotEmpty() || todayHolidays.isNotEmpty()) {
+            Text(
+                text = "Today's Events",
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    shadow = textOutlineShadow,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                )
             )
+
+            // Display today's holidays first
+            todayHolidays.forEach { holiday ->
+                HolidayRow(holiday = holiday)
+            }
+
+            // Display all today's events (no limit)
+            todayEvents.forEach { event ->
+                EventRow(
+                    event = event,
+                    use24HourFormat = use24HourFormat,
+                    timeFormatter12 = timeFormatter12,
+                    timeFormatter24 = timeFormatter24,
+                    isoParser = isoParser
+                )
+            }
+        }
+
+        // Tomorrow's Events section (shown after 9pm)
+        if (showTomorrow && (tomorrowEvents.isNotEmpty() || tomorrowHolidays.isNotEmpty())) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Tomorrow's Events",
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    shadow = textOutlineShadow,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                )
+            )
+
+            // Display tomorrow's holidays first
+            tomorrowHolidays.forEach { holiday ->
+                HolidayRow(holiday = holiday)
+            }
+
+            // Display all tomorrow's events (no limit)
+            tomorrowEvents.forEach { event ->
+                EventRow(
+                    event = event,
+                    use24HourFormat = use24HourFormat,
+                    timeFormatter12 = timeFormatter12,
+                    timeFormatter24 = timeFormatter24,
+                    isoParser = isoParser
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HolidayRow(holiday: com.homecontrol.sensors.ui.screens.calendar.Holiday) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Holiday",
+            style = TextStyle(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+                color = Color(0xFFFFD700).copy(alpha = 0.9f),
+                shadow = textOutlineShadow
+            ),
+            modifier = Modifier.widthIn(min = 60.dp)
+        )
+        Text(
+            text = holiday.name,
+            style = TextStyle(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFFFD700),
+                shadow = textOutlineShadow
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun EventRow(
+    event: CalendarEvent,
+    use24HourFormat: Boolean,
+    timeFormatter12: DateTimeFormatter,
+    timeFormatter24: DateTimeFormatter,
+    isoParser: DateTimeFormatter
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Time or "All Day"
+        val timeText = if (event.allDay) {
+            "All Day"
+        } else {
+            try {
+                val startDateTime = LocalDateTime.parse(event.start, isoParser)
+                val formatter = if (use24HourFormat) timeFormatter24 else timeFormatter12
+                startDateTime.format(formatter)
+            } catch (e: Exception) {
+                event.start.substringAfter("T").substringBefore(":")
+                    .let { if (it.length <= 5) it else "" }
+            }
+        }
+
+        Text(
+            text = timeText,
+            style = TextStyle(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+                color = Color.White.copy(alpha = 0.7f),
+                shadow = textOutlineShadow
+            ),
+            modifier = Modifier.widthIn(min = 60.dp)
         )
 
-        // Display holidays first
-        holidays.forEach { holiday ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Holiday",
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Color(0xFFFFD700).copy(alpha = 0.9f),  // Gold color for holidays
-                        shadow = textOutlineShadow
-                    ),
-                    modifier = Modifier.widthIn(min = 60.dp)
-                )
-                Text(
-                    text = holiday.name,
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFFFD700),  // Gold color for holidays
-                        shadow = textOutlineShadow
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+        // Event title with optional color indicator
+        val eventColor = event.color?.let { colorHex ->
+            try {
+                Color(android.graphics.Color.parseColor(colorHex))
+            } catch (e: Exception) { null }
         }
 
-        events.take(10 - holidays.size.coerceAtMost(3)).forEach { event ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Time or "All Day"
-                val timeText = if (event.allDay) {
-                    "All Day"
-                } else {
-                    try {
-                        val startDateTime = LocalDateTime.parse(event.start, isoParser)
-                        val formatter = if (use24HourFormat) timeFormatter24 else timeFormatter12
-                        startDateTime.format(formatter)
-                    } catch (e: Exception) {
-                        event.start.substringAfter("T").substringBefore(":")
-                            .let { if (it.length <= 5) it else "" }
-                    }
-                }
-
-                Text(
-                    text = timeText,
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Color.White.copy(alpha = 0.7f),
-                        shadow = textOutlineShadow
-                    ),
-                    modifier = Modifier.widthIn(min = 60.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Color dot if event has a color
+            eventColor?.let { color ->
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(color, CircleShape)
                 )
-
-                // Event title with optional color indicator
-                val eventColor = event.color?.let { colorHex ->
-                    try {
-                        Color(android.graphics.Color.parseColor(colorHex))
-                    } catch (e: Exception) { null }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Color dot if event has a color
-                    eventColor?.let { color ->
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(color, CircleShape)
-                        )
-                    }
-
-                    Text(
-                        text = event.title,
-                        style = TextStyle(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = Color.White,
-                            shadow = textOutlineShadow
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
-        }
 
-        val totalItems = holidays.size + events.size
-        val displayedEvents = 10 - holidays.size.coerceAtMost(3)
-        if (events.size > displayedEvents) {
             Text(
-                text = "+${events.size - displayedEvents} more",
+                text = event.title,
                 style = TextStyle(
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Normal,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = Color.White,
                     shadow = textOutlineShadow
-                )
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

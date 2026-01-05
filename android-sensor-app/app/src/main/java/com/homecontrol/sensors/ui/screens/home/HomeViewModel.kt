@@ -2,11 +2,12 @@ package com.homecontrol.sensors.ui.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.homecontrol.sensors.data.model.Entity
-import com.homecontrol.sensors.data.model.TemperatureRequest
+import com.homecontrol.sensors.data.model.ClimateEntity
+import com.homecontrol.sensors.data.model.FanEntity
+import com.homecontrol.sensors.data.model.FilteredAutomation
 import com.homecontrol.sensors.data.repository.EntityRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,95 +24,81 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadEntities()
-        startPolling()
+        loadData()
     }
 
-    fun loadEntities() {
+    fun loadData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = it.groups.isEmpty(), error = null) }
+            _uiState.update { it.copy(isLoading = it.automations.isEmpty() && it.fans.isEmpty() && it.climates.isEmpty(), error = null) }
 
-            entityRepository.getEntities()
-                .onSuccess { groups ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRefreshing = false,
-                            groups = groups,
-                            error = null
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRefreshing = false,
-                            error = error.message ?: "Failed to load entities"
-                        )
-                    }
-                }
+            // Load automations, fans, and climates in parallel
+            val automationsDeferred = async { entityRepository.getFilteredAutomations() }
+            val fansDeferred = async { entityRepository.getFans() }
+            val climatesDeferred = async { entityRepository.getClimateEntities() }
+
+            val automationsResult = automationsDeferred.await()
+            val fansResult = fansDeferred.await()
+            val climatesResult = climatesDeferred.await()
+
+            _uiState.update { state ->
+                state.copy(
+                    isLoading = false,
+                    isRefreshing = false,
+                    automations = automationsResult.getOrDefault(state.automations),
+                    fans = fansResult.getOrDefault(state.fans),
+                    climates = climatesResult.getOrDefault(state.climates),
+                    error = automationsResult.exceptionOrNull()?.message
+                        ?: fansResult.exceptionOrNull()?.message
+                        ?: climatesResult.exceptionOrNull()?.message
+                )
+            }
         }
     }
 
     fun refresh() {
         _uiState.update { it.copy(isRefreshing = true) }
-        loadEntities()
+        loadData()
     }
 
-    fun toggleEntity(entity: Entity) {
+    fun pressAutomation(automation: FilteredAutomation) {
         viewModelScope.launch {
-            entityRepository.toggleEntity(entity.id)
-                .onSuccess {
-                    // Refresh to get updated state
-                    loadEntities()
-                }
-                .onFailure { error ->
-                    _uiState.update {
-                        it.copy(error = "Failed to toggle: ${error.message}")
-                    }
-                }
-        }
-    }
+            val result = if (automation.triggerType == "button") {
+                // For buttons, we need to press them
+                entityRepository.pressButton(automation.entityId)
+            } else {
+                // For switches, toggle them
+                entityRepository.toggleEntity(automation.entityId)
+            }
 
-    fun selectEntity(entity: Entity?) {
-        _uiState.update { it.copy(selectedEntity = entity) }
-    }
-
-    fun setClimateTemperature(entityId: String, temperature: Double) {
-        viewModelScope.launch {
-            entityRepository.setClimateTemperature(
-                entityId,
-                TemperatureRequest(temperature = temperature)
-            ).onSuccess {
-                loadEntities()
+            result.onSuccess {
+                loadData()
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(error = "Failed to set temperature: ${error.message}")
+                    it.copy(error = "Failed to activate: ${error.message}")
                 }
             }
         }
     }
 
-    fun setClimateMode(entityId: String, mode: String) {
+    fun toggleFan(fan: FanEntity) {
         viewModelScope.launch {
-            entityRepository.setClimateMode(entityId, mode)
+            entityRepository.toggleEntity(fan.entityId)
                 .onSuccess {
-                    loadEntities()
+                    loadData()
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(error = "Failed to set mode: ${error.message}")
+                        it.copy(error = "Failed to toggle fan: ${error.message}")
                     }
                 }
         }
     }
 
-    fun setClimateFanMode(entityId: String, fanMode: String) {
+    fun setClimateFanMode(climate: ClimateEntity, fanMode: String) {
         viewModelScope.launch {
-            entityRepository.setClimateFanMode(entityId, fanMode)
+            entityRepository.setClimateFanMode(climate.entityId, fanMode)
                 .onSuccess {
-                    loadEntities()
+                    loadData()
                 }
                 .onFailure { error ->
                     _uiState.update {
@@ -123,16 +110,5 @@ class HomeViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    private fun startPolling() {
-        viewModelScope.launch {
-            while (true) {
-                delay(10_000) // Poll every 10 seconds
-                if (!_uiState.value.isLoading && !_uiState.value.isRefreshing) {
-                    loadEntities()
-                }
-            }
-        }
     }
 }

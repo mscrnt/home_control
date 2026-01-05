@@ -30,8 +30,8 @@ android {
         applicationId = "com.homecontrol.sensors"
         minSdk = 24  // Raised for Compose
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.7.0"
+        versionCode = 7
+        versionName = "1.8.0"
 
         vectorDrawables {
             useSupportLibrary = true
