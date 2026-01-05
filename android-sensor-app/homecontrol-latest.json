@@ -1,6 +1,6 @@
 {
-  "version": "1.7.0",
-  "versionCode": 6,
-  "url": "https://github.com/mscrnt/home_control/releases/download/v1.7.0/homecontrol-1.7.0-debug.apk",
-  "changelog": "Entertainment overhaul: Xbox/PS5 via Home Assistant, Sony TV/Soundbar control, Shield app launcher, streaming service icons, holiday display, reusable remote template"
+  "version": "1.8.0",
+  "versionCode": 7,
+  "url": "https://github.com/mscrnt/home_control/releases/download/v1.8.0/homecontrol-1.8.0-debug.apk",
+  "changelog": "Only Fans section with fan/climate controls, screensaver shows tomorrow's events after 9pm, removed event limit, HA registry for entity browsing"
 }

@@ -2,6 +2,64 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.8.0] - 2026-01-04
+
+### Server/Backend
+
+#### Added
+- **Fan Entity Endpoint** (`93a393d`)
+  - GET `/api/ha/fans` - List all fan entities with on/off state
+  - Sorted by friendly name
+
+- **Climate Entity Endpoint** (`93a393d`)
+  - GET `/api/ha/climate` - List climate entities with fan mode control
+  - Returns entity_id, friendly_name, state, fan_mode, and available fan_modes
+  - Filters out Tesla HVAC entities
+  - Only includes climates with fan mode support
+
+- **Filtered Automations Endpoint** (`93a393d`)
+  - GET `/api/ha/automations/filtered` - Button/switch triggered automations
+  - Returns trigger entities that activate automations
+  - Supports state triggers, device triggers, and event triggers
+
+- **Home Assistant Registry** (`93a393d`)
+  - New registry module for entity browsing and search
+  - GET `/api/ha/registry/domains` - List all domains with entity counts
+  - GET `/api/ha/registry/domain/{domain}` - Entities in a domain
+  - GET `/api/ha/registry/entity/{entityId}` - Single entity details
+  - GET `/api/ha/search` - Search entities by query
+  - POST `/api/ha/registry/refresh` - Force registry refresh
+
+- **Home Assistant Icon** (`93a393d`)
+  - Added home-assistant.svg icon for drawer menu
+
+### Android App
+
+#### Added
+- **Only Fans Section** (`93a393d`)
+  - New section on Home screen showing all fan entities
+  - On/off toggle switches for each fan
+  - Climate fan mode control (e.g., Ecobee Auto/On)
+  - Segmented buttons for selecting fan modes
+  - Combined regular fans and climate fans in single section
+
+- **Screensaver Tomorrow's Events** (`93a393d`)
+  - Shows tomorrow's events after 9pm alongside today's events
+  - Separate "Today's Events" and "Tomorrow's Events" headers
+  - Includes tomorrow's holidays when applicable
+
+- **Home Assistant Icon** (`93a393d`)
+  - Custom HA icon in navigation drawer
+
+#### Changed
+- **Screensaver Event Limit Removed** (`93a393d`)
+  - Previously limited to 10 events, now shows all events
+  - Removed "+N more" indicator
+
+- **Home Screen Loading** (`93a393d`)
+  - Parallel loading of automations, fans, and climates
+  - Improved loading state handling
+
 ## [1.7.0] - 2026-01-02
 
 ### Server/Backend
