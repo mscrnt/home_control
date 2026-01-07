@@ -57,7 +57,8 @@ fun MonthView(
     modifier: Modifier = Modifier
 ) {
     val yearMonth = YearMonth.from(currentDate)
-    val days = remember(yearMonth, events) {
+    val today = LocalDate.now()
+    val days = remember(yearMonth, events, today) {
         generateMonthDays(yearMonth, events)
     }
 

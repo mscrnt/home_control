@@ -101,6 +101,7 @@ import com.homecontrol.sensors.ui.screens.cameras.DoorbellScreen
 import com.homecontrol.sensors.ui.screens.entertainment.EntertainmentScreen
 import com.homecontrol.sensors.ui.screens.settings.SettingsScreen
 import com.homecontrol.sensors.ui.screens.spotify.SpotifyScreen
+import com.homecontrol.sensors.ui.screens.tesla.TeslaScreen
 import com.homecontrol.sensors.ui.theme.HomeControlColors
 import com.homecontrol.sensors.ui.theme.HomeControlTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -444,6 +445,7 @@ sealed class SmartHomeModal {
     object Music : SmartHomeModal()
     object Cameras : SmartHomeModal()
     object Media : SmartHomeModal()
+    object Tesla : SmartHomeModal()
     object Settings : SmartHomeModal()
     data class Doorbell(val cameraName: String) : SmartHomeModal() // Dedicated doorbell view with PTT
 }
@@ -479,6 +481,11 @@ val smartHomeNavItems = listOf(
         modal = SmartHomeModal.Media,
         label = "Entertainment",
         icon = Icons.Filled.Tv
+    ),
+    DrawerNavItem(
+        modal = SmartHomeModal.Tesla,
+        label = "Tesla",
+        icon = Icons.Filled.SmartToy // Will be overridden with Tesla logo in drawer
     ),
     DrawerNavItem(
         modal = SmartHomeModal.Settings,
@@ -633,6 +640,7 @@ fun MainContent(
                                 SmartHomeModal.Music -> "Spotify"
                                 SmartHomeModal.Cameras -> "Cameras"
                                 SmartHomeModal.Media -> "Entertainment"
+                                SmartHomeModal.Tesla -> "Tesla"
                                 SmartHomeModal.Settings -> "Settings"
                                 else -> ""
                             },
@@ -643,6 +651,7 @@ fun MainContent(
                             titleContent = when (modal) {
                                 SmartHomeModal.Music -> { { SpotifyLogoTitle() } }
                                 SmartHomeModal.Lights -> { { PhilipsHueLogoTitle() } }
+                                SmartHomeModal.Tesla -> { { TeslaLogoTitle() } }
                                 else -> null
                             }
                         ) {
@@ -652,6 +661,7 @@ fun MainContent(
                                 SmartHomeModal.Music -> SpotifyScreen()
                                 SmartHomeModal.Cameras -> CamerasScreen()
                                 SmartHomeModal.Media -> EntertainmentScreen()
+                                SmartHomeModal.Tesla -> TeslaScreen()
                                 SmartHomeModal.Settings -> SettingsScreen()
                                 else -> {}
                             }
@@ -860,6 +870,13 @@ private fun SmartHomeDrawerContent(
                 SmartHomeModal.Media -> {
                     // Special Entertainment drawer item with icon
                     EntertainmentDrawerItem(
+                        selected = false,
+                        onClick = { onItemClick(item.modal) }
+                    )
+                }
+                SmartHomeModal.Tesla -> {
+                    // Special Tesla drawer item with logo
+                    TeslaDrawerItem(
                         selected = false,
                         onClick = { onItemClick(item.modal) }
                     )
@@ -1135,6 +1152,53 @@ private fun EntertainmentDrawerItem(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = EntertainmentPurple
+        )
+    }
+}
+
+// Tesla brand color
+private val TeslaRed = Color(0xFFE82127)
+
+@Composable
+private fun TeslaLogoTitle() {
+    Image(
+        painter = painterResource(id = R.drawable.ic_tesla_logo),
+        contentDescription = "Tesla",
+        modifier = Modifier.height(28.dp)
+    )
+}
+
+@Composable
+private fun TeslaDrawerItem(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        TeslaRed.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_tesla),
+            contentDescription = "Tesla",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = "Tesla",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = TeslaRed
         )
     }
 }

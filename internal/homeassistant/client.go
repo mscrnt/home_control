@@ -828,3 +828,273 @@ func (c *Client) GetClimateEntities() ([]ClimateEntity, error) {
 
 	return climates, nil
 }
+
+// HAWeatherData represents weather data from Home Assistant
+type HAWeatherData struct {
+	Current  HACurrentWeather  `json:"current"`
+	Hourly   []HAHourlyWeather `json:"hourly"`
+	Daily    []HADailyWeather  `json:"daily"`
+	Timezone string            `json:"timezone"`
+}
+
+// HACurrentWeather represents current weather conditions from HA
+type HACurrentWeather struct {
+	Temp       float64 `json:"temp"`
+	FeelsLike  float64 `json:"feelsLike"`
+	Humidity   int     `json:"humidity"`
+	WindSpeed  float64 `json:"windSpeed"`
+	WindDeg    int     `json:"windDeg"`
+	Clouds     int     `json:"clouds"`
+	UVI        float64 `json:"uvi"`
+	Condition  string  `json:"condition"`
+	Icon       string  `json:"icon"`
+	IconUri    string  `json:"iconUri"`
+	Sunrise    int64   `json:"sunrise"`
+	Sunset     int64   `json:"sunset"`
+	Visibility float64 `json:"visibility"`
+	Pressure   float64 `json:"pressure"`
+}
+
+// HAHourlyWeather represents hourly forecast from HA
+type HAHourlyWeather struct {
+	Time      int64   `json:"time"`
+	Temp      float64 `json:"temp"`
+	FeelsLike float64 `json:"feelsLike"`
+	Humidity  int     `json:"humidity"`
+	Condition string  `json:"condition"`
+	Icon      string  `json:"icon"`
+	IconUri   string  `json:"iconUri"`
+	Pop       float64 `json:"pop"` // Probability of precipitation (0-1)
+}
+
+// HADailyWeather represents daily forecast from HA
+type HADailyWeather struct {
+	Time      int64   `json:"time"`
+	TempMin   float64 `json:"tempMin"`
+	TempMax   float64 `json:"tempMax"`
+	Humidity  int     `json:"humidity"`
+	Condition string  `json:"condition"`
+	Icon      string  `json:"icon"`
+	IconUri   string  `json:"iconUri"`
+	Pop       float64 `json:"pop"`
+	Sunrise   int64   `json:"sunrise"`
+	Sunset    int64   `json:"sunset"`
+	Summary   string  `json:"summary"`
+}
+
+// HAForecastItem represents a single forecast item from HA
+type HAForecastItem struct {
+	Datetime            string  `json:"datetime"`
+	Temperature         float64 `json:"temperature"`
+	Templow             float64 `json:"templow,omitempty"`
+	Humidity            int     `json:"humidity,omitempty"`
+	Condition           string  `json:"condition"`
+	PrecipitationProb   float64 `json:"precipitation_probability,omitempty"`
+	WindSpeed           float64 `json:"wind_speed,omitempty"`
+	WindBearing         int     `json:"wind_bearing,omitempty"`
+	CloudCoverage       int     `json:"cloud_coverage,omitempty"`
+	IsNight             bool    `json:"is_night,omitempty"`
+	ApparentTemperature float64 `json:"apparent_temperature,omitempty"`
+	UVIndex             int     `json:"uv_index,omitempty"`
+}
+
+// haForecastResponse represents the response from weather.get_forecasts service
+type haForecastResponse struct {
+	ServiceResponse map[string]struct {
+		Forecast []HAForecastItem `json:"forecast"`
+	} `json:"service_response"`
+}
+
+// GetWeather fetches weather data from weather.home entity
+func (c *Client) GetWeather(entityID string) (*HAWeatherData, error) {
+	if entityID == "" {
+		entityID = "weather.home"
+	}
+
+	// Get current weather from entity state
+	entity, err := c.GetState(entityID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get weather entity: %w", err)
+	}
+
+	weatherData := &HAWeatherData{}
+
+	// Parse current conditions from entity attributes
+	attrs := entity.Attributes
+	weatherData.Current = HACurrentWeather{
+		Condition: entity.State,
+		Icon:      mapHAConditionToIcon(entity.State, true),
+	}
+
+	if temp, ok := attrs["temperature"].(float64); ok {
+		weatherData.Current.Temp = temp
+	}
+	if feelsLike, ok := attrs["apparent_temperature"].(float64); ok {
+		weatherData.Current.FeelsLike = feelsLike
+	} else {
+		weatherData.Current.FeelsLike = weatherData.Current.Temp
+	}
+	if humidity, ok := attrs["humidity"].(float64); ok {
+		weatherData.Current.Humidity = int(humidity)
+	}
+	if windSpeed, ok := attrs["wind_speed"].(float64); ok {
+		weatherData.Current.WindSpeed = windSpeed
+	}
+	if windBearing, ok := attrs["wind_bearing"].(float64); ok {
+		weatherData.Current.WindDeg = int(windBearing)
+	}
+	if clouds, ok := attrs["cloud_coverage"].(float64); ok {
+		weatherData.Current.Clouds = int(clouds)
+	}
+	if uvi, ok := attrs["uv_index"].(float64); ok {
+		weatherData.Current.UVI = uvi
+	}
+	if pressure, ok := attrs["pressure"].(float64); ok {
+		weatherData.Current.Pressure = pressure
+	}
+
+	// Get daily forecast
+	dailyForecasts, err := c.getWeatherForecast(entityID, "daily")
+	if err == nil && len(dailyForecasts) > 0 {
+		weatherData.Daily = make([]HADailyWeather, 0, len(dailyForecasts))
+		for _, f := range dailyForecasts {
+			forecastTime := parseHADateTime(f.Datetime)
+			weatherData.Daily = append(weatherData.Daily, HADailyWeather{
+				Time:      forecastTime.Unix(),
+				TempMax:   f.Temperature,
+				TempMin:   f.Templow,
+				Humidity:  f.Humidity,
+				Condition: f.Condition,
+				Icon:      mapHAConditionToIcon(f.Condition, true),
+				Pop:       f.PrecipitationProb / 100.0,
+				Summary:   f.Condition,
+			})
+		}
+	}
+
+	// Get hourly forecast
+	hourlyForecasts, err := c.getWeatherForecast(entityID, "hourly")
+	if err == nil && len(hourlyForecasts) > 0 {
+		weatherData.Hourly = make([]HAHourlyWeather, 0, len(hourlyForecasts))
+		for _, f := range hourlyForecasts {
+			forecastTime := parseHADateTime(f.Datetime)
+			weatherData.Hourly = append(weatherData.Hourly, HAHourlyWeather{
+				Time:      forecastTime.Unix(),
+				Temp:      f.Temperature,
+				FeelsLike: f.ApparentTemperature,
+				Humidity:  f.Humidity,
+				Condition: f.Condition,
+				Icon:      mapHAConditionToIcon(f.Condition, !f.IsNight),
+				Pop:       f.PrecipitationProb / 100.0,
+			})
+		}
+	}
+
+	return weatherData, nil
+}
+
+// getWeatherForecast calls the weather.get_forecasts service
+func (c *Client) getWeatherForecast(entityID string, forecastType string) ([]HAForecastItem, error) {
+	// Note: ?return_response is required for services that return data
+	url := fmt.Sprintf("%s/api/services/weather/get_forecasts?return_response", c.baseURL)
+
+	data := map[string]interface{}{
+		"entity_id": entityID,
+		"type":      forecastType,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", url, io.NopCloser(
+		io.Reader(stringReader(string(jsonData))),
+	))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HA forecast service failed %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// Response format: {"service_response": {"weather.home": {"forecast": [...]}}}
+	var result haForecastResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode forecast response: %w", err)
+	}
+
+	// Extract forecast from service_response
+	for _, entityData := range result.ServiceResponse {
+		return entityData.Forecast, nil
+	}
+
+	return nil, fmt.Errorf("no forecast data in response")
+}
+
+// parseHADateTime parses HA datetime string to time.Time
+func parseHADateTime(datetime string) time.Time {
+	// Try RFC3339 format first
+	if t, err := time.Parse(time.RFC3339, datetime); err == nil {
+		return t
+	}
+	// Try without timezone
+	if t, err := time.Parse("2006-01-02T15:04:05", datetime); err == nil {
+		return t
+	}
+	// Try date only
+	if t, err := time.Parse("2006-01-02", datetime); err == nil {
+		return t
+	}
+	return time.Time{}
+}
+
+// mapHAConditionToIcon converts HA weather conditions to icon names
+func mapHAConditionToIcon(condition string, isDaytime bool) string {
+	switch strings.ToLower(condition) {
+	case "clear-night":
+		return "moon"
+	case "sunny":
+		return "sun"
+	case "clear":
+		if isDaytime {
+			return "sun"
+		}
+		return "moon"
+	case "partlycloudy", "partly-cloudy":
+		if isDaytime {
+			return "cloud-sun"
+		}
+		return "cloud-moon"
+	case "cloudy":
+		return "cloud"
+	case "overcast":
+		return "clouds"
+	case "rainy", "pouring":
+		return "cloud-showers"
+	case "lightning", "lightning-rainy":
+		return "bolt"
+	case "snowy", "snowy-rainy":
+		return "snowflake"
+	case "hail":
+		return "snowflake"
+	case "fog":
+		return "smog"
+	case "windy", "windy-variant":
+		return "wind"
+	case "exceptional":
+		return "exclamation-triangle"
+	default:
+		return "cloud"
+	}
+}

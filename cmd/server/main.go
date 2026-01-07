@@ -64,6 +64,7 @@ var quietPaths = map[string]bool{
 	"/api/ha/states":        true,
 	"/api/ha/registry":      true,
 	"/api/ha/domains":       true,
+	"/api/ha/search":        true,
 	"/api/entities":         true,
 	"/api/syncbox":          true,
 	"/api/spotify/playback": true,
@@ -494,11 +495,19 @@ func main() {
 	}
 
 	// Initialize Weather client (Google Weather API - uses API key)
+	// If Home Assistant is available, we use it as primary source for weather (to avoid duplicate Google Weather API calls)
+	// The direct Google Weather client is only used as fallback when HA is unavailable
 	if cfg.GoogleWeatherAPIKey != "" && cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
 		weatherCacheFile := "data/weather_cache.json"
 		weatherClient = weather.NewClient(cfg.GoogleWeatherAPIKey, cfg.WeatherLat, cfg.WeatherLon, cfg.Timezone, weatherCacheFile)
-		weatherClient.Start()
-		log.Printf("Weather client initialized for coordinates (%.4f, %.4f)", cfg.WeatherLat, cfg.WeatherLon)
+		if haClient == nil {
+			// Only start background refresh if HA is not available
+			weatherClient.Start()
+			log.Printf("Weather client initialized (primary) for coordinates (%.4f, %.4f)", cfg.WeatherLat, cfg.WeatherLon)
+		} else {
+			// HA is available, weather client is fallback only (no background refresh)
+			log.Printf("Weather client initialized (fallback only, HA is primary) for coordinates (%.4f, %.4f)", cfg.WeatherLat, cfg.WeatherLon)
+		}
 	} else if cfg.WeatherLat != 0 && cfg.WeatherLon != 0 {
 		log.Println("Warning: GOOGLE_WEATHER_API_KEY not set. Weather will not be available.")
 	}
@@ -3938,6 +3947,21 @@ func handleClearCompleted(w http.ResponseWriter, r *http.Request) {
 // Weather API handler
 
 func handleGetWeather(w http.ResponseWriter, r *http.Request) {
+	// Try Home Assistant first (it already uses Google Weather, avoid duplicate API calls)
+	if haClient != nil {
+		haWeather, err := haClient.GetWeather("weather.home")
+		if err == nil {
+			// Convert HA weather data to our weather.WeatherData format
+			data := convertHAWeatherToWeatherData(haWeather)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(data)
+			return
+		}
+		// Log but continue to fallback
+		log.Printf("HA weather fetch failed, falling back to direct API: %v", err)
+	}
+
+	// Fallback to direct Google Weather API
 	if weatherClient == nil {
 		http.Error(w, "Weather not configured", http.StatusServiceUnavailable)
 		return
@@ -3951,6 +3975,61 @@ func handleGetWeather(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+}
+
+// convertHAWeatherToWeatherData converts HA weather data to the weather.WeatherData format
+func convertHAWeatherToWeatherData(ha *homeassistant.HAWeatherData) *weather.WeatherData {
+	data := &weather.WeatherData{
+		Current: weather.CurrentWeather{
+			Temp:      ha.Current.Temp,
+			FeelsLike: ha.Current.FeelsLike,
+			Humidity:  ha.Current.Humidity,
+			WindSpeed: ha.Current.WindSpeed,
+			WindDeg:   ha.Current.WindDeg,
+			Clouds:    ha.Current.Clouds,
+			UVI:       ha.Current.UVI,
+			Condition: ha.Current.Condition,
+			Icon:      ha.Current.Icon,
+			IconUri:   ha.Current.IconUri,
+			Sunrise:   ha.Current.Sunrise,
+			Sunset:    ha.Current.Sunset,
+		},
+		Timezone:  ha.Timezone,
+		FetchedAt: time.Now(),
+	}
+
+	// Convert hourly forecasts
+	for _, h := range ha.Hourly {
+		data.Hourly = append(data.Hourly, weather.HourlyWeather{
+			Time:      h.Time,
+			Temp:      h.Temp,
+			FeelsLike: h.FeelsLike,
+			Humidity:  h.Humidity,
+			Condition: h.Condition,
+			Icon:      h.Icon,
+			IconUri:   h.IconUri,
+			Pop:       h.Pop,
+		})
+	}
+
+	// Convert daily forecasts
+	for _, d := range ha.Daily {
+		data.Daily = append(data.Daily, weather.DailyWeather{
+			Time:      d.Time,
+			TempMin:   d.TempMin,
+			TempMax:   d.TempMax,
+			Humidity:  d.Humidity,
+			Condition: d.Condition,
+			Icon:      d.Icon,
+			IconUri:   d.IconUri,
+			Pop:       d.Pop,
+			Sunrise:   d.Sunrise,
+			Sunset:    d.Sunset,
+			Summary:   d.Summary,
+		})
+	}
+
+	return data
 }
 
 // WebSocket handler

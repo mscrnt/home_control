@@ -63,7 +63,8 @@ fun WeekView(
     onEventClick: (CalendarEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val weekDays = remember(currentDate, events) {
+    val today = LocalDate.now()
+    val weekDays = remember(currentDate, events, today) {
         generateWeekDays(currentDate, events)
     }
 

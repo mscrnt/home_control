@@ -66,6 +66,17 @@ class CalendarViewModel @Inject constructor(
     init {
         loadInitialData()
         observeSettings()
+        startEventPolling()
+    }
+
+    private fun startEventPolling() {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60_000) // Poll every 1 minute
+                Log.d("CalendarViewModel", "Auto-refreshing events")
+                loadEvents()
+            }
+        }
     }
 
     /**
