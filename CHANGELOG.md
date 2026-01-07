@@ -2,6 +2,30 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.9.0] - 2026-01-06
+
+### Server/Backend
+
+#### Changed
+- **Weather API Consolidation**
+  - Weather data now fetched from Home Assistant as primary source
+  - Eliminates redundant Google Weather API calls (HA already uses Google Weather)
+  - Direct Google Weather API used as fallback only when HA is unavailable
+  - Background weather refresh disabled when HA is available
+
+### Android App
+
+#### Added
+- **Calendar Auto-Refresh**
+  - Events automatically poll every 60 seconds
+  - No longer requires app restart to see new events
+
+#### Fixed
+- **Calendar Today Highlighting**
+  - Fixed issue where "today" wasn't updating after midnight
+  - Month and week views now correctly highlight current day
+  - Added date change detection on screen visibility
+
 ## [1.8.0] - 2026-01-04
 
 ### Server/Backend

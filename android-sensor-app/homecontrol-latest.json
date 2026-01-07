@@ -1,6 +1,6 @@
 {
-  "version": "1.8.0",
-  "versionCode": 7,
-  "url": "https://github.com/mscrnt/home_control/releases/download/v1.8.0/homecontrol-1.8.0-debug.apk",
-  "changelog": "Only Fans section with fan/climate controls, screensaver shows tomorrow's events after 9pm, removed event limit, HA registry for entity browsing"
+  "version": "1.9.0",
+  "versionCode": 8,
+  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.0/homecontrol-1.9.0-debug.apk",
+  "changelog": "Weather now fetched from Home Assistant (reduces redundant API calls), calendar auto-refreshes every minute, fixed today highlighting in calendar views"
 }
