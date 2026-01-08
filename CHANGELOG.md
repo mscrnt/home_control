@@ -2,6 +2,20 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.9.1] - 2026-01-07
+
+### Android App
+
+#### Changed
+- **Screensaver Weather Position**
+  - Moved weather display from top right to bottom right (above clock)
+  - Creates cleaner visual grouping of time-related information
+
+#### Fixed
+- **Screensaver Tomorrow's Events**
+  - Fixed bug where tomorrow's events wouldn't appear after 9pm if app was already running
+  - App now detects the 9pm transition and refreshes events accordingly
+
 ## [1.9.0] - 2026-01-06
 
 ### Server/Backend
