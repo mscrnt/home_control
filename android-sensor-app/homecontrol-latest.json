@@ -1,6 +1,6 @@
 {
-  "version": "1.9.0",
-  "versionCode": 8,
-  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.0/homecontrol-1.9.0-debug.apk",
-  "changelog": "Weather now fetched from Home Assistant (reduces redundant API calls), calendar auto-refreshes every minute, fixed today highlighting in calendar views"
+  "version": "1.9.1",
+  "versionCode": 9,
+  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.1/homecontrol-1.9.1-debug.apk",
+  "changelog": "Moved weather display to bottom right of screensaver (above clock), fixed tomorrow's events not appearing after 9pm on screensaver"
 }

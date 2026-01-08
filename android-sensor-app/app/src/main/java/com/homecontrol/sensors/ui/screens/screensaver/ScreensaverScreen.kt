@@ -101,19 +101,6 @@ fun ScreensaverScreen(
             )
         }
 
-        // Weather - top right
-        uiState.weather?.let { weather ->
-            WeatherOverlay(
-                temperature = weather.current.temp,
-                condition = weather.current.condition,
-                serverUrl = uiState.serverUrl,
-                icon = weather.current.icon,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-            )
-        }
-
         // Bottom area - Clock on right, Spotify player on left
         Row(
             modifier = Modifier
@@ -138,11 +125,27 @@ fun ScreensaverScreen(
                 }
             } ?: Spacer(modifier = Modifier.width(1.dp))
 
-            // Clock - bottom right
-            ClockOverlay(
-                time = uiState.currentTime,
-                date = uiState.currentDate
-            )
+            // Weather + Clock - bottom right
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Weather - above the clock
+                uiState.weather?.let { weather ->
+                    WeatherOverlay(
+                        temperature = weather.current.temp,
+                        condition = weather.current.condition,
+                        serverUrl = uiState.serverUrl,
+                        icon = weather.current.icon
+                    )
+                }
+
+                // Clock
+                ClockOverlay(
+                    time = uiState.currentTime,
+                    date = uiState.currentDate
+                )
+            }
         }
     }
 }

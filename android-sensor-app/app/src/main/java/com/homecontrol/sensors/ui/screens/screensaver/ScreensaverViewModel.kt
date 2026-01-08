@@ -240,6 +240,7 @@ class ScreensaverViewModel @Inject constructor(
         clockJob?.cancel()
         clockJob = viewModelScope.launch {
             var lastCheckedDate: java.time.LocalDate? = null
+            var lastShowTomorrow: Boolean? = null
             var tickCount = 0
 
             while (true) {
@@ -253,16 +254,21 @@ class ScreensaverViewModel @Inject constructor(
                     )
                 }
 
-                // Check for date change every minute (60 ticks) or on first run
+                // Check for date change or 9pm transition every minute (60 ticks) or on first run
                 tickCount++
                 if (tickCount >= 60 || lastCheckedDate == null) {
                     tickCount = 0
                     val today = now.toLocalDate()
-                    if (lastCheckedDate != today) {
-                        Log.d(TAG, "Date changed or first check, refreshing events")
+                    val shouldShowTomorrow = now.hour >= 21
+
+                    // Reload events if date changed OR if we just crossed 9pm
+                    if (lastCheckedDate != today ||
+                        (lastShowTomorrow == false && shouldShowTomorrow)) {
+                        Log.d(TAG, "Date changed or crossed 9pm, refreshing events (showTomorrow: $shouldShowTomorrow)")
                         lastCheckedDate = today
                         loadTodayEvents()
                     }
+                    lastShowTomorrow = shouldShowTomorrow
                 }
 
                 delay(1000) // Update every second
