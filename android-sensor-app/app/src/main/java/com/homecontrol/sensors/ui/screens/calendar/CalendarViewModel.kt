@@ -67,6 +67,7 @@ class CalendarViewModel @Inject constructor(
         loadInitialData()
         observeSettings()
         startEventPolling()
+        startWeatherPolling()
     }
 
     private fun startEventPolling() {
@@ -75,6 +76,16 @@ class CalendarViewModel @Inject constructor(
                 kotlinx.coroutines.delay(60_000) // Poll every 1 minute
                 Log.d("CalendarViewModel", "Auto-refreshing events")
                 loadEvents()
+            }
+        }
+    }
+
+    private fun startWeatherPolling() {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(15 * 60_000) // Poll every 15 minutes
+                Log.d("CalendarViewModel", "Auto-refreshing weather")
+                loadWeather()
             }
         }
     }

@@ -1,6 +1,6 @@
 {
-  "version": "1.9.1",
-  "versionCode": 9,
-  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.1/homecontrol-1.9.1-debug.apk",
-  "changelog": "Moved weather display to bottom right of screensaver (above clock), fixed tomorrow's events not appearing after 9pm on screensaver"
+  "version": "1.9.2",
+  "versionCode": 10,
+  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.2/homecontrol-1.9.2-debug.apk",
+  "changelog": "Weather now auto-refreshes every 15 minutes on calendar and screensaver"
 }

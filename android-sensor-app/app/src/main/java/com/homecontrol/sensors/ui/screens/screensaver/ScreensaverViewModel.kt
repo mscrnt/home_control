@@ -82,6 +82,7 @@ class ScreensaverViewModel @Inject constructor(
         loadInitialData()
         startClockUpdates()
         startSpotifyPolling()
+        startWeatherPolling()
     }
 
     private fun observeSettings() {
@@ -233,6 +234,17 @@ class ScreensaverViewModel @Inject constructor(
     private suspend fun loadWeather() {
         weatherRepository.getWeather().onSuccess { weather ->
             _uiState.update { it.copy(weather = weather) }
+        }
+    }
+
+    private fun startWeatherPolling() {
+        weatherJob?.cancel()
+        weatherJob = viewModelScope.launch {
+            while (true) {
+                delay(15 * 60_000) // Poll every 15 minutes
+                Log.d(TAG, "Auto-refreshing weather")
+                loadWeather()
+            }
         }
     }
 

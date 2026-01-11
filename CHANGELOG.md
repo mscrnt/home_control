@@ -2,6 +2,15 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.9.2] - 2026-01-07
+
+### Android App
+
+#### Fixed
+- **Weather Auto-Refresh**
+  - Calendar and screensaver now auto-refresh weather every 15 minutes
+  - Previously weather only loaded once and never updated
+
 ## [1.9.1] - 2026-01-07
 
 ### Android App
