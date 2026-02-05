@@ -52,7 +52,7 @@ class SettingsRepository @Inject constructor(
 
     val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
         AppSettings(
-            serverUrl = sharedPreferences.getString(PREFS_KEY_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL,
+            serverUrl = (sharedPreferences.getString(PREFS_KEY_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL).trimEnd('/'),
             themeMode = ThemeMode.valueOf(preferences[KEY_THEME_MODE] ?: ThemeMode.SYSTEM.name),
             appMode = AppMode.valueOf(preferences[KEY_APP_MODE] ?: AppMode.NATIVE.name),
             idleTimeout = preferences[KEY_IDLE_TIMEOUT] ?: 60,
@@ -64,7 +64,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setServerUrl(url: String) {
-        sharedPreferences.edit().putString(PREFS_KEY_SERVER_URL, url).apply()
+        sharedPreferences.edit().putString(PREFS_KEY_SERVER_URL, url.trimEnd('/')).apply()
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {

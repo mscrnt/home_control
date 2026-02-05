@@ -2,6 +2,15 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.9.3] - 2026-02-05
+
+### Android App
+
+#### Fixed
+- **Server URL Double Slash**
+  - Fixed double slash in API URLs when server URL has a trailing slash
+  - Server URL is now trimmed on both read and write in settings
+
 ## [1.9.2] - 2026-01-07
 
 ### Android App
