@@ -169,7 +169,7 @@ class SensorService : Service(), SensorEventListener {
 
         // Load preferences with default fallback
         val prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        serverUrl = prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
+        serverUrl = (prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL).trimEnd('/')
         idleTimeout = prefs.getLong(PREF_IDLE_TIMEOUT, 180000)
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -186,7 +186,7 @@ class SensorService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Reload preferences in case they changed (with default fallback)
         val prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        serverUrl = prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
+        serverUrl = (prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL).trimEnd('/')
         idleTimeout = prefs.getLong(PREF_IDLE_TIMEOUT, 180000)
 
         createNotificationChannel()

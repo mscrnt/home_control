@@ -1,6 +1,6 @@
 {
-  "version": "1.9.3",
-  "versionCode": 11,
-  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.3/homecontrol-1.9.3-debug.apk",
-  "changelog": "Fixed double slash in server URL when trailing slash is present"
+  "version": "1.9.4",
+  "versionCode": 12,
+  "url": "https://github.com/mscrnt/home_control/releases/download/v1.9.4/homecontrol-1.9.4-debug.apk",
+  "changelog": "Fixed double slash in SensorService API URLs"
 }

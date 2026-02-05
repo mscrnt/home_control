@@ -2,6 +2,15 @@
 
 All notable changes to the Home Control project will be documented in this file.
 
+## [1.9.4] - 2026-02-05
+
+### Android App
+
+#### Fixed
+- **SensorService Double Slash**
+  - SensorService was reading server URL directly from SharedPreferences without trimming trailing slash
+  - Fixed both `onCreate` and `onStartCommand` URL reads to use `trimEnd('/')`
+
 ## [1.9.3] - 2026-02-05
 
 ### Android App
