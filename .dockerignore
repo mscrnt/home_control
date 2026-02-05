@@ -12,13 +12,20 @@ home_control
 
 # Secrets and local config
 .env
+.env.example
 token.json
 client_secret*.json
 data/
 
-# IDE
+# IDE and tooling
 .vscode/
 .idea/
+.claude/
+
+# Docker (don't send these into the build context)
+Dockerfile
+docker-compose.yml
+.dockerignore
 
 # Documentation
 *.md
